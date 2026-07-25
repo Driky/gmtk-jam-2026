@@ -54,6 +54,32 @@ func test_fall_steers_over_the_target_cell() -> void:
 	enemy._actuate(decision, Vector2i(71, 22), 1.0 / 60.0)
 	assert_float(enemy.velocity.x).is_greater(0.0)
 
+
+func test_stuck_walking_arms_direct_mode() -> void:
+	# WALK frames with no displacement -> direct-to-Core override arms.
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(100.0, 100.0)
+	for i in 95: # 95 frames at 1/60 s > STUCK_WINDOW (1.5 s).
+		enemy._update_stuck(EnemyLocomotion.Action.WALK, 1.0 / 60.0)
+	assert_float(enemy._direct_left).is_greater(0.0)
+
+
+func test_chewing_never_reads_as_stuck() -> void:
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(100.0, 100.0)
+	for i in 200:
+		enemy._update_stuck(EnemyLocomotion.Action.CHEW, 1.0 / 60.0)
+	assert_float(enemy._direct_left).is_equal(0.0)
+
+
+func test_movement_resets_stuck_timer() -> void:
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(100.0, 100.0)
+	for i in 60:
+		enemy._update_stuck(EnemyLocomotion.Action.WALK, 1.0 / 60.0)
+		enemy.global_position.x += 1.0 # Real progress every frame.
+	assert_float(enemy._direct_left).is_equal(0.0)
+
 # --- Damage / death ----------------------------------------------------------
 
 

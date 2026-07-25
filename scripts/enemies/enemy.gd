@@ -25,6 +25,15 @@ const THREAT_THRESHOLD := 8.0
 ## Center-to-center swing distance against an aggro target (1.5 tiles).
 const ATTACK_RANGE_PX := 24.0
 
+## Stuck watchdog: the shared field assumes reference capabilities, so its
+## guidance can cycle for a mob that can't use a route (e.g. a walker sent
+## toward a climb chimney ping-pongs at the cycle boundary). No net movement
+## for STUCK_WINDOW while trying to move -> commit to the direct-to-Core dig
+## line for DIRECT_MODE_TIME, which always terminates by chewing.
+const STUCK_WINDOW := 1.5
+const STUCK_EPSILON_PX := 8.0
+const DIRECT_MODE_TIME := 6.0
+
 ## Set by the spawner before add_child (scene has no default on purpose —
 ## every mob must state its type).
 @export var stats: EnemyStats
@@ -42,6 +51,9 @@ var _attack_left := 0.0
 ## Highest point of the current airborne stretch; INF = grounded. Tracking
 ## the apex (not the leave-floor y) charges jump-then-fall arcs correctly.
 var _air_top_y := INF
+var _stuck_timer := 0.0
+var _stuck_anchor := Vector2.INF
+var _direct_left := 0.0
 
 
 func _ready() -> void:
@@ -76,7 +88,8 @@ func _physics_process(delta: float) -> void:
 ## Default behavior: follow the flow field toward the Core, melee entities in
 ## the way, chew-fallback anything the field can't route.
 func _push_core(pos: Vector2i, delta: float) -> void:
-	var dir := _intent_dir(pos)
+	_direct_left = maxf(_direct_left - delta, 0.0)
+	var dir := _direct_dir(pos) if _direct_left > 0.0 else _intent_dir(pos)
 	var entity := _attackable_entity(pos, dir)
 	if entity != null:
 		velocity.x = 0.0
@@ -89,7 +102,26 @@ func _push_core(pos: Vector2i, delta: float) -> void:
 		var direct := _direct_dir(pos)
 		if direct != dir:
 			decision = EnemyLocomotion.decide(terrain, pos, direct, stats)
+	_update_stuck(decision.action, delta)
 	_actuate(decision, pos, delta)
+
+
+## Movement actions that produce no displacement mean field guidance is
+## cycling — arm the direct-mode override. Chewing/attacking is progress.
+func _update_stuck(action: EnemyLocomotion.Action, delta: float) -> void:
+	var moving := (
+		action == EnemyLocomotion.Action.WALK
+		or action == EnemyLocomotion.Action.FALL
+		or action == EnemyLocomotion.Action.JUMP
+	)
+	if not moving or global_position.distance_to(_stuck_anchor) > STUCK_EPSILON_PX:
+		_stuck_anchor = global_position
+		_stuck_timer = 0.0
+		return
+	_stuck_timer += delta
+	if _stuck_timer >= STUCK_WINDOW:
+		_direct_left = DIRECT_MODE_TIME
+		_stuck_timer = 0.0
 
 
 ## Aggro override: direct local chase toward the attacker (no flow field),
