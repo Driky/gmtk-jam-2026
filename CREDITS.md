@@ -8,7 +8,7 @@ Rule ([docs/systems/pipeline.md](docs/systems/pipeline.md)): every sourced asset
 
 ## Audio
 
-*(none yet)*
+- `countdown_tick.wav`, `wave_start.wav` — own work (script-synthesized placeholder beeps) — CC0
 
 ## Fonts
 
