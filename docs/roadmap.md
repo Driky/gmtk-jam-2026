@@ -31,9 +31,9 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Debug assert: entity dict ↔ TileMap agreement.
 
 ### 1.5 World generation ([world-gen.md](systems/world-gen.md))
-- [ ] Seeded pipeline: height-noise surface → 5 biome bands → cave carving → per-biome ore scatter → deposit blobs with `reserve` → bedrock border.
-- [ ] Buffer zones: flat dirt, no caves/resources, visual boundary treatment 🔴.
-- [ ] Amortized generation (N rows/frame) behind a loading bar (`GENERATING` state).
+- [x] Seeded pipeline: height-noise surface → 5 biome bands → cave carving → per-biome ore scatter → deposit blobs with `reserve` → bedrock border.
+- [x] Buffer zones: flat dirt, no caves/resources, visual boundary treatment 🔴.
+- [x] Amortized generation (N rows/frame) behind a loading bar (`GENERATING` state).
 
 ### 1.6 Player, mining, inventory ([player-combat.md](systems/player-combat.md))
 - [ ] Platformer controller with coyote time + jump buffer; stats stubbed until `Progression` exists.
