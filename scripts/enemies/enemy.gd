@@ -14,6 +14,10 @@ const TILE := TileLayout.TILE_SIZE
 ## must never soft-lock a mob.
 const MONSTER_TOOL_TIER := 98
 
+## HP lost per tile fallen beyond max_safe_fall — keeps drop-trap designs
+## viable (walker: a 4-tile drop stings, ~8 tiles is lethal).
+const FALL_DAMAGE_PER_TILE := 6.0
+
 ## Set by the spawner before add_child (scene has no default on purpose —
 ## every mob must state its type).
 @export var stats: EnemyStats
@@ -27,6 +31,9 @@ var current_hp := 0.0
 var _core: Node2D = null
 var _dead := false
 var _attack_left := 0.0
+## Highest point of the current airborne stretch; INF = grounded. Tracking
+## the apex (not the leave-floor y) charges jump-then-fall arcs correctly.
+var _air_top_y := INF
 
 
 func _ready() -> void:
@@ -42,7 +49,10 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	# Gravity mirrors the player's tuning — shared consts avoid a second
 	# divergent gravity value.
-	if not is_on_floor():
+	if is_on_floor():
+		_check_landing()
+	else:
+		_air_top_y = minf(_air_top_y, global_position.y)
 		velocity.y = minf(velocity.y + Player.GRAVITY * delta, Player.MAX_FALL_SPEED)
 	_attack_left = maxf(_attack_left - delta, 0.0)
 	var pos := cell()
@@ -65,6 +75,16 @@ func _physics_process(delta: float) -> void:
 
 func cell() -> Vector2i:
 	return Vector2i((global_position / TILE).floor())
+
+
+## Fall damage beyond max_safe_fall, applied on touching down.
+func _check_landing() -> void:
+	if _air_top_y == INF:
+		return
+	var tiles := (global_position.y - _air_top_y) / TILE
+	_air_top_y = INF
+	if tiles > stats.max_safe_fall:
+		take_damage((tiles - stats.max_safe_fall) * FALL_DAMAGE_PER_TILE)
 
 
 func take_damage(amount: float, _attacker: Node2D = null) -> void:

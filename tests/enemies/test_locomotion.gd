@@ -52,7 +52,8 @@ func test_walks_left_too() -> void:
 	assert_that(d.target).is_equal(Vector2i(4, 9))
 
 
-func test_down_over_air_falls() -> void:
+func test_down_over_safe_air_falls() -> void:
+	_terrain.set_solid(Vector2i(5, 12)) # Floor 2 below: a safe drop.
 	var d := _decide(Vector2i(5, 9), Vector2i.DOWN)
 	assert_int(d.action).is_equal(EnemyLocomotion.Action.FALL)
 
@@ -121,3 +122,68 @@ func test_up_through_air_is_none() -> void:
 	# The field routed a wall-climb this mob can't do — caller falls back.
 	var d := _decide(Vector2i(5, 9), Vector2i.UP)
 	assert_int(d.action).is_equal(EnemyLocomotion.Action.NONE)
+
+# --- Stair-digging (2.3, never-cut) ------------------------------------------
+
+
+func test_drop_tiles_counts_air_below() -> void:
+	_terrain.set_solid(Vector2i(5, 14))
+	assert_int(EnemyLocomotion.drop_tiles(_terrain, Vector2i(5, 9))).is_equal(4)
+
+
+func test_drop_tiles_scan_cap_reads_unsafe() -> void:
+	var depth := EnemyLocomotion.drop_tiles(_terrain, Vector2i(5, 9), 8)
+	assert_int(depth).is_equal(9)
+
+
+func test_safe_drop_walks_off() -> void:
+	# Floor at y = 10 up to x = 5; landing 3 below ahead.
+	_lay_floor(0, 5)
+	_lay_floor(6, 12, 13)
+	var d := _decide(Vector2i(5, 9), Vector2i.RIGHT)
+	assert_int(d.action).is_equal(EnemyLocomotion.Action.WALK)
+
+
+func test_unsafe_drop_at_lip_digs_own_feet() -> void:
+	# Sheer cliff: columns >= 6 are air down to y = 18.
+	_lay_floor(0, 5)
+	_lay_floor(6, 12, 18)
+	var d := _decide(Vector2i(5, 9), Vector2i.RIGHT)
+	assert_int(d.action).is_equal(EnemyLocomotion.Action.CHEW)
+	assert_that(d.target).is_equal(Vector2i(5, 10))
+
+
+func test_down_over_unsafe_air_is_none() -> void:
+	# Straddling: below is air, drop is deep, nothing diggable below.
+	var d := _decide(Vector2i(5, 9), Vector2i.DOWN)
+	assert_int(d.action).is_equal(EnemyLocomotion.Action.NONE)
+
+
+## Simulate the emergent stair-dig loop against a sheer 8-deep cliff: apply
+## each chew to the terrain, let the mob descend, re-decide — it must reach a
+## safe remaining drop in bounded steps, never soft-locking.
+func test_stair_sequence_terminates_at_safe_drop() -> void:
+	_lay_floor(0, 5) # High ground at y = 10.
+	_lay_floor(6, 12, 18) # Valley floor 8 below.
+	# Solid fill between the two levels under the high ground, like real
+	# world gen (the mob digs through this).
+	for y in range(11, 18):
+		for x in range(0, 6):
+			_terrain.set_solid(Vector2i(x, y))
+	var cell := Vector2i(5, 9)
+	for step in 32:
+		var d := _decide(cell, Vector2i.RIGHT)
+		match d.action:
+			EnemyLocomotion.Action.CHEW:
+				_terrain.solids.erase(d.target)
+				# Descend once the chew opened the floor under the mob.
+				if not _terrain.is_solid(cell + Vector2i.DOWN):
+					cell += Vector2i.DOWN
+			EnemyLocomotion.Action.WALK:
+				var ahead: Vector2i = d.target
+				assert_int(EnemyLocomotion.drop_tiles(_terrain, ahead)).is_less_equal(3)
+				return # Reached a safe walk-off — loop terminated correctly.
+			_:
+				fail("unexpected action %d at %s" % [d.action, cell])
+				return
+	fail("stair-dig never reached a safe drop")

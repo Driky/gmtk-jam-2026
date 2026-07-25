@@ -64,7 +64,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 ### 2.3 First enemy — walker, fully working ([enemies.md](systems/enemies.md))
 - [x] Enemy base (`CharacterBody2D`) + `EnemyStats` Resource with locomotion capabilities.
 - [x] Locomotion resolution: walk / jump / chew fallback via `Terrain.damage_tile`.
-- [ ] Stair-digging on unsafe drops 🔴; fall damage beyond `max_safe_fall`.
+- [x] Stair-digging on unsafe drops 🔴; fall damage beyond `max_safe_fall`.
 - [ ] Threat-table aggro: damage adds threat, decay, Core as default target.
 
 ### 2.4 Wave manager v1 ([enemies.md](systems/enemies.md))
