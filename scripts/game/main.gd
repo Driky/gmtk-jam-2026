@@ -17,6 +17,8 @@ var _gen: WorldGen
 
 func _ready() -> void:
 	Game.world_seed = FORCED_SEED if FORCED_SEED != 0 else randi()
+	# MENU is an instant pass-through until the real main menu lands (4.5).
+	Game.set_state(Game.State.MENU)
 	Game.set_state(Game.State.GENERATING)
 	_gen = WorldGen.new(Terrain, Game.world_seed)
 
@@ -40,5 +42,5 @@ func _finish_generation() -> void:
 	add_child(player)
 	_hud.bind_player(player)
 	_hud.visible = true
-	Game.set_state(Game.State.BUILD_PHASE)
+	Game.start_build_phase()
 	_gen = null
