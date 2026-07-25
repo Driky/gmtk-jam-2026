@@ -22,8 +22,10 @@ class TerrainStub:
 	signal entity_changed(pos: Vector2i)
 
 
+	## Row 0 is the world's bedrock border — solid everywhere, including above
+	## the buffer surface. Spawn placement must skip it, not stand on it.
 	func is_solid(pos: Vector2i) -> bool:
-		return pos.y >= SOLID_ROW
+		return pos.y == 0 or pos.y >= SOLID_ROW
 
 
 	func touch(pos: Vector2i) -> void:

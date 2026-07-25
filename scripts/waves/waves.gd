@@ -160,14 +160,15 @@ func _spawn_position() -> Vector2:
 	return Vector2((x + 0.5) * TILE, _surface_row(x) * TILE - SPAWN_FEET_OFFSET)
 
 
-## First solid row in a column. Buffers are flat dirt with no caves and no
-## resources (world-gen.md), so this is a short scan that can't stop on a cave
-## roof. Row 0 (bedrock border) is the degenerate fallback — mobs would drop in.
+## First solid row in a column, skipping the row-0 bedrock border (solid across
+## the whole world — scanning from 0 would park every mob on the roof). Buffers
+## are flat dirt with no caves and no resources (world-gen.md), so this short
+## scan can't stop on a cave roof either. Fallback 1 = drop in from the top.
 func _surface_row(x: int) -> int:
-	for y in FlowField.REGION_ROWS:
+	for y in range(1, FlowField.REGION_ROWS):
 		if terrain.is_solid(Vector2i(x, y)):
 			return y
-	return 0
+	return 1
 
 
 func _on_enemy_died(enemy: Node) -> void:
