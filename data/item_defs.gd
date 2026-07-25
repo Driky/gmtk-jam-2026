@@ -1,0 +1,33 @@
+## Item stat registry + the resolution chain behind `Items.stats_for`.
+## The item half of the DB that docs/systems/progression.md assigns to `Items` —
+## recipes land with it on Day 3 (roadmap 3.6). Static and pure, so it resolves
+## in tests without the autoload.
+##
+## An entry here overrides everything, and the key can be ANY item id — tools,
+## weapons, or a plain terrain block. That's the point: making one odd block a
+## viable off-label tool or weapon is a single .tres, with no schema change to
+## materials.gd (which feeds the tileset generator).
+## Owning doc: docs/systems/player-combat.md
+class_name ItemDefs
+
+## Fallbacks, deliberately NOT in STATS — they're what an id resolves *to*,
+## not something you can hold. Blocks sit a little above bare hands so hitting
+## with a fistful of stone is worth something.
+const BARE_HAND: ItemStats = preload("res://data/items/bare_hand.tres")
+const BLOCK_DEFAULT: ItemStats = preload("res://data/items/block_default.tres")
+
+const PICKAXE_T1: ItemStats = preload("res://data/items/pickaxe_t1.tres")
+
+const STATS: Dictionary = {
+	"pickaxe_t1": PICKAXE_T1,
+}
+
+
+## Authored > block default > bare hand. Never returns null: every id is
+## usable, so no call site needs a "no item" branch.
+static func stats_for(id: String) -> ItemStats:
+	if STATS.has(id):
+		return STATS[id]
+	if Materials.MATERIALS.has(id):
+		return BLOCK_DEFAULT
+	return BARE_HAND

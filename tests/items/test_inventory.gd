@@ -76,3 +76,38 @@ func test_slot_changed_payloads() -> void:
 	_inv.add_item("dirt", 150) # slots 0 (99) + 1 (51)
 	_inv.remove_from_slot(1, 51)
 	assert_array(_slot_events).contains_exactly([0, 1, 1])
+
+# --- take_range (death drop, 2.5) --------------------------------------------
+
+
+## The death-drop split: the hotbar survives, everything past it goes to the bag.
+func test_take_range_empties_only_the_requested_span() -> void:
+	_inv.add_item("dirt", 99 * Inventory.HOTBAR_SIZE + 5) # fills 0-9, spills into 10
+	var taken := _inv.take_range(Inventory.HOTBAR_SIZE, Inventory.SLOT_COUNT)
+	assert_int(taken.size()).is_equal(1)
+	assert_int(taken[0].count).is_equal(5)
+	assert_bool(_inv.get_slot(Inventory.HOTBAR_SIZE).is_empty()).is_true()
+	assert_int(_inv.get_slot(0).count).is_equal(99) # hotbar untouched
+
+
+func test_take_range_skips_empty_slots_and_emits_per_slot() -> void:
+	_inv.add_item("dirt", 1)
+	_inv.add_item("wood", 1)
+	_slot_events.clear()
+	var taken := _inv.take_range(0, Inventory.SLOT_COUNT)
+	assert_int(taken.size()).is_equal(2) # not 40 — empties are skipped
+	assert_array(_slot_events).contains_exactly([0, 1])
+
+
+## The returned dicts are detached copies: mutating a bag's contents must not
+## reach back into the (now empty) inventory slot.
+func test_take_range_returns_detached_copies() -> void:
+	_inv.add_item("dirt", 4)
+	var taken := _inv.take_range(0, 1)
+	taken[0].count = 99
+	assert_bool(_inv.get_slot(0).is_empty()).is_true()
+
+
+func test_take_range_clamps_out_of_bounds() -> void:
+	_inv.add_item("dirt", 4)
+	assert_int(_inv.take_range(-10, Inventory.SLOT_COUNT + 10).size()).is_equal(1)

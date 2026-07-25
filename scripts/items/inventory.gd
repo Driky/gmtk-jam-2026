@@ -68,6 +68,20 @@ func remove_from_slot(index: int, count: int) -> int:
 	return removed
 
 
+## Empty slots [from, to) and return what was in them, in slot order. The death
+## drop (2.5) uses it to move everything outside the hotbar into a loot bag —
+## the returned dicts are detached copies, safe to hand to the bag.
+func take_range(from: int, to: int) -> Array[Dictionary]:
+	var taken: Array[Dictionary] = []
+	for i in range(maxi(from, 0), mini(to, SLOT_COUNT)):
+		if _slots[i].is_empty():
+			continue
+		taken.append(_slots[i].duplicate())
+		_slots[i] = { }
+		slot_changed.emit(i)
+	return taken
+
+
 ## Read-only view; {} when empty. Callers must not mutate the result.
 func get_slot(index: int) -> Dictionary:
 	return _slots[index]
