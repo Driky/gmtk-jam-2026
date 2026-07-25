@@ -94,6 +94,32 @@ func test_countdown_zero_starts_wave() -> void:
 	assert_int(_game.wave_number).is_equal(1)
 	assert_array(_wave_starts).contains_exactly([1])
 
+# --- Debug countdown skip (F8) -------------------------------------------------
+
+
+func test_skip_countdown_shortens_and_repaints() -> void:
+	_game.start_build_phase()
+	_ticks.clear()
+	_game.skip_countdown()
+	assert_float(_game.time_left).is_equal(GameScript.DEBUG_SKIP_TO_SECONDS)
+	# The HUD must see the jump immediately, not on the next whole second.
+	assert_array(_ticks).contains_exactly([ceili(GameScript.DEBUG_SKIP_TO_SECONDS)])
+
+
+func test_skip_countdown_never_extends_the_clock() -> void:
+	_game.start_build_phase()
+	_game._tick_countdown(_game.build_phase_duration() - 2.0) # 2 s left.
+	_game.skip_countdown()
+	assert_float(_game.time_left).is_equal_approx(2.0, 0.001)
+
+
+func test_skip_countdown_is_a_noop_outside_build_phase() -> void:
+	_game.start_build_phase()
+	_game._tick_countdown(_game.build_phase_duration() + 0.1)
+	_game.skip_countdown()
+	assert_int(_game.state).is_equal(GameScript.State.WAVE_PHASE)
+	assert_float(_game.time_left).is_equal(0.0)
+
 # --- Wave clear + grace beat ---------------------------------------------------
 
 

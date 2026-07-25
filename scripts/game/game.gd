@@ -30,9 +30,13 @@ const BUILD_PHASE_DURATION := 240.0
 const FINAL_WINDOW := 10
 ## Beat between wave cleared and the next build phase.
 const GRACE_BEAT := 2.0
-## Debug: short build phase for browser smoke tests.
+## Debug: short build phase for browser smoke tests, where no key can be
+## pressed. F8 is the interactive equivalent — see skip_countdown.
 const DEBUG_FAST_PHASES := false
 const DEBUG_BUILD_PHASE_DURATION := 15.0
+## Debug (F8): how much countdown skip_countdown leaves on the clock. Inside
+## FINAL_WINDOW on purpose, so the skip still shows the last-10s presentation.
+const DEBUG_SKIP_TO_SECONDS := 5.0
 
 var state := State.BOOT
 ## The run's world seed — world gen consumes it, the save system persists it.
@@ -66,6 +70,21 @@ func _process(delta: float) -> void:
 			_poll_depth()
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"debug_skip_countdown"):
+		skip_countdown()
+
+
+## Debug (F8): cut a running build countdown short so a wave can be reached
+## without waiting out four minutes. Only ever shortens — repeat presses can't
+## push the clock back up. The wave-phase counterpart is F9 (waves.gd).
+func skip_countdown() -> void:
+	if state != State.BUILD_PHASE:
+		return
+	time_left = minf(time_left, DEBUG_SKIP_TO_SECONDS)
+	_emit_tick()
+
+
 func set_state(next: State) -> void:
 	if next == state:
 		return
@@ -87,8 +106,8 @@ func start_build_phase() -> void:
 	_emit_tick()
 
 
-## Public wave-clear contract: Waves calls this when all spawned mobs are
-## dead (stub auto-timer now; the real manager keeps the same call in 2.4).
+## Public wave-clear contract: Waves calls this once its spawn queue is empty
+## and every mob it spawned is dead (2.4).
 func notify_wave_cleared() -> void:
 	if state != State.WAVE_PHASE or _grace_left > 0.0:
 		return
