@@ -16,8 +16,14 @@ class_name FlowField
 extends RefCounted
 
 ## Field rows (full world width x this): mobs live near the surface; anything
-## deeper reads as no-data.
-const REGION_ROWS := 150
+## deeper reads as no-data and falls back to the direct-to-Core dig line.
+##
+## Solve cost is linear in cells, and this is the cheapest lever on it — the
+## browser measured 110 ms at 150 rows. 64 covers the surface band (rows
+## ~16-32) plus ~30 rows under it, past CAVE_MIN_ROW. Second, quieter win:
+## _on_cell_changed ignores edits below the region, so deep player mining
+## stops triggering recomputes at all.
+const REGION_ROWS := 64
 ## Reference mob capabilities (accepted simplification: one field for every
 ## ground mob) — Day-4 tuning knobs.
 const REFERENCE_DIG_POWER := 1.0
