@@ -6,7 +6,7 @@ Owner of: the `Deployable` base, placement, all deployable categories, the 10 Hz
 All placeables share a `Deployable` base scene: grid footprint (**arbitrary W×H per type**, defined in its data), HP, faction, `on_placed/on_removed`, registered into `Terrain`'s entity dict per occupied cell. Placement mode: grid-snapped ghost with validity tint (space empty, supported, in reach, not in a buffer zone), plus the power coverage overlay for powered machines.
 
 ## Categories
-- **Miner** — placed on deposit tiles; extracts from `reserve` every N ticks into its output slot.
+- **Miner** — placed on deposit tiles; extracts from `reserve` every N ticks into its output slot. Exhausted deposits become air ([terrain.md](terrain.md)), so a miner whose footprint tiles have all emptied shows an alert state (icon/toast) prompting removal.
 - **Conveyor** — non-blocking directional scaffold tube; items levitate through. One slot per tile; slot holds a **stack**. Tiered variants move faster.
 - **Inserter** — **mandatory for all machine I/O** (locked): picks from the tile behind (conveyor/machine output), drops to the tile in front (conveyor/machine input), one swing per transfer. **Stacking inserters** (higher tier) move whole stacks per swing.
 - **Stacker** — conveyor-like; when its output is blocked and the incoming stack matches its held stack's item id, merges them (up to max stack size) — saturated lines densify automatically.

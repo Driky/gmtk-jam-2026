@@ -25,10 +25,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] `scripts/terrain/tile_layout.gd`: derive `LAYOUT` from the template once; pin `variant_hash` ([terrain.md](systems/terrain.md) — never change after first save).
 
 ### 1.4 Terrain system ([terrain.md](systems/terrain.md))
-- [ ] `Terrain` autoload: TileMapLayer + sparse state dict, full API (`get_tile_data`, `damage_tile`, `set_tile`, `is_solid`, `place_entity`, `get_entity`).
-- [ ] `damage_tile` pipeline: damage accumulation + abandon-timeout, drops, deposit `reserve` depletion, XP hook (wired Day 2), `source`-based buffer-zone rejection 🔴.
-- [ ] Manual autotiling: 4-bit mask recompute on change, deterministic variants.
-- [ ] Debug assert: entity dict ↔ TileMap agreement.
+- [x] `Terrain` autoload: TileMapLayer + sparse state dict, full API (`get_tile_data`, `damage_tile`, `set_tile`, `is_solid`, `place_entity`, `get_entity`).
+- [x] `damage_tile` pipeline: damage accumulation + abandon-timeout, drops, deposit `reserve` depletion, XP hook (wired Day 2), `source`-based buffer-zone rejection 🔴.
+- [x] Manual autotiling: 4-bit mask recompute on change, deterministic variants.
+- [x] Debug assert: entity dict ↔ TileMap agreement.
 
 ### 1.5 World generation ([world-gen.md](systems/world-gen.md))
 - [ ] Seeded pipeline: height-noise surface → 5 biome bands → cave carving → per-biome ore scatter → deposit blobs with `reserve` → bedrock border.

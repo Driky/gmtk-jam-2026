@@ -2,3 +2,6 @@
 .godot/
 /android/
 /build/
+
+# gdUnit4 test reports
+/reports/

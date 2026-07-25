@@ -29,7 +29,9 @@ const ORDER: Array[String] = [
 ## Per material: base_color (placeholder ramp source), hardness, drop_id
 ## ("" = no drop), drop_count, min_tool_tier (99 = unminable), is_solid,
 ## is_ore, is_deposit, optional sheet (reuse another material's PNG —
-## deposits reuse their ore's sheet, no extra art).
+## deposits reuse their ore's sheet, no extra art). Deposits also carry
+## base_reserve (starting ore reserve; read by Terrain, not baked into the
+## TileSet).
 const MATERIALS: Dictionary = {
 	"grass": {
 		base_color = Color(0.36, 0.65, 0.26),
@@ -160,6 +162,7 @@ const MATERIALS: Dictionary = {
 		is_solid = true,
 		is_ore = true,
 		is_deposit = true,
+		base_reserve = 50,
 		sheet = "coal",
 	},
 	"copper_deposit": {
@@ -171,6 +174,7 @@ const MATERIALS: Dictionary = {
 		is_solid = true,
 		is_ore = true,
 		is_deposit = true,
+		base_reserve = 50,
 		sheet = "copper",
 	},
 	"iron_deposit": {
@@ -182,6 +186,7 @@ const MATERIALS: Dictionary = {
 		is_solid = true,
 		is_ore = true,
 		is_deposit = true,
+		base_reserve = 50,
 		sheet = "iron",
 	},
 	"gold_deposit": {
@@ -193,6 +198,7 @@ const MATERIALS: Dictionary = {
 		is_solid = true,
 		is_ore = true,
 		is_deposit = true,
+		base_reserve = 50,
 		sheet = "gold",
 	},
 	"magmatite_deposit": {
@@ -204,6 +210,7 @@ const MATERIALS: Dictionary = {
 		is_solid = true,
 		is_ore = true,
 		is_deposit = true,
+		base_reserve = 50,
 		sheet = "magmatite",
 	},
 	"wall": {
