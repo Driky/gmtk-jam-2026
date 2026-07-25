@@ -40,6 +40,20 @@ func test_landing_resets_apex() -> void:
 	enemy._check_landing() # Grounded: must be a no-op.
 	assert_float(enemy.current_hp).is_equal(hp)
 
+
+func test_fall_steers_over_the_target_cell() -> void:
+	# Body straddling the edge of a hole dug under its center: FALL must
+	# push toward the hole's center-x, not zero out (deadlock otherwise).
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(71.0 * 16.0 + 0.7, 22.5 * 16.0)
+	var decision := {
+		"action": EnemyLocomotion.Action.FALL,
+		"target": Vector2i(71, 23),
+		"jump_tiles": 0,
+	}
+	enemy._actuate(decision, Vector2i(71, 22), 1.0 / 60.0)
+	assert_float(enemy.velocity.x).is_greater(0.0)
+
 # --- Damage / death ----------------------------------------------------------
 
 

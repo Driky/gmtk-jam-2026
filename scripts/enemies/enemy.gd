@@ -157,8 +157,15 @@ func _direct_dir(pos: Vector2i) -> Vector2i:
 func _actuate(decision: Dictionary, pos: Vector2i, delta: float) -> void:
 	var target: Vector2i = decision.target
 	match decision.action:
-		EnemyLocomotion.Action.WALK, EnemyLocomotion.Action.FALL:
+		EnemyLocomotion.Action.WALK:
 			velocity.x = signi(target.x - pos.x) * stats.speed
+		EnemyLocomotion.Action.FALL:
+			# Steer over the target cell's center: a straight-down fall with
+			# zero x-velocity deadlocks when the body still straddles a
+			# neighbor tile (dug a hole under its center, feet on the edge).
+			var center_x := (target.x + 0.5) * TILE
+			var dx := center_x - global_position.x
+			velocity.x = 0.0 if absf(dx) < 1.0 else signf(dx) * stats.speed
 		EnemyLocomotion.Action.JUMP:
 			velocity.x = signi(target.x - pos.x) * stats.speed
 			if is_on_floor():
