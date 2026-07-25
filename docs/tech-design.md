@@ -10,6 +10,7 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 - Godot 4.x, **GDScript only** (no C# on web), **HTML5 export** to itch.io.
 - **Compatibility renderer**, **single-threaded** (no `Thread`, no SharedArrayBuffer setup).
 - Keyboard + mouse only. 16×16 px tiles.
+- **Display:** 1280×720 base viewport, `canvas_items` stretch (aspect `keep`), nearest-neighbor filtering. Fullscreen up to 1920×1080 via itch.io's embed fullscreen button (no in-game code needed).
 
 ## Codebase Map (autoloads = fixed public API)
 | Autoload | Owns | Doc |
@@ -54,3 +55,5 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 | Pause: menu interactive, gameplay actions blocked | [systems/ui.md](systems/ui.md) |
 | Save = seed + diff, autosave at build-phase start only (never serialize live monsters) | [systems/save.md](systems/save.md) |
 | Placeholder tilesets generated from template by palette remap; TileSet built from `materials.gd` | [systems/pipeline.md](systems/pipeline.md) |
+| 1280×720 base viewport, canvas_items stretch, nearest filtering; fullscreen via itch embed button | this file (Hard Constraints) |
+| World camera zoom cycles 1×/1.5×/2× (default 1×) on a hotkey; HUD stays native 720p | [systems/ui.md](systems/ui.md) |

@@ -9,10 +9,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 ## Day 1 — Dig loop (playable in-browser by bedtime)
 
 ### 1.1 Project setup
-- [ ] Godot 4.x project: Compatibility renderer, 16×16 tile settings, viewport/stretch config for web.
-- [ ] Input map: move/jump, mine, place, hotbar 1–0, `I`/`C`/`K`, power-overlay hotkey, debug-overlay hotkey, pause.
-- [ ] Autoload skeletons registered in fixed order: `Game`, `Terrain`, `Automation`, `Waves`, `Progression`, `Items`, `SaveSystem`, `AudioBus` ([tech-design.md](tech-design.md) codebase map).
-- [ ] `CREDITS.md` created (pipeline rule: from hour one — [pipeline.md](systems/pipeline.md)).
+- [x] Godot 4.x project: Compatibility renderer, 16×16 tile settings, viewport/stretch config for web.
+- [x] Input map: move/jump, mine, place, hotbar 1–0, `I`/`C`/`K`, power-overlay hotkey, debug-overlay hotkey, pause.
+- [x] Autoload skeletons registered in fixed order: `Game`, `Terrain`, `Automation`, `Waves`, `Progression`, `Items`, `SaveSystem`, `AudioBus` ([tech-design.md](tech-design.md) codebase map).
+- [x] `CREDITS.md` created (pipeline rule: from hour one — [pipeline.md](systems/pipeline.md)).
 
 ### 1.2 Web export — hour 2, not hour 90 🔴
 - [ ] HTML5 export preset (single-threaded, no SharedArrayBuffer requirement); run in an actual browser.

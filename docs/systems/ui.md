@@ -8,6 +8,9 @@ Navigable via tab buttons and cycling keys; each tab ALSO has a direct shortcut 
 - **Crafting tab:** recipes in **category tabs** (Tools & Weapons / Automation / Logistics / Power / Defense / Components…) for findability; filtered by unlocks, greyed when inputs missing (with missing-item highlight); search box if time allows.
 - **Skill tree tab:** node graph ([progression.md](progression.md)).
 
+## World camera zoom (locked)
+`Z` cycles the world camera zoom **1× → 1.5× → 2×** (default **1×**). Affects only the game world; HUD/UI stays native 720p ([tech-design.md](../tech-design.md) display constraint). Implemented on the player camera ([player-combat.md](player-combat.md), Day 1 step 1.6).
+
 ## Other screens
 HUD (countdown / wave banner, HP/mana bars, XP bar + level, hotbar, Core HP) · pause menu · placement mode overlay · **power overlay** on its own hotkey, togglable anytime ([automation.md](automation.md)) · debug overlay (slot occupancy, fortification score) · death & game-over screens · main menu with seed input (stretch: seedless "New Run" only). Keyboard + mouse only. Toasts for rejected placements (buffer zone, light cap — [terrain.md](terrain.md)).
 
