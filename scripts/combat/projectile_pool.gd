@@ -13,8 +13,17 @@ extends Node2D
 
 const ProjectileScene := preload("res://scenes/combat/projectile.tscn")
 
-## Well past what the player plus a few turrets can keep airborne at once; a
-## shot lives ~1.5 s, so this is the cap on shots-per-second-times-lifetime.
+## Ceiling on concurrent shots = fire rate × lifetime, summed over everything
+## shooting. Fine for the player alone (~2/s × 1.5 s = 3).
+##
+## ❗️FIXED SIZE DOES NOT SURVIVE TURRETS (3.5). Every turret is another
+## spawner, so a defended base blows past 32 and `_take` starts stealing shots
+## that are still in flight — bolts vanishing mid-air, and worse the more
+## turrets you build, which is exactly backwards. Before turrets ship, size the
+## pool from its spawners instead of a constant: have each one `reserve()` its
+## own worst case on place and release it on remove, grow the pool to the sum
+## (never shrink mid-wave), and keep the steal only as a last-resort backstop.
+## Growing is safe — nothing holds a Projectile reference across frames.
 const POOL_SIZE := 32
 
 static var instance: ProjectilePool = null

@@ -108,6 +108,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [ ] Coverage circles in placement mode; persistent power-overlay hotkey; unpowered-machine icon.
 
 ### 3.5 Defense
+- [ ] **Projectile pool must scale with spawner count before turrets ship** — the 2.5 pool is a fixed 32 and steals in-flight shots once exceeded ([player-combat.md](systems/player-combat.md)).
 - [ ] Basic turret: auto-target, shared projectiles, ammo slot fed by inserter/hand; spike trap.
 - [ ] Chest, respawn beacon, ladder (rope/pole Day 4, ✂️8).
 
