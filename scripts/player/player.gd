@@ -5,6 +5,10 @@ extends CharacterBody2D
 
 signal health_changed(current: float, max_value: float)
 signal mana_changed(current: float, max_value: float)
+## Died, with the seconds until respawn — the HUD announces off this (4.5
+## replaces the banner with a real death screen).
+signal died(respawn_seconds: float)
+signal respawned
 
 const TILE := TileLayout.TILE_SIZE
 
@@ -15,6 +19,8 @@ const COYOTE_TIME := 0.10
 const JUMP_BUFFER := 0.12
 const REACH_RADIUS_PX := 4.5 * TILE ## Player center → tile center.
 const COLLISION_EXTENTS := Vector2(6.0, 11.0) ## 12×22 box, fits 1-wide tunnels.
+## Physics layer 2 ("player" in project.godot) — restored after a death.
+const COLLISION_LAYER_PLAYER := 2
 
 const DEFAULT_HITBOX := preload("res://scenes/combat/swing_hitbox_default.tscn")
 ## Muzzle distance: clear of the 12×22 body, so a shot never spawns inside the
@@ -34,6 +40,14 @@ const BLINK_ALPHA := 0.3
 const HURT_KNOCKBACK := 140.0
 const HURT_LIFT := 80.0
 const HURT_STUN := 0.15
+
+const LOOT_BAG := preload("res://scenes/loot_bag.tscn")
+## Long enough to register the death, short enough that a wave doesn't resolve
+## itself without you. The Core is what ends a run, not this.
+const RESPAWN_TIME := 3.0
+## The hotbar rides along; everything past it goes in the bag. You respawn able
+## to dig and fight, and it's the bulk haul that's at risk.
+const KEPT_SLOTS := Inventory.HOTBAR_SIZE
 
 ## Combat seam (2.5): damage/spells only mutate these — clamp + HUD notify are
 ## in the setters. Maxima live in Progression, not here.
@@ -60,6 +74,8 @@ var _hitbox_scene: PackedScene = null
 var _invuln_left := 0.0
 var _stun_left := 0.0
 var _blink_left := 0.0
+## > 0 while dead. Doubles as the is_dead() flag so there's one source of truth.
+var _respawn_left := 0.0
 
 @onready var _visual: ColorRect = $Visual
 @onready var _hurtbox: Area2D = $Hurtbox
@@ -81,6 +97,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _step(delta: float) -> void:
+	if is_dead():
+		_tick_respawn(delta)
+		return
 	_tick_invulnerability(delta)
 	_move(delta)
 	_contact_damage()
@@ -98,11 +117,17 @@ func _step(delta: float) -> void:
 ## `attacker` is accepted for symmetry with Enemy.take_damage (and to attribute
 ## damage later); the player has no threat table to feed.
 func take_damage(amount: float, _attacker: Node2D = null) -> void:
-	if _invuln_left > 0.0 or current_hp <= 0.0:
+	if _invuln_left > 0.0 or is_dead():
 		return
 	current_hp -= amount
 	_invuln_left = INVULN_TIME
 	_blink_left = 0.0
+	if current_hp <= 0.0:
+		_die()
+
+
+func is_dead() -> bool:
+	return _respawn_left > 0.0
 
 
 ## Shove taken from a hit, mirroring Enemy.apply_knockback so both sides of a
@@ -131,6 +156,53 @@ func _tick_invulnerability(delta: float) -> void:
 	if _blink_left <= 0.0:
 		_blink_left = BLINK_PERIOD
 		_visual.modulate.a = BLINK_ALPHA if _visual.modulate.a >= 1.0 else 1.0
+
+# --- Death & respawn ---------------------------------------------------------
+
+
+## Drop the haul where you fell, then sit out the respawn timer. The run does
+## NOT end here — the Core is the loss condition (plan.md), so the wave keeps
+## pushing while you're down, which is the actual cost of dying.
+func _die() -> void:
+	_respawn_left = RESPAWN_TIME
+	velocity = Vector2.ZERO
+	_drop_loot_bag()
+	visible = false
+	# Deferred: _step runs inside physics, and changing collision mid-flush is
+	# an error. A corpse must not block mobs or take further hits either way.
+	set_deferred(&"collision_layer", 0)
+	died.emit(RESPAWN_TIME)
+
+
+## Everything past the hotbar goes into one bag at the death position. One bag
+## rather than N pickups: a full inventory would otherwise spray 30 items
+## across whatever killed you.
+func _drop_loot_bag() -> void:
+	var dropped := Items.player_inventory.take_range(KEPT_SLOTS, Inventory.SLOT_COUNT)
+	if dropped.is_empty():
+		return
+	var bag: Node2D = LOOT_BAG.instantiate()
+	bag.setup(dropped)
+	bag.global_position = global_position
+	get_parent().add_child(bag)
+
+
+func _tick_respawn(delta: float) -> void:
+	_respawn_left -= delta
+	if _respawn_left > 0.0:
+		return
+	_respawn_left = 0.0
+	var core := get_tree().get_first_node_in_group(&"core") as Node2D
+	if core != null:
+		# On top of the Core's anchor cell, feet clear of the surface tile.
+		global_position = (Vector2(core.base_cell()) + Vector2(0.5, 0.0)) * TILE - Vector2(0.0, 12.0)
+	current_hp = Progression.get_stat("max_hp")
+	visible = true
+	_visual.modulate.a = 1.0
+	set_deferred(&"collision_layer", COLLISION_LAYER_PLAYER)
+	# Land on your feet, not in a mob's mouth.
+	_invuln_left = INVULN_TIME
+	respawned.emit()
 
 
 ## Touching a mob hurts, with no threat required — a wave you can walk through

@@ -207,3 +207,72 @@ func test_damage_is_ignored_once_dead() -> void:
 	player._tick_invulnerability(Player.INVULN_TIME + 0.01)
 	player.take_damage(10.0)
 	assert_float(player.current_hp).is_equal(0.0)
+
+# --- Death & respawn (2.5) ---------------------------------------------------
+
+
+func test_lethal_damage_kills_and_emits_the_respawn_timer() -> void:
+	var player := _hurtable_player()
+	var announced: Array[float] = []
+	player.died.connect(func(seconds: float) -> void: announced.append(seconds))
+	player.take_damage(9999.0)
+	assert_bool(player.is_dead()).is_true()
+	assert_array(announced).contains_exactly([Player.RESPAWN_TIME])
+
+
+## The death-drop split: you respawn still able to dig and fight, and it's the
+## bulk haul that's at risk.
+func test_death_drops_past_the_hotbar_and_keeps_it() -> void:
+	Items.reset_run()
+	var inventory := Items.player_inventory
+	# Fill every hotbar slot, then spill one stack past it.
+	inventory.add_item("dirt", Inventory.STACK_SIZE * Inventory.HOTBAR_SIZE)
+	inventory.add_item("stone", 5)
+	var player := _hurtable_player()
+	player.take_damage(9999.0)
+	assert_int(inventory.count_of("dirt")).is_equal(
+		Inventory.STACK_SIZE * Inventory.HOTBAR_SIZE,
+	) # Hotbar kept.
+	assert_int(inventory.count_of("stone")).is_equal(0) # Went to the bag.
+	var bags := get_tree().get_nodes_in_group(&"loot_bags")
+	assert_int(bags.size()).is_equal(1)
+	assert_int((bags[0] as LootBag).contents[0].count).is_equal(5)
+	(bags[0] as Node).queue_free()
+	Items.reset_run()
+
+
+## Nothing outside the hotbar means nothing worth walking back for — an empty
+## bag would just be litter on the path.
+func test_no_bag_when_only_the_hotbar_is_carried() -> void:
+	Items.reset_run()
+	Items.player_inventory.add_item("dirt", 3)
+	var player := _hurtable_player()
+	player.take_damage(9999.0)
+	assert_array(get_tree().get_nodes_in_group(&"loot_bags")).is_empty()
+	Items.reset_run()
+
+
+## Being dead must not also mean being hittable — a corpse taking hits would
+## re-enter _die and drop a second bag.
+func test_a_dead_player_takes_no_further_damage() -> void:
+	var player := _hurtable_player()
+	player.take_damage(9999.0)
+	player._invuln_left = 0.0
+	player.take_damage(10.0)
+	assert_float(player.current_hp).is_equal(0.0)
+
+
+func test_respawn_restores_full_hp_and_grants_grace() -> void:
+	var player := _hurtable_player()
+	# Array, not an int: GDScript lambdas capture value types by COPY, so a
+	# `count += 1` inside one increments a copy and the assert reads 0 forever.
+	var respawns: Array[bool] = []
+	player.respawned.connect(func() -> void: respawns.append(true))
+	player.take_damage(9999.0)
+	player._tick_respawn(Player.RESPAWN_TIME + 0.01)
+	assert_bool(player.is_dead()).is_false()
+	assert_float(player.current_hp).is_equal(Progression.get_stat("max_hp"))
+	# Landing straight into a mob's mouth would make the timer a punishment.
+	assert_bool(player.is_invulnerable()).is_true()
+	assert_int(respawns.size()).is_equal(1)
+	assert_bool(player.visible).is_true()

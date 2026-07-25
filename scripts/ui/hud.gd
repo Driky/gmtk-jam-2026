@@ -89,6 +89,8 @@ func bind_player(player: Player) -> void:
 	_player = player
 	player.health_changed.connect(_on_health_changed)
 	player.mana_changed.connect(_on_mana_changed)
+	player.died.connect(_on_player_died)
+	player.respawned.connect(_on_player_respawned)
 	_on_health_changed(player.current_hp, Progression.get_stat("max_hp"))
 	_on_mana_changed(player.current_mana, Progression.get_stat("max_mana"))
 
@@ -161,6 +163,17 @@ func _on_mana_changed(current: float, max_value: float) -> void:
 func _on_core_health_changed(current: float, max_value: float) -> void:
 	_core_bar.max_value = max_value
 	_core_bar.value = current
+
+
+## Reuses the wave banner rather than growing a screen — a run continues
+## through a player death (the Core is the loss condition), so this is an
+## announcement, not an interruption. The real death screen is 4.5.
+func _on_player_died(respawn_seconds: float) -> void:
+	_announce("You died — respawning in %ds" % roundi(respawn_seconds))
+
+
+func _on_player_respawned() -> void:
+	_announce("Respawned at the Core")
 
 
 func _on_countdown_tick(seconds_left: int) -> void:
