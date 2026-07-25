@@ -6,6 +6,20 @@ extends GdUnitTestSuite
 const GameScript := preload("res://scripts/game/game.gd")
 const WavesScript := preload("res://scripts/waves/waves.gd")
 
+
+## Just the two signals _ready connects — keeps tests off the live Terrain.
+class TerrainStub:
+	extends Node
+
+	signal tile_changed(pos: Vector2i)
+	signal entity_changed(pos: Vector2i)
+
+
+	func touch(pos: Vector2i) -> void:
+		tile_changed.emit(pos)
+		entity_changed.emit(pos)
+
+
 var _game: Node
 var _waves: Node
 
@@ -14,6 +28,7 @@ func before_test() -> void:
 	_game = auto_free(GameScript.new())
 	_waves = auto_free(WavesScript.new())
 	_waves.game = _game # Inject before add_child (_ready connects signals).
+	_waves.terrain = auto_free(TerrainStub.new())
 	add_child(_waves)
 
 

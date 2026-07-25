@@ -49,6 +49,8 @@ func _finish_generation() -> void:
 	var registered: bool = core.register_footprint(Terrain)
 	assert(registered) # The flat spawn area guarantees air cells.
 	core.died.connect(Game.game_over)
+	# Field + untouched-terrain baseline: Core registered, zero player edits.
+	Waves.initialize_flow_field(core)
 	var player: CharacterBody2D = PlayerScene.instantiate()
 	# Feet on the surface tile top (center is 11 px up), 1 px slack against overlap.
 	player.position = Vector2((cx + PLAYER_SPAWN_OFFSET_X + 0.5) * TILE, surface_row * TILE - 12)
@@ -72,5 +74,6 @@ func _restart() -> void:
 	get_tree().paused = false # A reload does NOT unpause — clear it first.
 	Terrain.reset_run()
 	Items.reset_run()
+	Waves.reset_run()
 	Game.reset_run()
 	get_tree().reload_current_scene() # Fresh seed via _ready's randi().
