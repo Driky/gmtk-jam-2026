@@ -41,7 +41,6 @@ func _init() -> void:
 		push_error("Usage: godot --headless --script res://tools/generate_tilesets.gd -- [--pngs|--tileset]")
 	quit(0 if ok else 1)
 
-
 # --- PNG phase ---------------------------------------------------------------
 
 
@@ -68,7 +67,7 @@ func _generate_pngs() -> bool:
 		if mat.has("sheet"):
 			continue
 		var base: Color = mat.base_color
-		var ramp := {}
+		var ramp := { }
 		for pal_color: Color in palette:
 			var v := base.v * pal_color.get_luminance() / lum_max
 			ramp[pal_color.to_rgba32()] = Color.from_hsv(base.h, base.s, v)
@@ -92,7 +91,7 @@ func _generate_pngs() -> bool:
 
 ## Unique opaque colors, sorted darkest → brightest.
 func _extract_palette(img: Image) -> Array[Color]:
-	var seen := {}
+	var seen := { }
 	for y in img.get_height():
 		for x in img.get_width():
 			var p := img.get_pixel(x, y)
@@ -137,10 +136,10 @@ func _verify_layout(img: Image, border_color: Color) -> bool:
 			var oy := coord.y * pitch
 			var derived := 0
 			var edges := [
-				[1, Vector2i(ox, oy), Vector2i(1, 0)],  # N
-				[2, Vector2i(ox + 15, oy), Vector2i(0, 1)],  # E
-				[4, Vector2i(ox, oy + 15), Vector2i(1, 0)],  # S
-				[8, Vector2i(ox, oy), Vector2i(0, 1)],  # W
+				[1, Vector2i(ox, oy), Vector2i(1, 0)], # N
+				[2, Vector2i(ox + 15, oy), Vector2i(0, 1)], # E
+				[4, Vector2i(ox, oy + 15), Vector2i(1, 0)], # S
+				[8, Vector2i(ox, oy), Vector2i(0, 1)], # W
 			]
 			for edge: Array in edges:
 				var border_px := 0
@@ -158,11 +157,10 @@ func _verify_layout(img: Image, border_color: Color) -> bool:
 			if derived != mask:
 				push_error(
 					"Template drift at cell %s: LAYOUT says mask %d, template borders say %d. LAYOUT must never be restructured (docs/systems/terrain.md)."
-					% [coord, mask, derived]
+					% [coord, mask, derived],
 				)
 				return false
 	return true
-
 
 # --- TileSet phase -----------------------------------------------------------
 
@@ -179,9 +177,14 @@ func _build_tileset() -> bool:
 		ts.set_custom_data_layer_name(i, CUSTOM_DATA_LAYERS[i][0])
 		ts.set_custom_data_layer_type(i, CUSTOM_DATA_LAYERS[i][1])
 
-	var square := PackedVector2Array([
-		Vector2(-8, -8), Vector2(8, -8), Vector2(8, 8), Vector2(-8, 8)
-	])
+	var square := PackedVector2Array(
+		[
+			Vector2(-8, -8),
+			Vector2(8, -8),
+			Vector2(8, 8),
+			Vector2(-8, 8),
+		],
+	)
 
 	for source_id in MaterialsScript.ORDER.size():
 		var id: String = MaterialsScript.ORDER[source_id]
