@@ -57,9 +57,9 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Wave-end settle: loot/XP → grace beat → countdown reset. Game-over stats screen (waves, depth, blocks mined).
 
 ### 2.2 Flow-field pathfinding ([enemies.md](systems/enemies.md)) 🔴
-- [ ] Ground field: Dijkstra from Core, gravity-aware directional costs, dig-weighted solids, deployable HP costs.
-- [ ] Region restriction (top ~150 rows), recompute on terrain/deployable change debounced ≤ 0.5 s.
-- [ ] Cache untouched-terrain baseline costs at world gen (needed Day 4 for fortification score).
+- [x] Ground field: Dijkstra from Core, gravity-aware directional costs, dig-weighted solids, deployable HP costs.
+- [x] Region restriction (top ~150 rows), recompute on terrain/deployable change debounced ≤ 0.5 s.
+- [x] Cache untouched-terrain baseline costs at world gen (needed Day 4 for fortification score).
 
 ### 2.3 First enemy — walker, fully working ([enemies.md](systems/enemies.md))
 - [ ] Enemy base (`CharacterBody2D`) + `EnemyStats` Resource with locomotion capabilities.
