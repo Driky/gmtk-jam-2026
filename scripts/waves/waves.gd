@@ -1,28 +1,48 @@
 ## Wave composition, spawning, aggro helpers; owns the shared ground flow
 ## field (2.2). Owning doc: docs/systems/enemies.md
 ##
-## 2.1 stub: no enemies exist yet, so a wave "clears" on a fixed timer (or
-## the F9 debug action). The real manager (2.4) replaces the timer but keeps
-## the same clear contract: call game.notify_wave_cleared() when all spawned
-## mobs are dead.
+## The wave is pre-rolled into a spawn queue at wave start (composition table:
+## data/wave_roster.gd), then trickled out from both buffer zones. Clear
+## contract: game.notify_wave_cleared() once the queue is empty AND every mob
+## it spawned is dead.
+##
+## Signal note: phase flow goes through Game (see game.gd) — wave_progress
+## does not. It's this manager's own data, so the HUD listens here directly.
 extends Node
 
 ## The flow field was rebuilt — the debug overlay redraws on this; mobs just
 ## re-read the field every frame and don't need it.
 signal flow_field_updated
+## Spawn queue or alive count changed; payload is remaining(). HUD readout.
+signal wave_progress_changed(remaining: int)
 
-## Placeholder wave length until enemies land in 2.3/2.4. A stub-cleared wave
-## may leave spawned mobs alive — accepted until 2.4's live-mob count.
-const STUB_WAVE_DURATION := 15.0
 const ENEMY_SCENE := preload("res://scenes/enemies/enemy.tscn")
-const WALKER_STATS := preload("res://data/enemies/walker.tres")
+const TILE := TileLayout.TILE_SIZE
 ## Leading-edge debounce: the first change arms the timer, later changes never
 ## re-arm it (a trailing debounce would starve under continuous mob chewing).
 const RECOMPUTE_DEBOUNCE := 0.5
 
+## Concurrent-mob perf ceiling. Hitting it stalls the trickle — the wave keeps
+## its full budget, the queue just drains slower.
+const MAX_ALIVE := 25
+## Seconds between trickle spawns (Day-4 balance knob, roadmap 4.6).
+const SPAWN_INTERVAL := 1.2
+## Spawn band, measured from the OUTER world edge: mobs traverse the whole
+## player-immutable buffer, so no approach can be booby-trapped at the source.
+## Clear of the bedrock border column (x = 0) either way.
+const SPAWN_MARGIN_MIN := 3
+const SPAWN_MARGIN_MAX := 8
+## Enemy collision box is 12x14, so feet sit 7 px below center; 1 px of slack
+## against overlapping the surface tile (mirrors main.gd's player spawn).
+const SPAWN_FEET_OFFSET := 8.0
+
 ## Injected by tests; fall back to the autoloads (both load before us).
 var game: Node = null
 var terrain: Node = null
+## Spawn seams for tests: a stub scene and an explicit parent keep wave tests
+## off the real physics enemy and the live scene tree.
+var enemy_scene: PackedScene = ENEMY_SCENE
+var spawn_parent: Node = null
 
 ## null until initialize_flow_field() (main.gd, right after world gen).
 var flow_field: FlowField = null
@@ -32,7 +52,15 @@ var _goal_cells: Array[Vector2i] = []
 ## the Day-4 fortification score compares spawn-cell costs against this.
 var _baseline_costs := PackedFloat32Array()
 var _recompute_left := 0.0
-var _time_left := 0.0
+
+## Types still to spawn this wave, in roll order.
+var _queue: Array[EnemyStats] = []
+## Mobs this manager spawned and hasn't seen die.
+var _alive: Array[Node] = []
+var _spawn_left := 0.0
+## Alternates 0/1 so consecutive spawns come from opposite buffers.
+var _next_side := 0
+var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
@@ -51,26 +79,26 @@ func _process(delta: float) -> void:
 		_recompute_left -= delta
 		if _recompute_left <= 0.0:
 			_recompute_now()
-	if _time_left <= 0.0 or game.state != game.State.WAVE_PHASE:
-		return
-	_time_left -= delta
-	if _time_left <= 0.0:
-		game.notify_wave_cleared()
+	if game.state == game.State.WAVE_PHASE:
+		_tick_spawning(delta)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"debug_clear_wave") and game.state == game.State.WAVE_PHASE:
-		_time_left = 0.0
-		game.notify_wave_cleared()
-	# 2.3 debug spawner — the input handlers go away when the real wave
-	# manager lands (2.4); spawn_enemy stays as its entry point.
+		_queue.clear()
+		for enemy in _alive.duplicate(): # Lethal damage, so the real death path runs.
+			if is_instance_valid(enemy):
+				enemy.take_damage(INF)
+		_check_cleared()
+	# Debug spawner: drops one walker at the cursor, outside the wave budget.
 	if event.is_action_pressed(&"debug_spawn_walker", true):
 		var scene := get_tree().current_scene
 		var in_run: bool = (
 			game.state == game.State.BUILD_PHASE or game.state == game.State.WAVE_PHASE
 		)
 		if in_run and scene is Node2D:
-			spawn_enemy(WALKER_STATS, (scene as Node2D).get_global_mouse_position())
+			var stats: EnemyStats = WaveRoster.ENTRIES[0].stats
+			spawn_enemy(stats, (scene as Node2D).get_global_mouse_position())
 	# Poke the nearest enemy as the player: verifies aggro before 2.5 melee.
 	if event.is_action_pressed(&"debug_poke_enemy"):
 		var player: Node2D = get_tree().get_first_node_in_group(&"player")
@@ -85,15 +113,75 @@ func _unhandled_input(event: InputEvent) -> void:
 			if nearest != null:
 				nearest.take_damage(5.0, player)
 
-# --- Spawning (2.3; the 2.4 wave manager drives this) ------------------------
+# --- Wave manager (2.4) ------------------------------------------------------
 
 
-func spawn_enemy(stats: EnemyStats, world_pos: Vector2) -> Enemy:
-	var enemy: Enemy = ENEMY_SCENE.instantiate()
+## Mobs left in this wave: still to spawn plus still alive. Exact head count —
+## the queue is pre-rolled, so no cost-to-count estimation is involved.
+func remaining() -> int:
+	return _queue.size() + alive_count()
+
+
+func alive_count() -> int:
+	var count := 0
+	for enemy in _alive:
+		if is_instance_valid(enemy):
+			count += 1
+	return count
+
+
+func spawn_enemy(stats: EnemyStats, world_pos: Vector2) -> Node2D:
+	var enemy: Node2D = enemy_scene.instantiate()
 	enemy.stats = stats
 	enemy.position = world_pos
-	get_tree().current_scene.add_child(enemy)
+	enemy.died.connect(_on_enemy_died)
+	_alive.append(enemy)
+	var parent: Node = spawn_parent if spawn_parent != null else get_tree().current_scene
+	parent.add_child(enemy)
 	return enemy
+
+
+func _tick_spawning(delta: float) -> void:
+	if _queue.is_empty() or alive_count() >= MAX_ALIVE:
+		return
+	_spawn_left -= delta
+	if _spawn_left > 0.0:
+		return
+	_spawn_left = SPAWN_INTERVAL
+	spawn_enemy(_queue.pop_front(), _spawn_position())
+	wave_progress_changed.emit(remaining())
+
+
+## Alternating buffer, random depth in the outer band, standing on the surface.
+func _spawn_position() -> Vector2:
+	var margin := _rng.randi_range(SPAWN_MARGIN_MIN, SPAWN_MARGIN_MAX)
+	var x := margin if _next_side == 0 else WorldConfig.WORLD_WIDTH - 1 - margin
+	_next_side = 1 - _next_side
+	return Vector2((x + 0.5) * TILE, _surface_row(x) * TILE - SPAWN_FEET_OFFSET)
+
+
+## First solid row in a column. Buffers are flat dirt with no caves and no
+## resources (world-gen.md), so this is a short scan that can't stop on a cave
+## roof. Row 0 (bedrock border) is the degenerate fallback — mobs would drop in.
+func _surface_row(x: int) -> int:
+	for y in FlowField.REGION_ROWS:
+		if terrain.is_solid(Vector2i(x, y)):
+			return y
+	return 0
+
+
+func _on_enemy_died(enemy: Node) -> void:
+	_alive.erase(enemy)
+	wave_progress_changed.emit(remaining())
+	_check_cleared()
+
+
+## Game.notify_wave_cleared is itself guarded against double-fire (grace beat).
+func _check_cleared() -> void:
+	if game.state != game.State.WAVE_PHASE:
+		return
+	if _queue.is_empty() and alive_count() == 0:
+		game.notify_wave_cleared()
 
 # --- Flow field (2.2) --------------------------------------------------------
 
@@ -127,7 +215,10 @@ func reset_run() -> void:
 	_goal_cells = []
 	_baseline_costs = PackedFloat32Array()
 	_recompute_left = 0.0
-	_time_left = 0.0
+	_queue.clear()
+	_alive.clear()
+	_spawn_left = 0.0
+	_next_side = 0
 
 # --- Internals ---------------------------------------------------------------
 
@@ -146,7 +237,11 @@ func _recompute_now() -> void:
 	flow_field_updated.emit()
 
 
-func _on_wave_started(_wave_number: int) -> void:
-	_time_left = STUB_WAVE_DURATION
+func _on_wave_started(wave_number: int) -> void:
 	if _recompute_left > 0.0:
 		_recompute_now() # Mobs must never spawn against a stale field.
+	# Seeded per (run, wave) so a wave replays identically for a seed (save.md).
+	_rng.seed = game.world_seed ^ (wave_number * 0x9E3779B1)
+	_queue = WaveRoster.build_queue(_rng, wave_number)
+	_spawn_left = 0.0 # First mob of the wave spawns on the next tick.
+	wave_progress_changed.emit(remaining())

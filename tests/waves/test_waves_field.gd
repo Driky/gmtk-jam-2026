@@ -4,6 +4,7 @@ extends GdUnitTestSuite
 
 const GameScript := preload("res://scripts/game/game.gd")
 const WavesScript := preload("res://scripts/waves/waves.gd")
+const StubEnemyScene := preload("res://tests/waves/stub_enemy.tscn")
 
 const DEEP_ROW := FlowField.REGION_ROWS + 10
 
@@ -27,6 +28,10 @@ class TerrainDouble:
 
 	func get_entity_cells() -> Array[Vector2i]:
 		return []
+
+
+	func is_solid(_pos: Vector2i) -> bool:
+		return false # Empty world; spawn placement isn't under test here.
 
 
 	func touch_tile(pos: Vector2i) -> void:
@@ -57,6 +62,11 @@ func before_test() -> void:
 	_waves = auto_free(WavesScript.new())
 	_waves.game = _game
 	_waves.terrain = _terrain # Inject before add_child (_ready connects).
+	# Spawn seams: this suite only exercises the field, but _waves is in the
+	# tree, so the engine ticks its real _process and may trickle mobs out.
+	_waves.enemy_scene = StubEnemyScene
+	_waves.spawn_parent = auto_free(Node2D.new())
+	add_child(_waves.spawn_parent)
 	add_child(_waves)
 	_core = auto_free(CoreDouble.new())
 	_updates = 0
@@ -157,7 +167,7 @@ func test_reset_run_clears_everything() -> void:
 	_waves.reset_run()
 	assert_object(_waves.flow_field).is_null()
 	assert_float(_waves._recompute_left).is_equal(0.0)
-	assert_float(_waves._time_left).is_equal(0.0)
+	assert_int(_waves.remaining()).is_equal(0)
 	assert_float(_waves.baseline_cost_at(Vector2i(100, 20))).is_equal(INF)
 	# Post-reset terrain signals are ignored again.
 	_terrain.touch_tile(Vector2i(100, 20))
