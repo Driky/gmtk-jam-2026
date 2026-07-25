@@ -1,5 +1,6 @@
-## HUD: HP/mana bars, hotbar display, elevation readout, countdown/wave
-## phase label, Core HP bar. Bars, hotbar, and phase widgets are purely
+## HUD: HP/mana bars, hotbar display, elevation readout, phase label
+## (countdown, then "Wave n — X remaining"), Core HP bar. Bars, hotbar, and
+## phase widgets are purely
 ## signal-driven; only the elevation label polls, and only repaints on row
 ## change. The countdown presentation (big timer, last-10s red pulse, wave
 ## announce) is a never-cut item — docs/plan.md. Owning doc: docs/systems/ui.md
@@ -26,10 +27,15 @@ static var _icon_cache: Dictionary = { }
 var inventory: Inventory = null
 ## Injected by tests before add_child; falls back to the live autoload.
 var game: Node = null
+## Injected by tests before add_child; falls back to the live autoload. The
+## remaining-mob count is Waves' own data, not phase flow, so it doesn't route
+## through Game (signal-hub note in game.gd).
+var waves: Node = null
 
 var _player: Player = null
 var _last_row := -(1 << 30)
 var _banner_tween: Tween = null
+var _wave_number := 0
 
 var _slot_bgs: Array[ColorRect] = []
 var _slot_icons: Array[TextureRect] = []
@@ -52,6 +58,8 @@ func _ready() -> void:
 		inventory = Items.player_inventory
 	if game == null:
 		game = Game
+	if waves == null:
+		waves = Waves
 	for i in Inventory.HOTBAR_SIZE:
 		_make_slot(i)
 	inventory.slot_changed.connect(_on_slot_changed)
@@ -62,6 +70,7 @@ func _ready() -> void:
 	game.countdown_tick.connect(_on_countdown_tick)
 	game.wave_started.connect(_on_wave_started)
 	game.wave_cleared.connect(_on_wave_cleared)
+	waves.wave_progress_changed.connect(_on_wave_progress_changed)
 
 
 func _process(_delta: float) -> void:
@@ -129,6 +138,10 @@ static func format_time(seconds_left: int) -> String:
 	return "%d:%02d" % [floori(seconds_left / 60.0), seconds_left % 60]
 
 
+static func wave_text(wave_number: int, remaining: int) -> String:
+	return "Wave %d — %d remaining" % [wave_number, remaining]
+
+
 func _on_health_changed(current: float, max_value: float) -> void:
 	_hp_bar.max_value = max_value
 	_hp_bar.value = current
@@ -155,10 +168,26 @@ func _on_countdown_tick(seconds_left: int) -> void:
 
 
 func _on_wave_started(wave_number: int) -> void:
-	_phase_label.text = "Wave %d" % wave_number
+	_wave_number = wave_number
 	_phase_label.modulate = Color.WHITE
 	_phase_label.scale = Vector2.ONE
+	_refresh_wave_label()
 	_announce("Wave %d" % wave_number)
+
+
+func _on_wave_progress_changed(_remaining: int) -> void:
+	_refresh_wave_label()
+
+
+## Reads waves.remaining() rather than trusting the signal payload: Waves is an
+## autoload, so its wave_started handler runs before this node's — a
+## payload-driven label would be written before the queue exists. Skipped
+## outside WAVE_PHASE so a death during the grace beat can't overwrite the
+## countdown that _on_countdown_tick just put there.
+func _refresh_wave_label() -> void:
+	if game.state != game.State.WAVE_PHASE:
+		return
+	_phase_label.text = wave_text(_wave_number, waves.remaining())
 
 
 func _on_wave_cleared(wave_number: int) -> void:

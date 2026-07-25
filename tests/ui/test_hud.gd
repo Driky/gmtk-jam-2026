@@ -1,6 +1,6 @@
-## Unit tests for the HUD (roadmap 1.7 + 2.1 phase widgets): formatting
-## statics, icon lookup, and reaction to an injected Inventory/Game — never
-## the live autoloads.
+## Unit tests for the HUD (roadmap 1.7 + 2.1 phase widgets + the 2.4 remaining
+## readout): formatting statics, icon lookup, and reaction to an injected
+## Inventory/Game/Waves — never the live autoloads.
 extends GdUnitTestSuite
 
 const HudScene := preload("res://scenes/ui/hud.tscn")
@@ -8,17 +8,39 @@ const HudScript := preload("res://scripts/ui/hud.gd")
 const GameScript := preload("res://scripts/game/game.gd")
 const Tileset := preload("res://assets/generated/terrain_tileset.tres")
 
+
+## Just the wave-progress surface the HUD reads (roadmap 2.4).
+class WavesStub:
+	extends Node
+
+	signal wave_progress_changed(left: int)
+
+	var count := 0
+
+
+	func remaining() -> int:
+		return count
+
+
+	func set_remaining(value: int) -> void:
+		count = value
+		wave_progress_changed.emit(value)
+
+
 var _inv: Inventory
 var _game: Node
+var _waves: WavesStub
 var _hud: CanvasLayer
 
 
 func before_test() -> void:
 	_inv = Inventory.new()
 	_game = auto_free(GameScript.new())
+	_waves = auto_free(WavesStub.new())
 	_hud = auto_free(HudScene.instantiate())
 	_hud.inventory = _inv
 	_hud.game = _game
+	_hud.waves = _waves
 	add_child(_hud)
 
 # --- Elevation formatting ----------------------------------------------------
@@ -143,13 +165,38 @@ func test_final_window_pulses_and_reddens() -> void:
 	assert_float(_hud._pulse_overlay.color.a).is_equal_approx(HudScript.PULSE_ALPHA, 0.001)
 
 
+func test_wave_text() -> void:
+	assert_str(HudScript.wave_text(3, 7)).is_equal("Wave 3 — 7 remaining")
+
+
 func test_wave_started_switches_label_and_announces() -> void:
+	_game.set_state(GameScript.State.WAVE_PHASE)
+	_waves.count = 5
 	_game.wave_started.emit(3)
-	assert_str(_hud._phase_label.text).is_equal("Wave 3")
+	assert_str(_hud._phase_label.text).is_equal("Wave 3 — 5 remaining")
 	assert_that(_hud._phase_label.modulate).is_equal(Color.WHITE)
 	assert_bool(_hud._wave_banner.visible).is_true()
 	assert_str(_hud._wave_banner.text).is_equal("Wave 3")
 	assert_float(_hud._wave_banner.modulate.a).is_equal(1.0)
+
+
+func test_wave_progress_counts_down() -> void:
+	_game.set_state(GameScript.State.WAVE_PHASE)
+	_waves.count = 5
+	_game.wave_started.emit(3)
+	_waves.set_remaining(4)
+	assert_str(_hud._phase_label.text).is_equal("Wave 3 — 4 remaining")
+
+
+## A mob dying during the grace beat must not overwrite the countdown that
+## _on_countdown_tick just wrote.
+func test_progress_outside_wave_phase_leaves_the_countdown_alone() -> void:
+	_game.set_state(GameScript.State.WAVE_PHASE)
+	_game.wave_started.emit(3)
+	_game.set_state(GameScript.State.BUILD_PHASE)
+	_game.countdown_tick.emit(240)
+	_waves.set_remaining(0)
+	assert_str(_hud._phase_label.text).is_equal("4:00")
 
 
 func test_wave_cleared_announces() -> void:
