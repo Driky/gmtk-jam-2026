@@ -36,10 +36,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Amortized generation (N rows/frame) behind a loading bar (`GENERATING` state).
 
 ### 1.6 Player, mining, inventory ([player-combat.md](systems/player-combat.md))
-- [ ] Platformer controller with coyote time + jump buffer; stats stubbed until `Progression` exists.
-- [ ] Hold-to-mine within reach radius via `Terrain.damage_tile`; tool-tier gating.
-- [ ] Item drops as pickups; inventory data model + hotbar; placing mined natural blocks back.
-- [ ] Camera follow (clamped to playable width + depth).
+- [x] Platformer controller with coyote time + jump buffer; stats stubbed until `Progression` exists.
+- [x] Hold-to-mine within reach radius via `Terrain.damage_tile`; tool-tier gating.
+- [x] Item drops as pickups; inventory data model + hotbar; placing mined natural blocks back.
+- [x] Camera follow (clamped to playable width + depth).
 
 ### 1.7 Basic HUD ([ui.md](systems/ui.md))
 - [ ] HP/mana bars (static values ok), hotbar display, depth readout.

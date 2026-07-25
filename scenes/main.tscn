@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://ky78m7otb228"]
+[gd_scene load_steps=3 format=3 uid="uid://ky78m7otb228"]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/items/pickup_spawner.gd" id="2_pickups"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -15,6 +16,9 @@ offset_left = 2400.0
 offset_right = 3200.0
 offset_bottom = 19200.0
 color = Color(0.1, 0.1, 0.2, 0.15)
+
+[node name="Pickups" type="Node2D" parent="."]
+script = ExtResource("2_pickups")
 
 [node name="Camera2D" type="Camera2D" parent="."]
 

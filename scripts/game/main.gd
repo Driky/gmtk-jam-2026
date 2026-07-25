@@ -1,8 +1,9 @@
-## Boot driver: amortized world generation behind the loading bar, then a
-## static surface view until the player lands (1.6). Owning doc: docs/roadmap.md
+## Boot driver: amortized world generation behind the loading bar, then the
+## player spawns on the flat center column. Owning doc: docs/roadmap.md
 extends Node2D
 
 const TILE := TileLayout.TILE_SIZE
+const PlayerScene := preload("res://scenes/player.tscn")
 ## Debug: set non-zero to force a seed (menu seed entry is a Day-4 stretch).
 const FORCED_SEED := 0
 
@@ -30,6 +31,11 @@ func _process(_delta: float) -> void:
 func _finish_generation() -> void:
 	_loading_ui.visible = false
 	var cx := int(WorldConfig.WORLD_WIDTH / 2.0)
-	_camera.position = Vector2((cx + 0.5) * TILE, (_gen.surface_height(cx) - 4) * TILE)
+	var surface_row: int = _gen.surface_height(cx)
+	_camera.enabled = false # Static view during GENERATING; player camera takes over.
+	var player: CharacterBody2D = PlayerScene.instantiate()
+	# Feet on the surface tile top (center is 11 px up), 1 px slack against overlap.
+	player.position = Vector2((cx + 0.5) * TILE, surface_row * TILE - 12)
+	add_child(player)
 	Game.set_state(Game.State.BUILD_PHASE)
 	_gen = null
