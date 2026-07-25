@@ -50,9 +50,22 @@ var region_rows := REGION_ROWS
 ## the browser has no editor profiler and this is the number we tune against.
 var last_solve_msec := 0.0
 
+## Pops between wall-clock checks: Time.get_ticks_usec() per pop would cost
+## more than the work it guards.
+const BUDGET_CHECK_INTERVAL := 256
+
 var _computed := false
+var _building := false
+## Front buffer — every query reads these. Never partially written: the back
+## buffer is swapped in only once its solve is complete, so a mob can't read a
+## half-built field mid-rebuild.
 var _cost := PackedFloat32Array()
 var _flow := PackedByteArray()
+## Back buffer — the solve in progress. Swapped with the front on completion
+## (a swap, not a copy: after it, each name owns a distinct buffer).
+var _build_cost := PackedFloat32Array()
+var _build_flow := PackedByteArray()
+var _build_usec := 0
 ## Terrain snapshot for one solve: atlas source id per cell (-1 = air),
 ## support flag (any cardinal solid), sparse entity surcharge by flat index.
 var _sid := PackedInt32Array()
@@ -78,26 +91,55 @@ func _init() -> void:
 # --- Public API --------------------------------------------------------------
 
 
+## Solve to completion in one call. Used by the world-gen baseline, by the
+## wave-start flush, and by tests; the per-frame path is begin/step below.
 func recompute(goal_cells: Array[Vector2i]) -> void:
+	begin_recompute(goal_cells)
+	while not step_recompute(1 << 30):
+		pass
+
+
+## Snapshot the terrain and seed the back buffer. Cheap relative to the solve
+## (one linear pass, no heap), so it stays synchronous.
+func begin_recompute(goal_cells: Array[Vector2i]) -> void:
 	assert(terrain != null)
 	var t0 := Time.get_ticks_usec()
 	var w := region_width
 	var rows := region_rows
 	_snapshot()
-	_cost.resize(w * rows)
-	_cost.fill(INF)
-	_flow.resize(w * rows)
-	_flow.fill(FLOW_NONE)
+	_build_cost.resize(w * rows)
+	_build_cost.fill(INF)
+	_build_flow.resize(w * rows)
+	_build_flow.fill(FLOW_NONE)
 	_heap_size = 0
 	for pos in goal_cells:
 		if _in_region(pos):
-			_cost[pos.y * w + pos.x] = 0.0
+			_build_cost[pos.y * w + pos.x] = 0.0
 			_heap_push(pos.y * w + pos.x, 0.0)
+	_building = true
+	_build_usec = Time.get_ticks_usec() - t0
+
+
+## Relax edges until the heap empties or budget_usec of wall clock is spent.
+## Returns true once the solve completed and was published to the front buffer.
+func step_recompute(budget_usec: int) -> bool:
+	if not _building:
+		return true
+	var t0 := Time.get_ticks_usec()
+	var w := region_width
+	var rows := region_rows
+	var checks := 0
 	while _heap_size > 0:
+		checks += 1
+		if checks >= BUDGET_CHECK_INTERVAL:
+			checks = 0
+			if Time.get_ticks_usec() - t0 >= budget_usec:
+				_build_usec += Time.get_ticks_usec() - t0
+				return false
 		var u := _heap_cells[0]
 		var k := _heap_keys[0]
 		_heap_pop_root()
-		if k > _cost[u]: # Lazy deletion: u was settled via a cheaper key.
+		if k > _build_cost[u]: # Lazy deletion: u was settled via a cheaper key.
 			continue
 		var ux := u % w
 		@warning_ignore("integer_division")
@@ -129,17 +171,38 @@ func recompute(goal_cells: Array[Vector2i]) -> void:
 			else:
 				continue
 			var tentative := k + step + surcharge
-			if tentative < _cost[v]:
-				_cost[v] = tentative
-				_flow[v] = (di + 2) & 3 # Mob step v -> u = opposite of u -> v.
+			if tentative < _build_cost[v]:
+				_build_cost[v] = tentative
+				_build_flow[v] = (di + 2) & 3 # Mob step v -> u = opposite of u -> v.
 				_heap_push(v, tentative)
-	_computed = true
-	last_solve_msec = (Time.get_ticks_usec() - t0) / 1000.0
-	print_verbose("FlowField recompute: %d cells in %.1f ms" % [w * rows, last_solve_msec])
+	_build_usec += Time.get_ticks_usec() - t0
+	_publish()
+	return true
 
 
 func is_computed() -> bool:
 	return _computed
+
+
+func is_building() -> bool:
+	return _building
+
+
+## Swap back buffer to front. Reference swap, not a copy — afterwards each
+## name owns a distinct buffer, so the next fill() never triggers copy-on-write.
+func _publish() -> void:
+	var cost := _cost
+	_cost = _build_cost
+	_build_cost = cost
+	var flow := _flow
+	_flow = _build_flow
+	_build_flow = flow
+	_building = false
+	_computed = true
+	last_solve_msec = _build_usec / 1000.0
+	print_verbose(
+		"FlowField solve: %d cells in %.1f ms" % [region_width * region_rows, last_solve_msec],
+	)
 
 
 func cost_at(cell: Vector2i) -> float:

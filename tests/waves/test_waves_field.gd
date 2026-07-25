@@ -17,9 +17,14 @@ class TerrainDouble:
 	signal tile_changed(pos: Vector2i)
 	signal entity_changed(pos: Vector2i)
 
+	## -1 = all air, which reaches only a handful of cells (nothing is
+	## "supported", so the solve is a thin falling column). Set it to the row
+	## under the goal to get a solve big enough to span multiple frame slices.
+	var floor_row := -1
 
-	func get_cell_source_id(_pos: Vector2i) -> int:
-		return -1
+
+	func get_cell_source_id(pos: Vector2i) -> int:
+		return Materials.ORDER.find("dirt") if pos.y == floor_row else -1
 
 
 	func get_entity(_pos: Vector2i) -> Node:
@@ -30,8 +35,8 @@ class TerrainDouble:
 		return []
 
 
-	func is_solid(_pos: Vector2i) -> bool:
-		return false # Empty world; spawn placement isn't under test here.
+	func is_solid(pos: Vector2i) -> bool:
+		return pos.y == floor_row
 
 
 	func touch_tile(pos: Vector2i) -> void:
@@ -67,6 +72,9 @@ func before_test() -> void:
 	_waves.enemy_scene = StubEnemyScene
 	_waves.spawn_parent = auto_free(Node2D.new())
 	add_child(_waves.spawn_parent)
+	# Solve in one slice: these tests assert on update counts, not on pacing.
+	# The amortized pacing itself is covered below and in test_flow_field.gd.
+	_waves.step_budget_usec = 1 << 30
 	add_child(_waves)
 	_core = auto_free(CoreDouble.new())
 	_updates = 0
@@ -172,3 +180,58 @@ func test_reset_run_clears_everything() -> void:
 	# Post-reset terrain signals are ignored again.
 	_terrain.touch_tile(Vector2i(100, 20))
 	assert_float(_waves._recompute_left).is_equal(0.0)
+
+# --- Amortized solve pacing ----------------------------------------------------
+
+
+## The frame-budget guarantee: arming the debounce must not solve the whole
+## field in one _process — it starts a build that later frames finish.
+func test_recompute_is_spread_across_frames() -> void:
+	_terrain.floor_row = 21 # Goal stands on it -> a wide, many-pop solve.
+	_waves.initialize_flow_field(_core)
+	_waves.step_budget_usec = 1 # One tiny slice per frame.
+	_terrain.touch_tile(Vector2i(100, 20))
+	_waves._process(WavesScript.RECOMPUTE_DEBOUNCE + 0.1)
+	assert_bool(_waves.flow_field.is_building()).is_true()
+	assert_int(_updates).is_equal(1) # Still only the init compute.
+	var frames := 0
+	while _waves.flow_field.is_building():
+		frames += 1
+		assert_int(frames).is_less(100000)
+		_waves._process(0.016)
+	assert_int(frames).is_greater(1) # Genuinely took multiple frames.
+	assert_int(_updates).is_equal(2) # Announced exactly once, on publish.
+
+
+## A change landing mid-solve must not cancel the one in flight — under
+## continuous chewing that would leave the front buffer stale forever.
+func test_change_during_a_solve_queues_a_rebuild() -> void:
+	_terrain.floor_row = 21 # Goal stands on it -> a wide, many-pop solve.
+	_waves.initialize_flow_field(_core)
+	_waves.step_budget_usec = 1
+	_terrain.touch_tile(Vector2i(100, 20))
+	_waves._process(WavesScript.RECOMPUTE_DEBOUNCE + 0.1)
+	assert_bool(_waves.flow_field.is_building()).is_true()
+	_terrain.touch_tile(Vector2i(101, 20)) # Arrives mid-solve.
+	_waves._process(WavesScript.RECOMPUTE_DEBOUNCE + 0.1)
+	assert_bool(_waves._rebuild_pending).is_true()
+	_waves.step_budget_usec = 1 << 30
+	_waves._process(0.016) # First solve publishes, second begins.
+	assert_int(_updates).is_equal(2)
+	assert_bool(_waves._rebuild_pending).is_false()
+	_waves._process(0.016) # Second publishes.
+	assert_int(_updates).is_equal(3)
+	assert_bool(_waves.flow_field.is_building()).is_false()
+
+
+## Spawning against a stale field is the one case worth a synchronous hitch.
+func test_wave_start_flushes_an_in_flight_solve() -> void:
+	_terrain.floor_row = 21 # Goal stands on it -> a wide, many-pop solve.
+	_waves.initialize_flow_field(_core)
+	_waves.step_budget_usec = 1
+	_terrain.touch_tile(Vector2i(100, 20))
+	_waves._process(WavesScript.RECOMPUTE_DEBOUNCE + 0.1)
+	assert_bool(_waves.flow_field.is_building()).is_true()
+	_enter_wave_phase()
+	assert_bool(_waves.flow_field.is_building()).is_false()
+	assert_int(_updates).is_equal(2)

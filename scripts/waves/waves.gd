@@ -21,6 +21,10 @@ const TILE := TileLayout.TILE_SIZE
 ## Leading-edge debounce: the first change arms the timer, later changes never
 ## re-arm it (a trailing debounce would starve under continuous mob chewing).
 const RECOMPUTE_DEBOUNCE := 0.5
+## Wall clock the field solve may take per frame. A full solve costs ~57 ms in
+## the browser, so spreading it at this rate lands inside RECOMPUTE_DEBOUNCE —
+## the field is never more than one debounce behind, and no frame stalls.
+const STEP_BUDGET_USEC := 4000
 
 ## Concurrent-mob perf ceiling. Hitting it stalls the trickle — the wave keeps
 ## its full budget, the queue just drains slower.
@@ -52,6 +56,10 @@ var _goal_cells: Array[Vector2i] = []
 ## the Day-4 fortification score compares spawn-cell costs against this.
 var _baseline_costs := PackedFloat32Array()
 var _recompute_left := 0.0
+## A change landed while a solve was already in flight — rebuild on publish.
+var _rebuild_pending := false
+## Per-frame solve budget; tests raise it so a solve finishes in one step.
+var step_budget_usec := STEP_BUDGET_USEC
 
 ## Types still to spawn this wave, in roll order.
 var _queue: Array[EnemyStats] = []
@@ -79,8 +87,21 @@ func _process(delta: float) -> void:
 		_recompute_left -= delta
 		if _recompute_left <= 0.0:
 			_recompute_now()
+	_advance_solve()
 	if game.state == game.State.WAVE_PHASE:
 		_tick_spawning(delta)
+
+
+## Spend this frame's slice on an in-flight solve; announce when it publishes.
+func _advance_solve() -> void:
+	if flow_field == null or not flow_field.is_building():
+		return
+	if not flow_field.step_recompute(step_budget_usec):
+		return
+	flow_field_updated.emit()
+	if _rebuild_pending:
+		_rebuild_pending = false
+		flow_field.begin_recompute(_goal_cells)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -216,6 +237,7 @@ func reset_run() -> void:
 	_goal_cells = []
 	_baseline_costs = PackedFloat32Array()
 	_recompute_left = 0.0
+	_rebuild_pending = false
 	_queue.clear()
 	_alive.clear()
 	_spawn_left = 0.0
@@ -232,15 +254,26 @@ func _on_cell_changed(pos: Vector2i) -> void:
 		_recompute_left = RECOMPUTE_DEBOUNCE
 
 
+## Start an amortized solve. A change arriving mid-solve can't cancel the one
+## in flight (the front buffer would be left stale indefinitely under
+## continuous chewing) — it queues a rebuild for the moment this one publishes.
 func _recompute_now() -> void:
 	_recompute_left = 0.0
-	flow_field.recompute(_goal_cells)
-	flow_field_updated.emit()
+	if flow_field.is_building():
+		_rebuild_pending = true
+		return
+	flow_field.begin_recompute(_goal_cells)
 
 
 func _on_wave_started(wave_number: int) -> void:
-	if _recompute_left > 0.0:
-		_recompute_now() # Mobs must never spawn against a stale field.
+	# Mobs must never spawn against a stale field, so this one flush is
+	# synchronous. Its ~57 ms lands on the frame that also plays the wave
+	# banner, where a hitch is masked — once per wave, not once per chew.
+	if _recompute_left > 0.0 or flow_field != null and flow_field.is_building():
+		_recompute_left = 0.0
+		_rebuild_pending = false
+		flow_field.recompute(_goal_cells)
+		flow_field_updated.emit()
 	# Seeded per (run, wave) so a wave replays identically for a seed (save.md).
 	_rng.seed = game.world_seed ^ (wave_number * 0x9E3779B1)
 	_queue = WaveRoster.build_queue(_rng, wave_number)

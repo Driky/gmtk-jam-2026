@@ -211,3 +211,62 @@ func test_cost_of_entering_cases() -> void:
 	var into_dirt := _field.cost_of_entering(Vector2i(2, 9), Vector2i(3, 9))
 	assert_float(into_dirt).is_equal_approx(1.0 + 1.0 / FlowField.REFERENCE_DIG_POWER, 0.0001)
 	assert_float(_field.cost_of_entering(Vector2i(5, 9), Vector2i(4, 9))).is_equal(INF)
+
+# --- Amortized solve (perf work: browser frame budget) --------------------------
+
+
+## The whole point: slicing the solve across frames must not change its answer.
+func test_amortized_solve_matches_the_synchronous_one() -> void:
+	_lay_floor()
+	_terrain.tiles[Vector2i(5, FLOOR_Y - 1)] = "stone"
+	_terrain.tiles[Vector2i(14, FLOOR_Y - 1)] = "stone"
+	_field.recompute(_goal())
+	var expected_costs := _field.snapshot_costs()
+	var expected_dirs: Array[Vector2i] = []
+	for i in W * ROWS:
+		@warning_ignore("integer_division")
+		expected_dirs.append(_field.get_flow_dir(Vector2i(i % W, i / W)))
+
+	var sliced := FlowField.new()
+	sliced.terrain = _terrain
+	sliced.region_width = W
+	sliced.region_rows = ROWS
+	sliced.begin_recompute(_goal())
+	var steps := 0
+	while not sliced.step_recompute(1): # 1 us: forces many tiny slices.
+		steps += 1
+		assert_int(steps).is_less(10000) # Guard against a non-terminating step.
+	assert_int(steps).is_greater(0) # It really did take more than one slice.
+	assert_array(sliced.snapshot_costs()).is_equal(expected_costs)
+	for i in W * ROWS:
+		@warning_ignore("integer_division")
+		assert_that(sliced.get_flow_dir(Vector2i(i % W, i / W))).is_equal(expected_dirs[i])
+
+
+## Mobs query every frame; a rebuild must never expose a half-solved field.
+func test_queries_read_the_previous_field_while_rebuilding() -> void:
+	_lay_floor()
+	_field.recompute(_goal())
+	var before := _field.cost_at(Vector2i(2, FLOOR_Y - 1))
+	assert_float(before).is_greater(0.0)
+	assert_float(before).is_not_equal(INF)
+
+	# Wall off the approach, then start a solve without finishing it.
+	for y in range(FLOOR_Y - 4, FLOOR_Y):
+		_terrain.tiles[Vector2i(6, y)] = "stone"
+	_field.begin_recompute(_goal())
+	assert_bool(_field.is_building()).is_true()
+	assert_bool(_field.is_computed()).is_true() # Old field still serviceable.
+	assert_float(_field.cost_at(Vector2i(2, FLOOR_Y - 1))).is_equal(before)
+
+	while not _field.step_recompute(1):
+		pass
+	assert_bool(_field.is_building()).is_false()
+	assert_float(_field.cost_at(Vector2i(2, FLOOR_Y - 1))).is_not_equal(before)
+
+
+func test_step_on_an_idle_field_is_a_noop() -> void:
+	_lay_floor()
+	_field.recompute(_goal())
+	assert_bool(_field.step_recompute(1)).is_true()
+	assert_bool(_field.is_building()).is_false()
