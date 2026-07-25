@@ -47,8 +47,13 @@ var _write_peak_usec := 0
 ## Godot's own accounting: time inside _process / _physics_process across the
 ## whole tree. If a frame is 83 ms while these read ~2 ms, the cost is not in
 ## our script at all — it's the renderer, the physics server, or the browser.
+## Rolling-window, NOT all-time: creating 240k tile bodies at world-gen end
+## spikes physics once, and an all-time max would report that startup cost
+## forever while a recurring hitch hid behind it.
 var _engine_process_peak := 0.0
 var _engine_physics_peak := 0.0
+var _engine_process_shown := 0.0
+var _engine_physics_shown := 0.0
 var _last_writes := 0
 var _dirty_left := 0
 
@@ -94,6 +99,10 @@ func _process(delta: float) -> void:
 		_window_left = WINDOW
 		_worst_shown = _worst_window
 		_worst_window = 0.0
+		_engine_process_shown = _engine_process_peak
+		_engine_physics_shown = _engine_physics_peak
+		_engine_process_peak = 0.0
+		_engine_physics_peak = 0.0
 	if not visible:
 		return
 	_refresh_left -= delta
@@ -116,8 +125,12 @@ func _process(delta: float) -> void:
 		)
 		_label.text += "\n" + Perf.format_top(SECTION_ROWS)
 		_label.text += (
-			"\ngodot script worst: process %.1f | physics %.1f ms"
-			% [_engine_process_peak, _engine_physics_peak]
+			"\ngodot %.0fs: process %.1f | physics %.1f ms"
+			% [
+				WINDOW,
+				maxf(_engine_process_shown, _engine_process_peak),
+				maxf(_engine_physics_shown, _engine_physics_peak),
+			]
 		)
 
 
