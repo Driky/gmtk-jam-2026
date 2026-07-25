@@ -8,6 +8,8 @@
 size = Vector2(12, 22)
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
+collision_layer = 2
+collision_mask = 1
 script = ExtResource("1_player")
 
 [node name="Visual" type="ColorRect" parent="."]

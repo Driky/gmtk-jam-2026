@@ -2,7 +2,7 @@
 
 Owner of: mob capabilities, flow-field pathfinding, stair-digging, climbable profiles, aggro, wave composition, roster.
 
-`CharacterBody2D` per monster, one base script + per-type `EnemyStats` Resource: HP, speed, damage, XP, drops, sprites, plus **locomotion capabilities** — `move_class` (ground/fly), `jump_height` (0 = walker, 1–2 = short-jumper, 4+ = big-jumper clearing low walls), `climb_speed` (0 = can't wall-climb), `is_biped` (gates climbable use), `dig_power`, `max_safe_fall` (tiles).
+`CharacterBody2D` per monster, one base script + per-type `EnemyStats` Resource: HP, speed, damage, XP, drops, sprites, plus **locomotion capabilities** — `move_class` (ground/fly), `jump_height` (0 = can't jump — the crawler, which climbs instead; 1–2 = walker/short-jumper; 4+ = big-jumper clearing low walls), `climb_speed` (0 = can't wall-climb), `is_biped` (gates climbable use), `dig_power`, `max_safe_fall` (tiles).
 
 **Design principle: capabilities are speed, digging is correctness.** Every mob can dig, so no terrain state can ever soft-lock a mob; capabilities only make mobs faster.
 

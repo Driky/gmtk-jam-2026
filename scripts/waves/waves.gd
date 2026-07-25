@@ -11,8 +11,11 @@ extends Node
 ## re-read the field every frame and don't need it.
 signal flow_field_updated
 
-## Placeholder wave length until enemies land in 2.3/2.4.
+## Placeholder wave length until enemies land in 2.3/2.4. A stub-cleared wave
+## may leave spawned mobs alive — accepted until 2.4's live-mob count.
 const STUB_WAVE_DURATION := 15.0
+const ENEMY_SCENE := preload("res://scenes/enemies/enemy.tscn")
+const WALKER_STATS := preload("res://data/enemies/walker.tres")
 ## Leading-edge debounce: the first change arms the timer, later changes never
 ## re-arm it (a trailing debounce would starve under continuous mob chewing).
 const RECOMPUTE_DEBOUNCE := 0.5
@@ -59,6 +62,25 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"debug_clear_wave") and game.state == game.State.WAVE_PHASE:
 		_time_left = 0.0
 		game.notify_wave_cleared()
+	# 2.3 debug spawner — the input handler goes away when the real wave
+	# manager lands (2.4); spawn_enemy stays as its entry point.
+	if event.is_action_pressed(&"debug_spawn_walker", true):
+		var scene := get_tree().current_scene
+		var in_run: bool = (
+			game.state == game.State.BUILD_PHASE or game.state == game.State.WAVE_PHASE
+		)
+		if in_run and scene is Node2D:
+			spawn_enemy(WALKER_STATS, (scene as Node2D).get_global_mouse_position())
+
+# --- Spawning (2.3; the 2.4 wave manager drives this) ------------------------
+
+
+func spawn_enemy(stats: EnemyStats, world_pos: Vector2) -> Enemy:
+	var enemy: Enemy = ENEMY_SCENE.instantiate()
+	enemy.stats = stats
+	enemy.position = world_pos
+	get_tree().current_scene.add_child(enemy)
+	return enemy
 
 # --- Flow field (2.2) --------------------------------------------------------
 

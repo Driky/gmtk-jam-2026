@@ -62,7 +62,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Cache untouched-terrain baseline costs at world gen (needed Day 4 for fortification score).
 
 ### 2.3 First enemy — walker, fully working ([enemies.md](systems/enemies.md))
-- [ ] Enemy base (`CharacterBody2D`) + `EnemyStats` Resource with locomotion capabilities.
+- [x] Enemy base (`CharacterBody2D`) + `EnemyStats` Resource with locomotion capabilities.
 - [ ] Locomotion resolution: walk / jump / chew fallback via `Terrain.damage_tile`.
 - [ ] Stair-digging on unsafe drops 🔴; fall damage beyond `max_safe_fall`.
 - [ ] Threat-table aggro: damage adds threat, decay, Core as default target.
