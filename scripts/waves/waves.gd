@@ -62,7 +62,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"debug_clear_wave") and game.state == game.State.WAVE_PHASE:
 		_time_left = 0.0
 		game.notify_wave_cleared()
-	# 2.3 debug spawner — the input handler goes away when the real wave
+	# 2.3 debug spawner — the input handlers go away when the real wave
 	# manager lands (2.4); spawn_enemy stays as its entry point.
 	if event.is_action_pressed(&"debug_spawn_walker", true):
 		var scene := get_tree().current_scene
@@ -71,6 +71,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		)
 		if in_run and scene is Node2D:
 			spawn_enemy(WALKER_STATS, (scene as Node2D).get_global_mouse_position())
+	# Poke the nearest enemy as the player: verifies aggro before 2.5 melee.
+	if event.is_action_pressed(&"debug_poke_enemy"):
+		var player: Node2D = get_tree().get_first_node_in_group(&"player")
+		if player != null:
+			var nearest: Node = null
+			var best := INF
+			for enemy: Node2D in get_tree().get_nodes_in_group(&"enemies"):
+				var dist := enemy.global_position.distance_to(player.global_position)
+				if dist < best:
+					best = dist
+					nearest = enemy
+			if nearest != null:
+				nearest.take_damage(5.0, player)
 
 # --- Spawning (2.3; the 2.4 wave manager drives this) ------------------------
 

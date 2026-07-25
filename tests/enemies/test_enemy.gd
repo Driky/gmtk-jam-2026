@@ -49,6 +49,21 @@ func test_take_damage_reduces_hp() -> void:
 	assert_float(enemy.current_hp).is_equal(enemy.stats.max_hp - 10.0)
 
 
+func test_damage_with_attacker_builds_aggro() -> void:
+	var enemy := _make_enemy()
+	var attacker: Node2D = auto_free(Node2D.new())
+	enemy.take_damage(10.0, attacker)
+	assert_that(enemy._threat.top_target(Enemy.THREAT_THRESHOLD)).is_same(attacker)
+
+
+func test_fall_damage_builds_no_aggro() -> void:
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(0, 8 * 16.0)
+	enemy._air_top_y = 0.0
+	enemy._check_landing()
+	assert_that(enemy._threat.top_target(0.1)).is_null()
+
+
 func test_lethal_damage_emits_died_once() -> void:
 	var enemy := _make_enemy()
 	var deaths: Array[Enemy] = []

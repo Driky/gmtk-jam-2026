@@ -18,6 +18,13 @@ const MONSTER_TOOL_TIER := 98
 ## viable (walker: a 4-tile drop stings, ~8 tiles is lethal).
 const FALL_DAMAGE_PER_TILE := 6.0
 
+## Aggro tuning: one melee hit (2.5 lands ~10+) instantly aggroes; an ignored
+## attacker is forgotten after a few seconds and the mob resumes the Core.
+const THREAT_DECAY_PER_S := 4.0
+const THREAT_THRESHOLD := 8.0
+## Center-to-center swing distance against an aggro target (1.5 tiles).
+const ATTACK_RANGE_PX := 24.0
+
 ## Set by the spawner before add_child (scene has no default on purpose —
 ## every mob must state its type).
 @export var stats: EnemyStats
@@ -28,6 +35,7 @@ var waves: Node = null
 
 var current_hp := 0.0
 
+var _threat := ThreatTable.new()
 var _core: Node2D = null
 var _dead := false
 var _attack_left := 0.0
@@ -55,22 +63,47 @@ func _physics_process(delta: float) -> void:
 		_air_top_y = minf(_air_top_y, global_position.y)
 		velocity.y = minf(velocity.y + Player.GRAVITY * delta, Player.MAX_FALL_SPEED)
 	_attack_left = maxf(_attack_left - delta, 0.0)
+	_threat.decay(delta, THREAT_DECAY_PER_S)
 	var pos := cell()
+	var aggro := _threat.top_target(THREAT_THRESHOLD)
+	if aggro != null:
+		_pursue_aggro(aggro, pos, delta)
+	else:
+		_push_core(pos, delta)
+	move_and_slide()
+
+
+## Default behavior: follow the flow field toward the Core, melee entities in
+## the way, chew-fallback anything the field can't route.
+func _push_core(pos: Vector2i, delta: float) -> void:
 	var dir := _intent_dir(pos)
 	var entity := _attackable_entity(pos, dir)
 	if entity != null:
 		velocity.x = 0.0
 		_try_attack(entity)
-	else:
-		var decision := EnemyLocomotion.decide(terrain, pos, dir, stats)
-		if decision.action == EnemyLocomotion.Action.NONE:
-			# The field's move isn't usable (e.g. wall-climb route) — the
-			# direct-to-Core chew fallback absorbs it.
-			var direct := _direct_dir(pos)
-			if direct != dir:
-				decision = EnemyLocomotion.decide(terrain, pos, direct, stats)
-		_actuate(decision, pos, delta)
-	move_and_slide()
+		return
+	var decision := EnemyLocomotion.decide(terrain, pos, dir, stats)
+	if decision.action == EnemyLocomotion.Action.NONE:
+		# The field's move isn't usable (e.g. wall-climb route) — the
+		# direct-to-Core chew fallback absorbs it.
+		var direct := _direct_dir(pos)
+		if direct != dir:
+			decision = EnemyLocomotion.decide(terrain, pos, direct, stats)
+	_actuate(decision, pos, delta)
+
+
+## Aggro override: direct local chase toward the attacker (no flow field),
+## chewing through blockers; swing when in range. take_damage is guarded —
+## the Player grows one in 2.5 and melee starts landing then.
+func _pursue_aggro(target: Node2D, pos: Vector2i, delta: float) -> void:
+	if global_position.distance_to(target.global_position) <= ATTACK_RANGE_PX:
+		velocity.x = 0.0
+		if target.has_method(&"take_damage"):
+			_try_attack(target)
+		return
+	var d := Vector2i((target.global_position / TILE).floor()) - pos
+	var dir := Vector2i(signi(d.x), 0) if d.x != 0 else Vector2i(0, signi(d.y))
+	_actuate(EnemyLocomotion.decide(terrain, pos, dir, stats), pos, delta)
 
 
 func cell() -> Vector2i:
@@ -87,10 +120,12 @@ func _check_landing() -> void:
 		take_damage((tiles - stats.max_safe_fall) * FALL_DAMAGE_PER_TILE)
 
 
-func take_damage(amount: float, _attacker: Node2D = null) -> void:
+func take_damage(amount: float, attacker: Node2D = null) -> void:
 	if _dead:
 		return
 	current_hp = maxf(current_hp - amount, 0.0)
+	if attacker != null:
+		_threat.add_threat(attacker, amount)
 	if current_hp <= 0.0:
 		_die()
 
@@ -167,4 +202,8 @@ func _die() -> void:
 		return
 	_dead = true
 	died.emit(self)
+	# XP seam — self-wires when Progression.grant_xp lands (roadmap 2.6)
+	# same pattern as terrain.gd's mining XP.
+	if Progression.has_method(&"grant_xp"):
+		Progression.call(&"grant_xp", "kills", stats.xp)
 	queue_free()
