@@ -4,7 +4,7 @@ Owner of: mob capabilities, flow-field pathfinding, stair-digging, climbable pro
 
 `CharacterBody2D` per monster, one base script + per-type `EnemyStats` Resource: HP, speed, damage, XP, drops, sprites, plus **locomotion capabilities** — `move_class` (ground/fly), `jump_height` (0 = can't jump — the crawler, which climbs instead; 1–2 = walker/short-jumper; 4+ = big-jumper clearing low walls), `climb_speed` (0 = can't wall-climb), `is_biped` (gates climbable use), `dig_power`, `max_safe_fall` (tiles).
 
-**Design principle: capabilities are speed, digging is correctness.** Every mob can dig, so no terrain state can ever soft-lock a mob; capabilities only make mobs faster.
+**Design principle: capabilities are speed, digging is correctness.** Every mob can dig, so no terrain state can ever soft-lock a mob; capabilities only make mobs faster. Mobs chew with an effective tool tier of 98 — everything but bedrock (99) breaks regardless of `min_tool_tier` gates, matching the flow field's only-bedrock-is-impassable cost model.
 
 ## Pathfinding — two shared dig-weighted flow fields
 Computed **once per movement class**, not per mob:
@@ -14,7 +14,7 @@ Computed **once per movement class**, not per mob:
 Restricted to the active wave region (top ~150 rows ≈ 30k cells total); one full synchronous recompute per trigger — terrain/deployable change, debounced ≤ 0.5 s (leading-edge, so it can't starve under continuous chewing). Real cost: ~120 ms measured in an editor debug run (each recompute prints its timing via `print_verbose`); pre-authorized fallback if browser playtests hitch: amortize the sweep across frames behind double-buffered arrays — the query API already hides recompute internals. **Accepted simplification:** fields use *reference* capabilities, so a mob may be routed toward a climbable it can't use — the dig fallback absorbs the error. No per-capability field variants.
 
 ## Locomotion resolution (per mob, per frame)
-Read the gradient at the current cell, resolve against capabilities in order: level/sideways → walk; up ≤ `jump_height` → jump; beyond → wall-climb if `climb_speed > 0`, or use a climbable if present and `is_biped`; otherwise → **chew** the blocker via `Terrain.damage_tile` (same pipeline as the player, gated by `dig_power`).
+Read the gradient at the current cell, resolve against capabilities in order: level/sideways → walk; up ≤ `jump_height` → jump; beyond → wall-climb if `climb_speed > 0`, or use a climbable if present and `is_biped`; otherwise → **chew** the blocker via `Terrain.damage_tile` (same pipeline as the player, gated by `dig_power`). Blockers that are **entities** (Core, deployables) sit on air cells, so they take discrete melee hits (`damage` every `attack_cooldown` seconds) instead of the chew pipeline.
 
 **Fall handling:** falls beyond `max_safe_fall` damage mobs. When the gradient points down an unsafe drop, the mob **stair-digs**: chew one block down-and-forward, descend, re-evaluate, repeat until the drop is safe. Flyers/big-jumpers with high `max_safe_fall` skip it. Pit traps stay viable: hard-walled spike pits cost real chew time, and fall damage enables drop-trap designs.
 

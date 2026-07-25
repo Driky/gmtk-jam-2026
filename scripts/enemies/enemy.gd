@@ -9,6 +9,11 @@ signal died(enemy: Enemy)
 
 const TILE := TileLayout.TILE_SIZE
 
+## Effective tool tier for chewing: everything but bedrock (99) breaks, the
+## enforcement behind "digging is correctness" — a tier-gated ore in the path
+## must never soft-lock a mob.
+const MONSTER_TOOL_TIER := 98
+
 ## Set by the spawner before add_child (scene has no default on purpose —
 ## every mob must state its type).
 @export var stats: EnemyStats
@@ -21,6 +26,7 @@ var current_hp := 0.0
 
 var _core: Node2D = null
 var _dead := false
+var _attack_left := 0.0
 
 
 func _ready() -> void:
@@ -38,9 +44,22 @@ func _physics_process(delta: float) -> void:
 	# divergent gravity value.
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + Player.GRAVITY * delta, Player.MAX_FALL_SPEED)
+	_attack_left = maxf(_attack_left - delta, 0.0)
 	var pos := cell()
-	var decision := EnemyLocomotion.decide(terrain, pos, _intent_dir(pos), stats)
-	_actuate(decision, pos)
+	var dir := _intent_dir(pos)
+	var entity := _attackable_entity(pos, dir)
+	if entity != null:
+		velocity.x = 0.0
+		_try_attack(entity)
+	else:
+		var decision := EnemyLocomotion.decide(terrain, pos, dir, stats)
+		if decision.action == EnemyLocomotion.Action.NONE:
+			# The field's move isn't usable (e.g. wall-climb route) — the
+			# direct-to-Core chew fallback absorbs it.
+			var direct := _direct_dir(pos)
+			if direct != dir:
+				decision = EnemyLocomotion.decide(terrain, pos, direct, stats)
+		_actuate(decision, pos, delta)
 	move_and_slide()
 
 
@@ -80,13 +99,47 @@ func _direct_dir(pos: Vector2i) -> Vector2i:
 	return Vector2i.ZERO
 
 
-func _actuate(decision: Dictionary, pos: Vector2i) -> void:
+func _actuate(decision: Dictionary, pos: Vector2i, delta: float) -> void:
+	var target: Vector2i = decision.target
 	match decision.action:
 		EnemyLocomotion.Action.WALK, EnemyLocomotion.Action.FALL:
-			var target: Vector2i = decision.target
 			velocity.x = signi(target.x - pos.x) * stats.speed
+		EnemyLocomotion.Action.JUMP:
+			velocity.x = signi(target.x - pos.x) * stats.speed
+			if is_on_floor():
+				var tiles: int = decision.jump_tiles
+				# +0.6 tiles of apex slack so the body clears the ledge lip.
+				velocity.y = -sqrt(2.0 * Player.GRAVITY * (tiles + 0.6) * TILE)
+		EnemyLocomotion.Action.CHEW:
+			# Standing still keeps the cell (and thus the target) stable, so
+			# the 2 s damage-abandon sweep never claws back mob progress.
+			velocity.x = 0.0
+			terrain.damage_tile(
+				target,
+				stats.dig_power * delta,
+				MONSTER_TOOL_TIER,
+				Terrain.Source.MONSTER,
+			)
 		_:
 			velocity.x = 0.0
+
+
+## An adjacent entity that can be hit (the Core today, deployables Day 3):
+## entity cells are air, so blockers registered there take melee hits instead
+## of the chew pipeline.
+func _attackable_entity(pos: Vector2i, dir: Vector2i) -> Node:
+	for probe in [pos, pos + dir]:
+		var entity: Node = terrain.get_entity(probe)
+		if entity != null and entity.has_method(&"take_damage"):
+			return entity
+	return null
+
+
+func _try_attack(entity: Node) -> void:
+	if _attack_left > 0.0:
+		return
+	_attack_left = stats.attack_cooldown
+	entity.take_damage(stats.damage)
 
 
 func _die() -> void:
