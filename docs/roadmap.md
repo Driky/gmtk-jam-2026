@@ -68,8 +68,8 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Threat-table aggro: damage adds threat, decay, Core as default target.
 
 ### 2.4 Wave manager v1 ([enemies.md](systems/enemies.md))
-- [ ] Budget `B(n)`, trickle spawning from both buffer zones, ~25-alive cap, "Wave n — X remaining" HUD.
-- [ ] Fixed unlock-by-wave composition for now (adaptive skew is Day 4, ✂️9 fallback anyway).
+- [x] Budget `B(n)`, trickle spawning from both buffer zones, ~25-alive cap, "Wave n — X remaining" HUD.
+- [x] Fixed unlock-by-wave composition for now (adaptive skew is Day 4, ✂️9 fallback anyway).
 
 ### 2.5 Combat ([player-combat.md](systems/player-combat.md))
 - [ ] Melee: `Area2D` hitbox arc, damage + knockback.
