@@ -11,6 +11,7 @@ var _terrain: Node
 var _drops: Array = []
 var _changed: Array = []
 var _broken: Array = []
+var _entity_changed: Array = []
 
 
 func before_test() -> void:
@@ -19,6 +20,11 @@ func before_test() -> void:
 	_drops = []
 	_changed = []
 	_broken = []
+	_entity_changed = []
+	_terrain.entity_changed.connect(
+		func(pos: Vector2i) -> void:
+			_entity_changed.append(pos),
+	)
 	_terrain.drops_spawned.connect(
 		func(pos: Vector2i, drop_id: String, drop_count: int, source: int) -> void:
 			_drops.append([pos, drop_id, drop_count, source]),
@@ -216,3 +222,31 @@ func test_entity_rejected_on_solid_cell() -> void:
 	var node: Node2D = auto_free(Node2D.new())
 	assert_bool(_terrain.place_entity(P, node)).is_false()
 	assert_object(_terrain.get_entity(P)).is_null()
+	assert_array(_entity_changed).is_empty()
+
+
+func test_entity_changed_emits_on_place_and_real_remove_only() -> void:
+	var node: Node2D = auto_free(Node2D.new())
+	_terrain.remove_entity(P) # No entity here — must not emit.
+	assert_array(_entity_changed).is_empty()
+	_terrain.place_entity(P, node)
+	assert_array(_entity_changed).contains_exactly([P])
+	var other: Node2D = auto_free(Node2D.new())
+	_terrain.place_entity(P, other) # Occupied → rejected, no emit.
+	assert_array(_entity_changed).contains_exactly([P])
+	_terrain.remove_entity(P)
+	assert_array(_entity_changed).contains_exactly([P, P])
+
+
+func test_get_entity_cells_reflects_occupancy() -> void:
+	assert_array(_terrain.get_entity_cells()).is_empty()
+	var node: Node2D = auto_free(Node2D.new())
+	var q := P + Vector2i(2, 0)
+	_terrain.place_entity(P, node)
+	_terrain.place_entity(q, node)
+	# Damage-only state must not count as an entity cell.
+	_terrain.set_tile(P + Vector2i(5, 0), "dirt")
+	_terrain.damage_tile(P + Vector2i(5, 0), 0.4, 1, TerrainScript.Source.PLAYER)
+	assert_array(_terrain.get_entity_cells()).contains_exactly_in_any_order([P, q])
+	_terrain.remove_entity(P)
+	assert_array(_terrain.get_entity_cells()).contains_exactly([q])

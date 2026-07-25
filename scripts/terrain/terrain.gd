@@ -7,6 +7,9 @@ extends Node
 
 ## Structure changed (type or solidity) — Day-2 flow-field debounce hooks here.
 signal tile_changed(pos: Vector2i)
+## A deployable was registered on / removed from a cell — the flow-field
+## debounce (2.2) treats this like tile_changed.
+signal entity_changed(pos: Vector2i)
 ## A break/chip produced drops — the pickup spawner (1.6) hooks here and owns
 ## drop policy (source is in the payload).
 signal drops_spawned(pos: Vector2i, drop_id: String, drop_count: int, source: int)
@@ -114,6 +117,12 @@ func is_solid(pos: Vector2i) -> bool:
 	return sid != -1 and _solid_by_source[sid]
 
 
+## Hot-path read for the flow-field terrain snapshot (2.2): one native call,
+## zero allocation. -1 = air/out-of-world, else an index into Materials.ORDER.
+func get_cell_source_id(pos: Vector2i) -> int:
+	return _layer.get_cell_source_id(pos)
+
+
 ## Buffer-zone rule for player actions (mining ghost tint, place-block checks).
 func can_player_edit(pos: Vector2i) -> bool:
 	return WorldConfig.is_in_world(pos) and not WorldConfig.is_in_buffer(pos)
@@ -199,20 +208,32 @@ func place_entity(pos: Vector2i, node: Node) -> bool:
 		_prune(pos, state)
 		return false
 	state.entity = node
+	entity_changed.emit(pos)
 	return true
 
 
 func remove_entity(pos: Vector2i) -> void:
 	var state: TileState = _state.get(pos)
-	if state == null:
+	if state == null or state.entity == null:
 		return
 	state.entity = null
 	_prune(pos, state)
+	entity_changed.emit(pos)
 
 
 func get_entity(pos: Vector2i) -> Node:
 	var state: TileState = _state.get(pos)
 	return state.entity if state != null else null
+
+
+## Every cell currently occupied by a deployable — the flow-field snapshot
+## (2.2) reads this instead of probing get_entity across the whole region.
+func get_entity_cells() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for pos: Vector2i in _state:
+		if _state[pos].entity != null:
+			cells.append(pos)
+	return cells
 
 # --- Bulk seam (1.5 world gen) -----------------------------------------------
 
