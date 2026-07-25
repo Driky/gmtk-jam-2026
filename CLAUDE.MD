@@ -1,0 +1,3 @@
+Solo game jam. Godot 4.x, GDScript only, HTML5/web export (Compatibility renderer, single-threaded, no threads, no C#).
+
+docs/tech-design.md is the design entry point: pitch, constraints, glossary, and a decision log linking each locked decision to its single owning doc under docs/systems/ (+ docs/plan.md). Before modifying a system, read its owning doc. Every decision lives in exactly ONE doc — when it changes, update that owning doc in the SAME commit; never restate a decision in another doc (one-line mention + link only).

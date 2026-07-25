@@ -1,0 +1,56 @@
+# "Countdown" — Design Index
+
+Terraria-style digging × factory automation × wave defense. **This file is the entry point**; every locked decision has exactly ONE owning doc (linked below). Other docs may mention a decision in one line + link, never restate it. When a decision changes, update its owning doc (and this log if the one-liner changed) in the same commit.
+
+## Pitch & Core Loop
+A repeating literal countdown (the jam theme). **Build phase:** fixed countdown ticks while the player digs, mines, automates, fortifies. At zero, **wave phase:** monsters spawn at the map edges and push toward the player's **Core**; no timer — the wave ends when cleared, then the countdown restarts. Endless; score = waves survived. Core destroyed = game over. Depth = progression: better ores deeper, pulling the player away from the base they must defend.
+
+## Hard Constraints
+- 96 hours, solo. Content is data-driven; cut lines are pre-authorized in [plan.md](plan.md).
+- Godot 4.x, **GDScript only** (no C# on web), **HTML5 export** to itch.io.
+- **Compatibility renderer**, **single-threaded** (no `Thread`, no SharedArrayBuffer setup).
+- Keyboard + mouse only. 16×16 px tiles.
+
+## Codebase Map (autoloads = fixed public API)
+| Autoload | Owns | Doc |
+|---|---|---|
+| `Game` | Phase state machine + countdown timer | [plan.md](plan.md) |
+| `Terrain` | World grid — ALL tile access | [systems/terrain.md](systems/terrain.md) |
+| `Automation` | 10 Hz tick: conveyors, inserters, machines, power | [systems/automation.md](systems/automation.md) |
+| `Waves` | Wave composition, spawning, aggro helpers | [systems/enemies.md](systems/enemies.md) |
+| `Progression` | XP, levels, stats, skill tree | [systems/progression.md](systems/progression.md) |
+| `Items` | Item/recipe DB, crafting-range queries | [systems/progression.md](systems/progression.md) |
+| `SaveSystem` | Serialize/deserialize session | [systems/save.md](systems/save.md) |
+| `AudioBus` | Music crossfade, pooled SFX | [systems/pipeline.md](systems/pipeline.md) |
+
+## Glossary
+- **Core** — pre-placed base heart; monsters' default target; its death ends the run.
+- **Buffer zones** — ~50 flat-dirt tiles beyond each side of the 100-tile playable width; player-immutable, monster-diggable spawn areas.
+- **Deposit** — rich ore tile blob with a `reserve`, meant for machine mining.
+- **Flow field** — shared Dijkstra cost field from the Core that all wave mobs read; dig-weighted.
+- **Stair-digging** — mob behavior: chew a diagonal step down instead of taking fall damage.
+- **Conveyor** — 1-slot scaffold tube; slots carry item **stacks**. **Stacker** — merges identical items into stacks under saturation. **Inserter** — mandatory machine I/O device.
+- **Fortification score** — spawn-cell path cost vs. baseline; skews waves toward crawlers/flyers.
+- **Climbable** — ladder/rope/pole deployable with directional climb profile; biped-only for mobs.
+
+## Decision Log
+| Decision (one line) | Owner |
+|---|---|
+| Fixed countdown build phase; untimed wave; endless + boss stretch; full state machine | [plan.md](plan.md) |
+| World 100×~1200 playable + buffer zones, 5 stacked biomes, seeded deterministic gen | [systems/world-gen.md](systems/world-gen.md) |
+| Hybrid terrain: TileMapLayer (type) + sparse dict (dynamic state), single `Terrain` API | [systems/terrain.md](systems/terrain.md) |
+| Terraria self-merge 48-frame autotile, manual autotiling, coordinate-hash variants | [systems/terrain.md](systems/terrain.md) |
+| Lighting: CanvasModulate + PointLight2D + occluders; vicinity light cap with toast | [systems/terrain.md](systems/terrain.md) |
+| Deposits render as ore autotile + shader FX overlay layer; reserve-based depletion | [systems/terrain.md](systems/terrain.md) |
+| Mined natural blocks placeable back, 1:1 self-drops (processed variants = data later) | [systems/terrain.md](systems/terrain.md) |
+| Melee hitbox + ONE shared projectile system (ranged, spells, turrets); death drops loot bag | [systems/player-combat.md](systems/player-combat.md) |
+| Capability-driven mobs; two dig-weighted flow fields; stair-digging; dig = universal fallback | [systems/enemies.md](systems/enemies.md) |
+| Threat-table aggro (Core default); reachability-adaptive wave composition | [systems/enemies.md](systems/enemies.md) |
+| Climbables biped-only, directional profiles (pole = down-only) | [systems/enemies.md](systems/enemies.md) |
+| 10 Hz deterministic tick; 1-slot conveyors carrying stacks; inserters mandatory; tick order fixed | [systems/automation.md](systems/automation.md) |
+| Power = radius coverage grids (generator + relay), brownout `supply/demand` scaling | [systems/automation.md](systems/automation.md) |
+| One mixed skill tree (recipes + leveled buffs) as Resource nodes; crafting range incl. nearby containers | [systems/progression.md](systems/progression.md) |
+| Tabbed character screen (Inventory/Crafting/Tree) with direct hotkeys; power overlay hotkey | [systems/ui.md](systems/ui.md) |
+| Pause: menu interactive, gameplay actions blocked | [systems/ui.md](systems/ui.md) |
+| Save = seed + diff, autosave at build-phase start only (never serialize live monsters) | [systems/save.md](systems/save.md) |
+| Placeholder tilesets generated from template by palette remap; TileSet built from `materials.gd` | [systems/pipeline.md](systems/pipeline.md) |
