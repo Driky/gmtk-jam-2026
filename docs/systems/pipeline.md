@@ -5,7 +5,7 @@ Owner of: placeholder tileset generation, the TileSet builder, sourced assets, a
 ## Placeholder tilesets — template palette remap
 The 48-frame template sheet (16×16 tiles, green/blue master) is committed at `res://assets/templates/terrain_template_16.png` and is the *shape master* for all terrain tiles. `res://tools/generate_tilesets.gd` (`@tool`, `Image` API, no external deps):
 1. Extract the template's unique opaque colors, rank by luminance. **Snap with tolerance** (nearest-of-palette) so stray anti-aliased/compressed pixels don't go unmapped.
-2. Per material, build a same-length shade ramp from its `base_color`: keep the template's per-rank luminance in HSV, replace hue/saturation. Alpha preserved verbatim.
+2. Per material, build a same-length shade ramp from its `base_color`: HSV with the base's hue/saturation, value = the base's value scaled by each rank's *relative* template luminance (brightest rank = the base color itself, so dark materials stay dark; the black outline maps to black). Alpha preserved verbatim.
 3. Save to `res://assets/generated/tiles/tile_<material_id>.png` — same pixel layout as the template by construction. Generated output is always reproducible from config + template.
 
 ## TileSet builder

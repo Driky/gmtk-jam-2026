@@ -19,10 +19,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Private itch.io project created; first build uploaded. Repeat daily (risk mitigation in [plan.md](plan.md)).
 
 ### 1.3 Tileset pipeline ([pipeline.md](systems/pipeline.md))
-- [ ] Commit `assets/templates/terrain_template_16.png` (48-frame shape master).
-- [ ] `data/materials.gd` — material config, single source of truth.
-- [ ] `tools/generate_tilesets.gd`: palette-remap PNG generation + TileSet builder (physics, occlusion, custom data layers).
-- [ ] `scripts/terrain/tile_layout.gd`: derive `LAYOUT` from the template once; pin `variant_hash` ([terrain.md](systems/terrain.md) — never change after first save).
+- [x] Commit `assets/templates/terrain_template_16.png` (48-frame shape master).
+- [x] `data/materials.gd` — material config, single source of truth.
+- [x] `tools/generate_tilesets.gd`: palette-remap PNG generation + TileSet builder (physics, occlusion, custom data layers).
+- [x] `scripts/terrain/tile_layout.gd`: derive `LAYOUT` from the template once; pin `variant_hash` ([terrain.md](systems/terrain.md) — never change after first save).
 
 ### 1.4 Terrain system ([terrain.md](systems/terrain.md))
 - [ ] `Terrain` autoload: TileMapLayer + sparse state dict, full API (`get_tile_data`, `damage_tile`, `set_tile`, `is_solid`, `place_entity`, `get_entity`).
