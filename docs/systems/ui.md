@@ -22,6 +22,8 @@ Navigable via tab buttons and cycling keys; each tab ALSO has a direct shortcut 
 
 Later HUD residents (owned by their systems): XP bar + level (2.6).
 
+**Debug overlays** (hidden by default, instanced by `main.gd`, never in a player's way): **F3** flow-field heat map ([enemies.md](enemies.md)) · **F4** perf readout (`scripts/debug/perf_overlay.gd`) — frame pacing and flow-field solve cost, existing because the browser has no editor profiler and web perf is the never-cut risk in [plan.md](../plan.md). Its headline figure is the **worst frame in a rolling window**, not mean FPS: a periodic hitch is invisible in an average. Toggling it on resets the accumulators, so a measurement run starts clean.
+
 ## Other screens
 Pause menu · placement mode overlay · **power overlay** on its own hotkey, togglable anytime ([automation.md](automation.md)) · debug overlay (slot occupancy, fortification score) · death & game-over screens · main menu with seed input (stretch: seedless "New Run" only). Keyboard + mouse only. Toasts for rejected placements (buffer zone, light cap — [terrain.md](terrain.md)).
 

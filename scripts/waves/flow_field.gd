@@ -40,6 +40,10 @@ var terrain: Node = null
 var region_width := WorldConfig.WORLD_WIDTH
 var region_rows := REGION_ROWS
 
+## Wall-clock cost of the last recompute(), surfaced by the F4 perf overlay —
+## the browser has no editor profiler and this is the number we tune against.
+var last_solve_msec := 0.0
+
 var _computed := false
 var _cost := PackedFloat32Array()
 var _flow := PackedByteArray()
@@ -124,9 +128,8 @@ func recompute(goal_cells: Array[Vector2i]) -> void:
 				_flow[v] = (di + 2) & 3 # Mob step v -> u = opposite of u -> v.
 				_heap_push(v, tentative)
 	_computed = true
-	print_verbose(
-		"FlowField recompute: %d cells in %d us" % [w * rows, Time.get_ticks_usec() - t0],
-	)
+	last_solve_msec = (Time.get_ticks_usec() - t0) / 1000.0
+	print_verbose("FlowField recompute: %d cells in %.1f ms" % [w * rows, last_solve_msec])
 
 
 func is_computed() -> bool:
