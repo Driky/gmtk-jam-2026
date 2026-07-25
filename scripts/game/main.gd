@@ -55,6 +55,7 @@ func _finish_generation() -> void:
 	Waves.initialize_flow_field(core)
 	add_child(FlowFieldOverlay.new()) # F3 debug view, hidden by default.
 	add_child(PerfOverlay.new()) # F4 perf readout, hidden by default.
+	_seed_starting_kit()
 	var player: CharacterBody2D = PlayerScene.instantiate()
 	# Feet on the surface tile top (center is 11 px up), 1 px slack against overlap.
 	player.position = Vector2((cx + PLAYER_SPAWN_OFFSET_X + 0.5) * TILE, surface_row * TILE - 12)
@@ -64,6 +65,14 @@ func _finish_generation() -> void:
 	_hud.visible = true
 	Game.start_build_phase()
 	_gen = null
+
+
+## Placeholder starting inventory. Bare hands mine at 2.0 hardness/s, so a run
+## has to open with a tool or the first minute is a slog; crafting (4.2) is what
+## eventually replaces this hand-out. Seeded BEFORE the player exists so its
+## _ready equips slot 0 straight away.
+func _seed_starting_kit() -> void:
+	Items.player_inventory.add_item("pickaxe_t1", 1)
 
 
 func _on_state_changed(state: Game.State) -> void:

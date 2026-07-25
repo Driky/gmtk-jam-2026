@@ -18,12 +18,22 @@ const MONSTER_TOOL_TIER := 98
 ## viable (walker: a 4-tile drop stings, ~8 tiles is lethal).
 const FALL_DAMAGE_PER_TILE := 6.0
 
-## Aggro tuning: one melee hit (2.5 lands ~10+) instantly aggroes; an ignored
-## attacker is forgotten after a few seconds and the mob resumes the Core.
+## Aggro tuning: two swings of the starter pickaxe (5 damage each) aggro a mob,
+## and an ignored attacker is forgotten after a few seconds so the mob resumes
+## the Core. Threat comes from damage, so a heavy weapon aggroes in one hit.
 const THREAT_DECAY_PER_S := 4.0
 const THREAT_THRESHOLD := 8.0
 ## Center-to-center swing distance against an aggro target (1.5 tiles).
 const ATTACK_RANGE_PX := 24.0
+
+## Knockback: locomotion writes velocity.x every frame, so a shove has to
+## suppress those writes or it's erased the same tick it lands. Short enough
+## that a mob never looks like it lost control, long enough to read as a hit.
+const KNOCKBACK_TIME := 0.12
+## Upward component, so a shove pops a mob off the ground instead of grinding
+## it along the floor — that's what makes a high-knockback tool buy space.
+const KNOCKBACK_LIFT := 60.0
+const HIT_FLASH_TIME := 0.08
 
 ## Stuck watchdog: the shared field assumes reference capabilities, so its
 ## guidance can cycle for a mob that can't use a route (e.g. a walker sent
@@ -54,6 +64,8 @@ var _air_top_y := INF
 var _stuck_timer := 0.0
 var _stuck_anchor := Vector2.INF
 var _direct_left := 0.0
+var _knockback_left := 0.0
+var _flash_tween: Tween = null
 
 
 func _ready() -> void:
@@ -82,6 +94,12 @@ func _step(delta: float) -> void:
 		velocity.y = minf(velocity.y + Player.GRAVITY * delta, Player.MAX_FALL_SPEED)
 	_attack_left = maxf(_attack_left - delta, 0.0)
 	_threat.decay(delta, THREAT_DECAY_PER_S)
+	if _knockback_left > 0.0:
+		# Coasting on the shove: skip decisions entirely, so nothing rewrites
+		# velocity.x back to a locomotion value this frame.
+		_knockback_left -= delta
+		move_and_slide()
+		return
 	var pos := cell()
 	var aggro := _threat.top_target(THREAT_THRESHOLD)
 	if aggro != null:
@@ -166,6 +184,36 @@ func take_damage(amount: float, attacker: Node2D = null) -> void:
 		_threat.add_threat(attacker, amount)
 	if current_hp <= 0.0:
 		_die()
+		return
+	_flash()
+
+
+## Shove this mob along `direction` at `strength` px/s. Callers pass a raw
+## offset (attacker → target); normalizing here means no call site has to
+## remember to, and a zero vector can't produce a NaN velocity.
+func apply_knockback(direction: Vector2, strength: float) -> void:
+	if _dead or strength <= 0.0:
+		return
+	var away := direction.normalized() if not direction.is_zero_approx() else Vector2.RIGHT
+	velocity = Vector2(away.x * strength, -KNOCKBACK_LIFT)
+	_knockback_left = KNOCKBACK_TIME
+	# A shove is a repositioning, not a route — the stuck watchdog must not read
+	# the lost ground as field guidance cycling.
+	_stuck_anchor = Vector2.INF
+	_stuck_timer = 0.0
+
+
+## White pop on hit. Plain modulate tween — Compatibility-safe, no shader.
+## A tween needs the tree, and the unit tests drive a bare Enemy outside it.
+func _flash() -> void:
+	if not is_inside_tree():
+		return
+	var visual := $Visual as ColorRect
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	visual.color = Color.WHITE
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(visual, "color", stats.color, HIT_FLASH_TIME)
 
 
 ## Flow-field gradient, or the direct-to-Core fallback when the field has no

@@ -13,6 +13,9 @@ extends Resource
 enum UseKind { SWING, PROJECTILE }
 
 @export var display_name := ""
+## Hotbar swatch until real art lands (4.2). Blocks draw their tile instead —
+## only authored items reach this ([ui.md](../../docs/systems/ui.md) icon rules).
+@export var icon_color := Color(0.75, 0.75, 0.8)
 @export var use_kind := UseKind.SWING
 ## Seconds between uses — swing rate and fire rate are the same knob.
 @export var use_cooldown := 0.35

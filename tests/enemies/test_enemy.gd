@@ -112,3 +112,47 @@ func test_lethal_damage_emits_died_once() -> void:
 	enemy.take_damage(999.0) # Already dead: must not re-emit.
 	assert_int(deaths.size()).is_equal(1)
 	assert_that(deaths[0]).is_same(enemy)
+
+# --- Knockback (2.5) ---------------------------------------------------------
+
+
+func test_knockback_pushes_away_and_lifts() -> void:
+	var enemy := _make_enemy()
+	enemy.apply_knockback(Vector2(3.0, 0.0), 100.0) # Raw offset, not normalized.
+	assert_float(enemy.velocity.x).is_equal_approx(100.0, 0.001)
+	assert_float(enemy.velocity.y).is_equal(-Enemy.KNOCKBACK_LIFT)
+	assert_float(enemy._knockback_left).is_equal(Enemy.KNOCKBACK_TIME)
+
+
+## A zero direction (attacker exactly on top of the mob) must not produce a NaN
+## velocity that corrupts the body forever.
+func test_knockback_survives_a_zero_direction() -> void:
+	var enemy := _make_enemy()
+	enemy.apply_knockback(Vector2.ZERO, 100.0)
+	assert_bool(is_nan(enemy.velocity.x)).is_false()
+	assert_float(absf(enemy.velocity.x)).is_equal_approx(100.0, 0.001)
+
+
+func test_zero_strength_is_not_a_knockback() -> void:
+	var enemy := _make_enemy()
+	enemy.apply_knockback(Vector2.RIGHT, 0.0)
+	assert_float(enemy._knockback_left).is_equal(0.0)
+
+
+func test_dead_mobs_are_not_shoved() -> void:
+	var enemy := _make_enemy()
+	enemy.take_damage(999.0)
+	enemy.apply_knockback(Vector2.RIGHT, 100.0)
+	assert_float(enemy._knockback_left).is_equal(0.0)
+
+
+## Ground lost to a shove must not read as "field guidance is cycling" — the
+## watchdog would otherwise flip mobs into direct-dig mode every time you hit
+## one with a high-knockback tool.
+func test_knockback_clears_the_stuck_watchdog() -> void:
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(100.0, 100.0)
+	for i in 60:
+		enemy._update_stuck(EnemyLocomotion.Action.WALK, 1.0 / 60.0)
+	enemy.apply_knockback(Vector2.RIGHT, 100.0)
+	assert_float(enemy._stuck_timer).is_equal(0.0)

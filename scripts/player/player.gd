@@ -16,9 +16,7 @@ const JUMP_BUFFER := 0.12
 const REACH_RADIUS_PX := 4.5 * TILE ## Player center → tile center.
 const COLLISION_EXTENTS := Vector2(6.0, 11.0) ## 12×22 box, fits 1-wide tunnels.
 
-## Equipment seam: tool items (3.6/4.2) replace these with equipped-tool stats.
-var tool_tier := 1
-var tool_power := 4.0 ## Hardness per second of held mining.
+const DEFAULT_HITBOX := preload("res://scenes/combat/swing_hitbox_default.tscn")
 
 ## Combat seam (2.5): damage/spells only mutate these — clamp + HUD notify are
 ## in the setters. Maxima live in Progression, not here.
@@ -34,11 +32,23 @@ var current_mana := 0.0:
 
 var _coyote := 0.0
 var _jump_buffer := 0.0
+## Seconds until the active item may be used again — one clock for swings and
+## shots alike, because ItemStats.use_cooldown is one knob.
+var _use_left := 0.0
+## The equipped item's hitbox, instanced on equip (never per swing). It hangs
+## directly off the player: the hitbox root aims itself, so there's nothing for
+## a mount node to do, and the scene stays free of a child the script owns.
+var _hitbox: SwingHitbox = null
+var _hitbox_scene: PackedScene = null
 
 
 func _ready() -> void:
 	current_hp = Progression.get_stat("max_hp")
 	current_mana = Progression.get_stat("max_mana")
+	var inventory := Items.player_inventory
+	inventory.selected_changed.connect(_on_selection_changed)
+	inventory.slot_changed.connect(_on_slot_changed)
+	_equip(Items.selected_stats())
 
 
 func _physics_process(delta: float) -> void:
@@ -49,10 +59,45 @@ func _physics_process(delta: float) -> void:
 
 func _step(delta: float) -> void:
 	_move(delta)
+	_use_left = maxf(_use_left - delta, 0.0)
 	if Input.is_action_pressed("mine"):
-		_mine(delta)
+		_use(delta)
 	elif Input.is_action_pressed("place"):
 		_place()
+
+
+## The one verb behind LMB: use the active hotbar item. A swingable item (tool,
+## melee weapon, block, bare hand) mines the hovered tile AND arcs at whatever
+## is in front of you — both, always, so there's no targeting rule to infer.
+## Mining is continuous per tick; the arc lands on the item's cooldown.
+func _use(delta: float) -> void:
+	var stats := Items.selected_stats()
+	if stats.use_kind == ItemStats.UseKind.SWING:
+		_mine(delta, stats)
+	if _use_left > 0.0:
+		return
+	_use_left = stats.effective_cooldown()
+	if stats.use_kind == ItemStats.UseKind.SWING:
+		_swing(stats)
+
+
+func _swing(stats: ItemStats) -> void:
+	if _hitbox == null:
+		return
+	var aim := get_global_mouse_position() - global_position
+	_hitbox.activate(aim, stats.arc_degrees, stats.active_window)
+
+
+## Damage is resolved here rather than in the hitbox: only the swinger knows
+## which item swung and what Progression multiplies it by.
+func _on_target_hit(body: Node2D) -> void:
+	if not body.has_method(&"take_damage"):
+		return
+	var stats := Items.selected_stats()
+	body.take_damage(stats.effective_melee_damage(), self)
+	if body.has_method(&"apply_knockback"):
+		var away := body.global_position - global_position
+		body.apply_knockback(away, stats.effective_knockback())
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -80,12 +125,12 @@ func _move(delta: float) -> void:
 	move_and_slide()
 
 
-func _mine(delta: float) -> void:
+func _mine(delta: float, stats: ItemStats) -> void:
 	var target := target_tile()
 	if not in_reach(target):
 		return
-	var amount: float = tool_power * Progression.get_stat("mining_speed") * delta
-	Terrain.damage_tile(target, amount, tool_tier, Terrain.Source.PLAYER)
+	var amount := stats.effective_mining_power() * delta
+	Terrain.damage_tile(target, amount, stats.tool_tier, Terrain.Source.PLAYER)
 
 
 func _place() -> void:
@@ -100,6 +145,35 @@ func _place() -> void:
 	var id: String = item.id
 	if Items.player_inventory.consume_selected(1):
 		Terrain.set_tile(target, id)
+
+# --- Equipment ---------------------------------------------------------------
+
+
+func _on_selection_changed(_index: int) -> void:
+	_equip(Items.selected_stats())
+
+
+## A slot edit only matters when it changes what's in HAND — mining a stack of
+## dirt fires this every break, and reinstancing the hitbox each time would
+## cancel a swing mid-sweep.
+func _on_slot_changed(index: int) -> void:
+	if index == Items.player_inventory.selected_slot:
+		_equip(Items.selected_stats())
+
+
+## Swap the equipped hitbox. Keyed on the SCENE, not the item: switching
+## between two items that share the default arc keeps the same instance, so
+## cycling the hotbar mid-fight can't interrupt a swing.
+func _equip(stats: ItemStats) -> void:
+	var scene: PackedScene = stats.hitbox_scene if stats.hitbox_scene != null else DEFAULT_HITBOX
+	if scene == _hitbox_scene and _hitbox != null:
+		return
+	_hitbox_scene = scene
+	if _hitbox != null:
+		_hitbox.queue_free()
+	_hitbox = scene.instantiate()
+	_hitbox.target_hit.connect(_on_target_hit)
+	add_child(_hitbox)
 
 
 func target_tile() -> Vector2i:

@@ -11,10 +11,17 @@ Owner of: player controller, mining interaction, inventory & pickups, placement,
 
 **Camera:** on the player scene; limits computed from `WorldConfig` (playable band × world height — never hardcoded pixels), position smoothing speed 8. Zoom cycling owned by [ui.md](ui.md).
 
-## Tools & mining
-Hold-to-mine on the targeted tile (under mouse) within **reach 4.5 tiles** (player center → tile center, no line-of-sight check); calls `Terrain.damage_tile` per physics tick with `tool_power × get_stat("mining_speed") × delta`. Tool tiers gate deeper blocks via `min_tool_tier` ([terrain.md](terrain.md)).
+## The use verb & item stats (locked, 2.5)
+**LMB is one verb: use the active hotbar item.** A `SWING` item (tool, melee weapon, block, bare hand) mines the hovered tile *and* arcs at whatever is in front of you — both effects on every use, so there is no targeting rule for the player to infer. A `PROJECTILE` item fires instead. Placement stays on RMB.
 
-**Tool stub (1.6):** `tool_tier = 1`, `tool_power = 4.0` hardness/s as fields on the player — the equipment system (3.6/4.2) replaces them with equipped-tool stats.
+**Every combat and mining number is an `ItemStats` Resource, never a constant on the player**: `use_kind`, `use_cooldown`, `mining_power`, `tool_tier`, `melee_damage`, `knockback`, and an optional `hitbox_scene` (+ `arc_degrees` / `active_window` for the default arc). That makes a tool a design space rather than a fixed upgrade curve — a fast, low-damage, high-knockback pickaxe is a "mine while shoving mobs off you" tool, and a heavy slow one is a weapon that also digs.
+
+Resolution — `Items.stats_for(id)`, table in `data/item_defs.gd`: **authored `.tres` > `BLOCK_DEFAULT` > `BARE_HAND`**, never null, so no call site needs a "no item" branch. Keys are *any* item id, blocks included, so making one odd block a viable off-label weapon is a single resource with no schema change to `materials.gd`. Blocks sit a little above bare hands. Starters: bare hand mines 2.0 hardness/s, a block 3.0, `pickaxe_t1` 4.0 (the pre-2.5 flat value, so minute-one dig feel is unchanged). Tool tiers gate deeper blocks via `min_tool_tier` ([terrain.md](terrain.md)).
+
+**Buff seam:** every read goes through an `effective_*` accessor that multiplies by `Progression.get_stat` (`mining_speed`, `melee_damage`, `knockback`; `swing_speed` *divides* `use_cooldown`). `get_stat` returns a neutral 1.0 for unknown names, so 3.7 buffs and any later debuff land without touching an item or a call site.
+
+## Mining
+Hold-to-mine on the targeted tile (under mouse) within **reach 4.5 tiles** (player center → tile center, no line-of-sight check); calls `Terrain.damage_tile` per physics tick with the item's effective mining power × delta.
 
 **Feedback:** `MiningCursor` draws the hovered tile's outline (white actionable / red rejected — the buffer-zone cue) + a damage-ratio fill from `Terrain.tile_damaged`. HUD-proper feedback is 1.7.
 
@@ -27,7 +34,7 @@ Hold-to-mine on the targeted tile (under mouse) within **reach 4.5 tiles** (play
 `place` puts the selected hotbar item down as a tile when the item id is a material id (1:1 self-drops — [terrain.md](terrain.md)). Validity: in reach + `can_player_edit` + target is air + no entity + not overlapping the player's collision box + **cardinally adjacent to ≥ 1 solid tile — no floating blocks**.
 
 ## Combat — three styles, two systems (locked)
-- **Melee:** animated `Area2D` hitbox arc in aim direction; damage + small knockback.
+- **Melee:** `Area2D` hitbox arc swept through the aim direction; damage + knockback, both from the item. **Instanced on equip, enabled on swing** — never instanced per swing; the swap is keyed on the hitbox *scene*, so cycling between two items that share the default arc can't interrupt a sweep. Default arc: 90° over a 0.15 s window at ~1.75 tiles' reach, **one hit per target per swing** (a 0.15 s window is ~9 physics frames — a naive per-frame poll would deal 9× damage). Bodies already overlapping when the arc switches on never emit `body_entered`, so frame 0 is polled: a mob standing on top of you is hittable. The hitbox reports the body; **the swinger resolves damage**, since only it knows which item swung and what `Progression` multiplies it by. Shape sets are indexed by swing **step**, so a combo (wide sweep, then narrow lunge) is a scene with two sets plus a caller passing step 1 — the combo *system* (input chaining, timing windows) is not built.
 - **Projectiles — ONE system shared by ranged weapons, spells, and turrets:** a pooled projectile scene parameterized by a `ProjectileStats` Resource (speed, damage, gravity, pierce, AoE, sprite, on-hit effect). Ranged consumes ammo items; spells consume mana; turrets ([automation.md](automation.md)) reuse it verbatim. One implementation serves three features.
 
 ## Death & respawn

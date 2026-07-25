@@ -100,7 +100,8 @@ func bind_core(core: Node) -> void:
 
 
 ## Icon = fully-surrounded autotile frame (mask 15, variant 0) of the id's
-## atlas source; ids without tile art get a base_color swatch (gray if unknown).
+## atlas source; ids without tile art get a flat swatch — an authored item's
+## icon_color, else the material's base_color, else gray.
 static func icon_for(id: String) -> Texture2D:
 	if _icon_cache.has(id):
 		return _icon_cache[id]
@@ -114,8 +115,11 @@ static func icon_for(id: String) -> Texture2D:
 		icon = atlas
 	else:
 		var mat: Dictionary = Materials.MATERIALS.get(id, { })
+		var color: Color = mat.get("base_color", FALLBACK_COLOR)
+		if ItemDefs.STATS.has(id):
+			color = (ItemDefs.STATS[id] as ItemStats).icon_color
 		var image := Image.create(ICON_SIZE, ICON_SIZE, false, Image.FORMAT_RGBA8)
-		image.fill(mat.get("base_color", FALLBACK_COLOR))
+		image.fill(color)
 		icon = ImageTexture.create_from_image(image)
 	_icon_cache[id] = icon
 	return icon
