@@ -42,6 +42,12 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Perf.begin(&"player")
+	_step(delta)
+	Perf.end()
+
+
+func _step(delta: float) -> void:
 	_move(delta)
 	if Input.is_action_pressed("mine"):
 		_mine(delta)

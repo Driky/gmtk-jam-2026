@@ -16,6 +16,9 @@ const MARGIN := Vector2(8.0, 60.0) ## Clears the HUD's HP/mana bars.
 ## its TileMapLayer quadrant rebuild (physics bodies, occluders) past the
 ## frame that called set_cell, so the cost lands a frame or two later.
 const DIRTY_FRAMES := 2
+## Sections shown in the breakdown line. Three is enough to name a culprit
+## without the label covering the game.
+const SECTION_ROWS := 3
 
 ## Injected by tests; falls back to the autoloads.
 var waves: Node = null
@@ -41,6 +44,11 @@ var _writes := 0
 var _write_usec := 0
 var _write_usec_base := 0
 var _write_peak_usec := 0
+## Godot's own accounting: time inside _process / _physics_process across the
+## whole tree. If a frame is 83 ms while these read ~2 ms, the cost is not in
+## our script at all — it's the renderer, the physics server, or the browser.
+var _engine_process_peak := 0.0
+var _engine_physics_peak := 0.0
 var _last_writes := 0
 var _dirty_left := 0
 
@@ -73,6 +81,14 @@ func _process(delta: float) -> void:
 	_worst_window = maxf(_worst_window, frame_ms)
 	_peak = maxf(_peak, frame_ms)
 	_sample_writes(frame_ms)
+	_engine_process_peak = maxf(
+		_engine_process_peak,
+		Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+	)
+	_engine_physics_peak = maxf(
+		_engine_physics_peak,
+		Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+	)
 	_window_left -= delta
 	if _window_left <= 0.0:
 		_window_left = WINDOW
@@ -97,6 +113,11 @@ func _process(delta: float) -> void:
 			_write_peak_usec / 1000.0,
 			_worst_dirty,
 			_worst_clean,
+		)
+		_label.text += "\n" + Perf.format_top(SECTION_ROWS)
+		_label.text += (
+			"\ngodot script worst: process %.1f | physics %.1f ms"
+			% [_engine_process_peak, _engine_physics_peak]
 		)
 
 
@@ -141,11 +162,14 @@ func reset_stats() -> void:
 	# starts, and folding those in made the in-call total read ~10x high.
 	_write_usec_base = terrain.cell_write_usec
 	_write_peak_usec = 0
+	_engine_process_peak = 0.0
+	_engine_physics_peak = 0.0
 	terrain.cell_write_peak_usec = 0 # Drop world gen's peak.
 	_last_writes = terrain.cell_writes # Baseline: don't count world gen's writes.
 	_dirty_left = 0
 	_window_left = WINDOW
 	_refresh_left = 0.0
+	Perf.reset()
 
 
 static func format_stats(

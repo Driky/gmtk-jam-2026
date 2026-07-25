@@ -169,8 +169,10 @@ func _tick_spawning(delta: float) -> void:
 	if _spawn_left > 0.0:
 		return
 	_spawn_left = SPAWN_INTERVAL
+	Perf.begin(&"wave.spawn")
 	spawn_enemy(_queue.pop_front(), _spawn_position())
 	wave_progress_changed.emit(remaining())
+	Perf.end()
 
 
 ## Alternating buffer, random depth in the outer band, standing on the surface.

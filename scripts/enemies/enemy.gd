@@ -67,6 +67,12 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Perf.begin(&"mob")
+	_step(delta)
+	Perf.end()
+
+
+func _step(delta: float) -> void:
 	# Gravity mirrors the player's tuning — shared consts avoid a second
 	# divergent gravity value.
 	if is_on_floor():

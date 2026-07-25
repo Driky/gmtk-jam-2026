@@ -90,7 +90,9 @@ func _process(delta: float) -> void:
 	_sweep_accum += delta
 	if _sweep_accum >= SWEEP_INTERVAL:
 		_sweep_accum = 0.0
+		Perf.begin(&"terrain.sweep")
 		_sweep_abandoned(Time.get_ticks_msec())
+		Perf.end()
 
 # --- Reads -------------------------------------------------------------------
 
@@ -206,8 +208,10 @@ func set_tile(pos: Vector2i, material_id: String) -> void:
 		assert(_source_by_material.has(material_id))
 		var sid: int = _source_by_material[material_id]
 		_write_cell(pos, sid, TileLayout.LAYOUT[15][TileLayout.variant_hash(pos)])
+	Perf.begin(&"terrain.set_tile")
 	_refresh_with_neighbors(pos)
 	tile_changed.emit(pos)
+	Perf.end()
 
 # --- Entities (deployables — automation.md registers per occupied cell) ------
 

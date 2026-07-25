@@ -106,7 +106,9 @@ func begin_recompute(goal_cells: Array[Vector2i]) -> void:
 	var t0 := Time.get_ticks_usec()
 	var w := region_width
 	var rows := region_rows
+	Perf.begin(&"field.snapshot")
 	_snapshot()
+	Perf.end()
 	_build_cost.resize(w * rows)
 	_build_cost.fill(INF)
 	_build_flow.resize(w * rows)
@@ -125,6 +127,7 @@ func begin_recompute(goal_cells: Array[Vector2i]) -> void:
 func step_recompute(budget_usec: int) -> bool:
 	if not _building:
 		return true
+	Perf.begin(&"field.step")
 	var t0 := Time.get_ticks_usec()
 	var w := region_width
 	var rows := region_rows
@@ -135,6 +138,7 @@ func step_recompute(budget_usec: int) -> bool:
 			checks = 0
 			if Time.get_ticks_usec() - t0 >= budget_usec:
 				_build_usec += Time.get_ticks_usec() - t0
+				Perf.end()
 				return false
 		var u := _heap_cells[0]
 		var k := _heap_keys[0]
@@ -177,6 +181,7 @@ func step_recompute(budget_usec: int) -> bool:
 				_heap_push(v, tentative)
 	_build_usec += Time.get_ticks_usec() - t0
 	_publish()
+	Perf.end()
 	return true
 
 
