@@ -186,15 +186,20 @@ func test_clear_fires_exactly_once() -> void:
 	assert_int(_game.waves_survived).is_equal(1)
 
 
+## Now a debug-menu row rather than a keybinding, so it's called directly.
 func test_debug_clear_wave_empties_the_wave() -> void:
 	_enter_wave_phase()
 	_pump_spawns(2)
-	var event := InputEventAction.new()
-	event.action = &"debug_clear_wave"
-	event.pressed = true
-	_waves._unhandled_input(event)
+	_waves.debug_clear_wave()
 	assert_int(_waves.remaining()).is_equal(0)
 	assert_int(_game.waves_survived).is_equal(1)
+
+
+## Clearing outside a wave must be inert — the menu button is clickable at any
+## time, including during the build phase.
+func test_debug_clear_wave_is_inert_outside_a_wave() -> void:
+	_waves.debug_clear_wave()
+	assert_int(_game.waves_survived).is_equal(0)
 
 # --- Run reset ---------------------------------------------------------------
 

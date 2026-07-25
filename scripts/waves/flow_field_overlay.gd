@@ -1,5 +1,6 @@
-## Debug view of the ground flow field (2.2): F3 (toggle_debug_overlay)
-## shows a cost heat-map + flow-direction ticks for the cells in view.
+## Debug view of the ground flow field (2.2): a cost heat-map + flow-direction
+## ticks for the cells in view. Visibility is driven by the F3 debug menu
+## ([ui.md](../../docs/systems/ui.md)) — this node owns no keybinding.
 ## Owning doc: docs/systems/enemies.md
 extends Node2D
 
@@ -25,11 +26,6 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if visible:
 		queue_redraw() # Debug-only cost; tracks camera motion + field updates.
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"toggle_debug_overlay"):
-		visible = not visible
 
 
 func _draw() -> void:

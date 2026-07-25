@@ -104,6 +104,10 @@ func _step(delta: float) -> void:
 	_move(delta)
 	_contact_damage()
 	_use_left = maxf(_use_left - delta, 0.0)
+	# Gameplay polls Input directly rather than going through the UI, so a click
+	# on a debug button would otherwise also swing at the world behind it.
+	if DebugMenu.is_open:
+		return
 	if Input.is_action_pressed("mine"):
 		_use(delta)
 	elif Input.is_action_pressed("place"):

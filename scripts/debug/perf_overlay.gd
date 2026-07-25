@@ -1,5 +1,6 @@
-## Debug perf readout (F4): frame pacing + flow-field solve cost, readable in
-## the browser where the editor profiler isn't available.
+## Debug perf readout: frame pacing + flow-field solve cost, readable in the
+## browser where the editor profiler isn't available. Visibility is driven by
+## the F3 debug menu — this node owns no keybinding.
 ## Owning doc: docs/systems/ui.md
 ##
 ## Headline number is the WORST frame in the last few seconds, not the mean:
@@ -152,14 +153,8 @@ func _sample_writes(frame_ms: float) -> void:
 	_dirty_left = DIRTY_FRAMES if wrote else maxi(_dirty_left - 1, 0)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"toggle_perf_overlay"):
-		visible = not visible
-		if visible:
-			reset_stats() # Toggling on means "measure from here".
-
-
-## Zero the accumulated peaks. Public so a measurement run can start clean.
+## Zero the accumulated peaks. Called by the debug menu when the readout is
+## switched on, so toggling it means "measure from here".
 func reset_stats() -> void:
 	_worst_window = 0.0
 	_worst_shown = 0.0

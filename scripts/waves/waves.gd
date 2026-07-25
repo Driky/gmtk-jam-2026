@@ -104,35 +104,51 @@ func _advance_solve() -> void:
 		flow_field.begin_recompute(_goal_cells)
 
 
+## Mob spawning is the one debug action that still owns a key (F4): it needs the
+## cursor to say WHERE, which no menu button can express. Everything else moved
+## into the F3 debug menu ([ui.md](../../docs/systems/ui.md)).
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"debug_clear_wave") and game.state == game.State.WAVE_PHASE:
-		_queue.clear()
-		for enemy in _alive.duplicate(): # Lethal damage, so the real death path runs.
-			if is_instance_valid(enemy):
-				enemy.take_damage(INF)
-		_check_cleared()
-	# Debug spawner: drops one walker at the cursor, outside the wave budget.
 	if event.is_action_pressed(&"debug_spawn_walker", true):
-		var scene := get_tree().current_scene
-		var in_run: bool = (
-			game.state == game.State.BUILD_PHASE or game.state == game.State.WAVE_PHASE
-		)
-		if in_run and scene is Node2D:
-			var stats: EnemyStats = WaveRoster.ENTRIES[0].stats
-			spawn_enemy(stats, (scene as Node2D).get_global_mouse_position())
-	# Poke the nearest enemy as the player: verifies aggro before 2.5 melee.
-	if event.is_action_pressed(&"debug_poke_enemy"):
-		var player: Node2D = get_tree().get_first_node_in_group(&"player")
-		if player != null:
-			var nearest: Node = null
-			var best := INF
-			for enemy: Node2D in get_tree().get_nodes_in_group(&"enemies"):
-				var dist := enemy.global_position.distance_to(player.global_position)
-				if dist < best:
-					best = dist
-					nearest = enemy
-			if nearest != null:
-				nearest.take_damage(5.0, player)
+		debug_spawn_at_cursor()
+
+
+## Drops one walker at the cursor, outside the wave budget.
+func debug_spawn_at_cursor() -> void:
+	var scene := get_tree().current_scene
+	var in_run: bool = game.state == game.State.BUILD_PHASE or game.state == game.State.WAVE_PHASE
+	if not in_run or not scene is Node2D:
+		return
+	var stats: EnemyStats = WaveRoster.ENTRIES[0].stats
+	spawn_enemy(stats, (scene as Node2D).get_global_mouse_position())
+
+
+## Wipe the wave without waiting it out. Lethal damage rather than free(), so
+## the real death path (loot, XP, clear check) runs.
+func debug_clear_wave() -> void:
+	if game.state != game.State.WAVE_PHASE:
+		return
+	_queue.clear()
+	for enemy in _alive.duplicate():
+		if is_instance_valid(enemy):
+			enemy.take_damage(INF)
+	_check_cleared()
+
+
+## Hit the nearest mob as the player — the quickest way to check that threat
+## aggro pulls a mob off the Core.
+func debug_poke_nearest() -> void:
+	var player: Node2D = get_tree().get_first_node_in_group(&"player")
+	if player == null:
+		return
+	var nearest: Node = null
+	var best := INF
+	for enemy: Node2D in get_tree().get_nodes_in_group(&"enemies"):
+		var dist := enemy.global_position.distance_to(player.global_position)
+		if dist < best:
+			best = dist
+			nearest = enemy
+	if nearest != null:
+		nearest.take_damage(5.0, player)
 
 # --- Wave manager (2.4) ------------------------------------------------------
 

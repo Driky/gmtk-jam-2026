@@ -7,6 +7,7 @@ const PlayerScene := preload("res://scenes/player.tscn")
 const CoreScene := preload("res://scenes/core.tscn")
 const FlowFieldOverlay := preload("res://scripts/waves/flow_field_overlay.gd")
 const PerfOverlay := preload("res://scripts/debug/perf_overlay.gd")
+const DebugMenuScript := preload("res://scripts/debug/debug_menu.gd")
 ## The Core owns the exact center column (flow-field origin, 2.2); the
 ## player spawns beside it, still on the guaranteed-flat span.
 const PLAYER_SPAWN_OFFSET_X := 3
@@ -53,8 +54,15 @@ func _finish_generation() -> void:
 	core.died.connect(Game.game_over)
 	# Field + untouched-terrain baseline: Core registered, zero player edits.
 	Waves.initialize_flow_field(core)
-	add_child(FlowFieldOverlay.new()) # F3 debug view, hidden by default.
-	add_child(PerfOverlay.new()) # F4 perf readout, hidden by default.
+	# Debug overlays own no keybindings — the F3 menu drives their visibility.
+	var flow_overlay := FlowFieldOverlay.new()
+	add_child(flow_overlay)
+	var perf_overlay := PerfOverlay.new()
+	add_child(perf_overlay)
+	var debug_menu: CanvasLayer = DebugMenuScript.new()
+	debug_menu.flow_overlay = flow_overlay
+	debug_menu.perf_overlay = perf_overlay
+	add_child(debug_menu)
 	_seed_starting_kit()
 	var player: CharacterBody2D = PlayerScene.instantiate()
 	# Feet on the surface tile top (center is 11 px up), 1 px slack against overlap.
