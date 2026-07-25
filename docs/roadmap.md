@@ -16,7 +16,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 
 ### 1.2 Web export — hour 2, not hour 90 🔴
 - [x] HTML5 export preset (single-threaded, no SharedArrayBuffer requirement); run in an actual browser.
-- [ ] Private itch.io project created; first build uploaded. Repeat daily (risk mitigation in [plan.md](plan.md)).
+- [x] Private itch.io project created; first build uploaded. Repeat daily (risk mitigation in [plan.md](plan.md)).
 
 ### 1.3 Tileset pipeline ([pipeline.md](systems/pipeline.md))
 - [ ] Commit `assets/templates/terrain_template_16.png` (48-frame shape master).
