@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://ky78m7otb228"]
+
+[node name="Main" type="Node2D" unique_id=1643327673]
+
+[node name="BuildLabel" type="Label" parent="." unique_id=64417747]
+offset_left = 540.0
+offset_top = 348.0
+offset_right = 757.0
+offset_bottom = 371.0
+text = "Countdown — web build OK"

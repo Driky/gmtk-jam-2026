@@ -15,7 +15,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] `CREDITS.md` created (pipeline rule: from hour one — [pipeline.md](systems/pipeline.md)).
 
 ### 1.2 Web export — hour 2, not hour 90 🔴
-- [ ] HTML5 export preset (single-threaded, no SharedArrayBuffer requirement); run in an actual browser.
+- [x] HTML5 export preset (single-threaded, no SharedArrayBuffer requirement); run in an actual browser.
 - [ ] Private itch.io project created; first build uploaded. Repeat daily (risk mitigation in [plan.md](plan.md)).
 
 ### 1.3 Tileset pipeline ([pipeline.md](systems/pipeline.md))
