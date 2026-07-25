@@ -17,9 +17,13 @@ const BARE_HAND: ItemStats = preload("res://data/items/bare_hand.tres")
 const BLOCK_DEFAULT: ItemStats = preload("res://data/items/block_default.tres")
 
 const PICKAXE_T1: ItemStats = preload("res://data/items/pickaxe_t1.tres")
+## Placeholder ranged weapon: exists so the pooled projectile system has a live
+## consumer before 3.5's turrets depend on it. Crafted bows (4.2) replace it.
+const BOLT_CASTER: ItemStats = preload("res://data/items/bolt_caster.tres")
 
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
+	"bolt_caster": BOLT_CASTER,
 }
 
 

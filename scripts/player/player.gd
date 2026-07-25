@@ -17,6 +17,9 @@ const REACH_RADIUS_PX := 4.5 * TILE ## Player center → tile center.
 const COLLISION_EXTENTS := Vector2(6.0, 11.0) ## 12×22 box, fits 1-wide tunnels.
 
 const DEFAULT_HITBOX := preload("res://scenes/combat/swing_hitbox_default.tscn")
+## Muzzle distance: clear of the 12×22 body, so a shot never spawns inside the
+## tile the player is standing in and dies on frame one.
+const MUZZLE_OFFSET_PX := 14.0
 
 ## Combat seam (2.5): damage/spells only mutate these — clamp + HUD notify are
 ## in the setters. Maxima live in Progression, not here.
@@ -79,13 +82,35 @@ func _use(delta: float) -> void:
 	_use_left = stats.effective_cooldown()
 	if stats.use_kind == ItemStats.UseKind.SWING:
 		_swing(stats)
+	else:
+		_shoot(stats)
 
 
 func _swing(stats: ItemStats) -> void:
 	if _hitbox == null:
 		return
+	_hitbox.activate(_aim(), stats.arc_degrees, stats.active_window)
+
+
+## Ammo and mana costs land with the real weapons (4.2) — the placeholder
+## caster is free, so the pooled system gets exercised the way a bow will.
+func _shoot(stats: ItemStats) -> void:
+	var aim := _aim()
+	# Spawn clear of the body so the shot doesn't start inside our own tile.
+	ProjectilePool.fire(
+		stats.projectile,
+		global_position + aim.normalized() * MUZZLE_OFFSET_PX,
+		aim,
+		Projectile.Faction.PLAYER,
+		self,
+	)
+
+
+## Everything the player aims is mouse-relative — one definition so the swing
+## arc and a shot can never disagree about where "forward" is.
+func _aim() -> Vector2:
 	var aim := get_global_mouse_position() - global_position
-	_hitbox.activate(aim, stats.arc_degrees, stats.active_window)
+	return Vector2.RIGHT if aim.is_zero_approx() else aim
 
 
 ## Damage is resolved here rather than in the hitbox: only the swinger knows

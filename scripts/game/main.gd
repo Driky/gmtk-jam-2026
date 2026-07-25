@@ -73,6 +73,7 @@ func _finish_generation() -> void:
 ## _ready equips slot 0 straight away.
 func _seed_starting_kit() -> void:
 	Items.player_inventory.add_item("pickaxe_t1", 1)
+	Items.player_inventory.add_item("bolt_caster", 1)
 
 
 func _on_state_changed(state: Game.State) -> void:

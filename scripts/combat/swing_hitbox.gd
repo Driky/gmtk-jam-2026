@@ -9,6 +9,11 @@
 ## sweep, then a narrow lunge) is a data change — a scene with two shape sets
 ## and a caller passing step 1. 2.5 always passes 0; the combo system itself
 ## (input chaining, timing windows) is not in this step.
+##
+## Overlaps come from POLLING, never body_entered: a swing is ~9 physics frames
+## of a reused area, and polling depends on no signal timing while solving the
+## already-overlapping-at-frame-0 case for free. Leave `monitorable` alone —
+## see the warning in projectile.gd about what setting it false costs.
 ## Owning doc: docs/systems/player-combat.md
 class_name SwingHitbox
 extends Node2D
@@ -48,9 +53,8 @@ func activate(aim_dir: Vector2, arc_degrees: float, active_window: float, step :
 	_active.monitoring = true
 	_active.visible = true
 
-	# Bodies already inside the arc at frame 0 never emit body_entered, so the
-	# first overlap sweep has to be polled — otherwise a mob standing on top of
-	# you eats nothing.
+	# Catches a mob already standing on top of you: its overlap predates the
+	# swing, so nothing would announce it.
 	_poll.call_deferred()
 
 	_tween = create_tween()
@@ -77,13 +81,6 @@ func _poll() -> void:
 		target_hit.emit(body)
 
 
-func _on_body_entered(body: Node2D) -> void:
-	if _active == null or body in _hit_this_swing:
-		return
-	_hit_this_swing.append(body)
-	target_hit.emit(body)
-
-
 func _cancel() -> void:
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
@@ -103,5 +100,4 @@ func _collect_areas() -> Array[Area2D]:
 	for child in get_children():
 		if child is Area2D:
 			areas.append(child as Area2D)
-			(child as Area2D).body_entered.connect(_on_body_entered)
 	return areas

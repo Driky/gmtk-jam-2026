@@ -33,6 +33,12 @@ enum UseKind { SWING, PROJECTILE }
 @export var arc_degrees := 90.0 ## Sweep the default arc travels through.
 @export var active_window := 0.15 ## Seconds the hitbox stays enabled.
 
+@export_group("Ranged")
+## What a PROJECTILE item fires. Ammo and mana costs are 4.2 — the placeholder
+## caster is free so the pooled system has a live consumer before 3.5's
+## turrets depend on it.
+@export var projectile: ProjectileStats = null
+
 
 ## Buff seam: every gameplay read goes through one of these, so skill-tree
 ## buffs (3.7) and any later debuff land without touching an item or a call
