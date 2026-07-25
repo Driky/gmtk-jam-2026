@@ -21,6 +21,20 @@ const DEFAULT_HITBOX := preload("res://scenes/combat/swing_hitbox_default.tscn")
 ## tile the player is standing in and dies on frame one.
 const MUZZLE_OFFSET_PX := 14.0
 
+## Grace window after any hit. Also what stops a mob's swing and its contact
+## damage double-dipping on the same frame — both route through take_damage,
+## so one gate covers both.
+const INVULN_TIME := 0.6
+## Blink cadence while invulnerable. Alpha rather than a hard hide: at 12×22 px
+## a vanishing player reads as a glitch, a dimming one reads as invulnerable.
+const BLINK_PERIOD := 0.08
+const BLINK_ALPHA := 0.3
+## Shove taken from a hit. Suppresses input briefly, or the movement code
+## rewrites velocity.x the same tick and the hit has no weight.
+const HURT_KNOCKBACK := 140.0
+const HURT_LIFT := 80.0
+const HURT_STUN := 0.15
+
 ## Combat seam (2.5): damage/spells only mutate these — clamp + HUD notify are
 ## in the setters. Maxima live in Progression, not here.
 var current_hp := 0.0:
@@ -43,6 +57,12 @@ var _use_left := 0.0
 ## a mount node to do, and the scene stays free of a child the script owns.
 var _hitbox: SwingHitbox = null
 var _hitbox_scene: PackedScene = null
+var _invuln_left := 0.0
+var _stun_left := 0.0
+var _blink_left := 0.0
+
+@onready var _visual: ColorRect = $Visual
+@onready var _hurtbox: Area2D = $Hurtbox
 
 
 func _ready() -> void:
@@ -61,12 +81,72 @@ func _physics_process(delta: float) -> void:
 
 
 func _step(delta: float) -> void:
+	_tick_invulnerability(delta)
 	_move(delta)
+	_contact_damage()
 	_use_left = maxf(_use_left - delta, 0.0)
 	if Input.is_action_pressed("mine"):
 		_use(delta)
 	elif Input.is_action_pressed("place"):
 		_place()
+
+# --- Taking damage -----------------------------------------------------------
+
+
+## Mobs hurt you two ways — a swing when you're in their reach, and simply
+## touching them. Both land here, so the grace window keeps them from stacking.
+## `attacker` is accepted for symmetry with Enemy.take_damage (and to attribute
+## damage later); the player has no threat table to feed.
+func take_damage(amount: float, _attacker: Node2D = null) -> void:
+	if _invuln_left > 0.0 or current_hp <= 0.0:
+		return
+	current_hp -= amount
+	_invuln_left = INVULN_TIME
+	_blink_left = 0.0
+
+
+## Shove taken from a hit, mirroring Enemy.apply_knockback so both sides of a
+## fight read the same. Direction is a raw offset; a zero can't make a NaN.
+func apply_knockback(direction: Vector2, strength: float) -> void:
+	if strength <= 0.0:
+		return
+	var away := direction.normalized() if not direction.is_zero_approx() else Vector2.RIGHT
+	velocity = Vector2(away.x * strength, -HURT_LIFT)
+	_stun_left = HURT_STUN
+
+
+func is_invulnerable() -> bool:
+	return _invuln_left > 0.0
+
+
+func _tick_invulnerability(delta: float) -> void:
+	_stun_left = maxf(_stun_left - delta, 0.0)
+	if _invuln_left <= 0.0:
+		return
+	_invuln_left -= delta
+	if _invuln_left <= 0.0:
+		_visual.modulate.a = 1.0
+		return
+	_blink_left -= delta
+	if _blink_left <= 0.0:
+		_blink_left = BLINK_PERIOD
+		_visual.modulate.a = BLINK_ALPHA if _visual.modulate.a >= 1.0 else 1.0
+
+
+## Touching a mob hurts, with no threat required — a wave you can walk through
+## unharmed isn't a wave. The mob's own swing (enemies.md) is the other path.
+## One hurtbox on the player rather than one per mob keeps this at a single
+## Area2D no matter how many are alive.
+func _contact_damage() -> void:
+	if _invuln_left > 0.0:
+		return
+	for body: Node2D in _hurtbox.get_overlapping_bodies():
+		var enemy := body as Enemy
+		if enemy == null:
+			continue
+		take_damage(enemy.stats.damage, enemy)
+		apply_knockback(global_position - enemy.global_position, HURT_KNOCKBACK)
+		return
 
 
 ## The one verb behind LMB: use the active hotbar item. A swingable item (tool,
@@ -133,7 +213,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _move(delta: float) -> void:
-	velocity.x = Input.get_axis("move_left", "move_right") * Progression.get_stat("move_speed")
+	# While stunned, velocity.x is the knockback's — writing input over it would
+	# erase the shove on the very tick it lands.
+	if _stun_left <= 0.0:
+		velocity.x = Input.get_axis("move_left", "move_right") * Progression.get_stat("move_speed")
 	if is_on_floor():
 		_coyote = COYOTE_TIME
 	else:

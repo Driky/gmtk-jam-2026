@@ -5,6 +5,7 @@ extends GdUnitTestSuite
 
 const TerrainScript := preload("res://scripts/terrain/terrain.gd")
 const PlayerScript := preload("res://scripts/player/player.gd")
+const PlayerScene := preload("res://scenes/player.tscn")
 
 ## Playable, far from edges; NOWHERE is a rect that overlaps nothing relevant.
 const P := Vector2i(100, 100)
@@ -92,8 +93,11 @@ func test_mined_drop_id_places_back() -> void:
 # --- HP/mana stub (1.7) ------------------------------------------------------
 
 
+## Uses the scene, not a bare script: once in the tree the player reads its own
+## Visual and Hurtbox children, so a script-only instance isn't a real player.
+## The pure setter tests below stay script-only — they never enter the tree.
 func test_ready_seeds_full_hp_and_mana() -> void:
-	var player: CharacterBody2D = auto_free(PlayerScript.new())
+	var player: Player = auto_free(PlayerScene.instantiate())
 	add_child(player)
 	assert_float(player.current_hp).is_equal(Progression.get_stat("max_hp"))
 	assert_float(player.current_mana).is_equal(Progression.get_stat("max_mana"))
@@ -123,3 +127,83 @@ func test_current_mana_clamps() -> void:
 	assert_float(player.current_mana).is_equal(max_mana)
 	player.current_mana = -1.0
 	assert_float(player.current_mana).is_equal(0.0)
+
+# --- Taking damage (2.5) -----------------------------------------------------
+
+
+func _hurtable_player() -> Player:
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	return player
+
+
+func test_take_damage_reduces_hp() -> void:
+	var player := _hurtable_player()
+	var before := player.current_hp
+	player.take_damage(10.0)
+	assert_float(player.current_hp).is_equal(before - 10.0)
+
+
+## The grace window is what stops a mob's swing and its contact damage both
+## landing on the same frame — a mob would otherwise deal double.
+func test_second_hit_inside_the_grace_window_is_ignored() -> void:
+	var player := _hurtable_player()
+	var before := player.current_hp
+	player.take_damage(10.0)
+	player.take_damage(10.0)
+	assert_float(player.current_hp).is_equal(before - 10.0)
+	assert_bool(player.is_invulnerable()).is_true()
+
+
+func test_damage_lands_again_once_the_window_expires() -> void:
+	var player := _hurtable_player()
+	var before := player.current_hp
+	player.take_damage(10.0)
+	player._tick_invulnerability(Player.INVULN_TIME + 0.01)
+	assert_bool(player.is_invulnerable()).is_false()
+	player.take_damage(10.0)
+	assert_float(player.current_hp).is_equal(before - 20.0)
+
+
+## The blink has to end on a fully opaque player — leaving it dimmed would look
+## like a permanent status effect.
+func test_blink_restores_full_alpha_when_the_window_ends() -> void:
+	var player := _hurtable_player()
+	player.take_damage(10.0)
+	for i in 20:
+		player._tick_invulnerability(Player.BLINK_PERIOD)
+	assert_float(player.is_invulnerable() as float).is_equal(0.0)
+	assert_float((player.get_node("Visual") as ColorRect).modulate.a).is_equal(1.0)
+
+
+func test_knockback_shoves_away_and_stuns() -> void:
+	var player := _hurtable_player()
+	player.apply_knockback(Vector2(-3.0, 0.0), 140.0) # Raw offset, not normalized.
+	assert_float(player.velocity.x).is_equal_approx(-140.0, 0.001)
+	assert_float(player.velocity.y).is_equal(-Player.HURT_LIFT)
+
+
+## Zero direction (a mob exactly on top of the player) must not make a NaN
+## velocity, which would corrupt the body permanently.
+func test_knockback_survives_a_zero_direction() -> void:
+	var player := _hurtable_player()
+	player.apply_knockback(Vector2.ZERO, 140.0)
+	assert_bool(is_nan(player.velocity.x)).is_false()
+
+
+## Input must not overwrite the shove on the tick it lands, or a hit reads as
+## weightless.
+func test_stun_suppresses_input_driven_movement() -> void:
+	var player := _hurtable_player()
+	player.apply_knockback(Vector2.RIGHT, 140.0)
+	player._move(1.0 / 60.0)
+	assert_float(player.velocity.x).is_equal_approx(140.0, 0.001)
+
+
+func test_damage_is_ignored_once_dead() -> void:
+	var player := _hurtable_player()
+	player.take_damage(9999.0)
+	assert_float(player.current_hp).is_equal(0.0)
+	player._tick_invulnerability(Player.INVULN_TIME + 0.01)
+	player.take_damage(10.0)
+	assert_float(player.current_hp).is_equal(0.0)

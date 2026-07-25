@@ -66,6 +66,7 @@ var _stuck_anchor := Vector2.INF
 var _direct_left := 0.0
 var _knockback_left := 0.0
 var _flash_tween: Tween = null
+var _player: Node2D = null
 
 
 func _ready() -> void:
@@ -114,6 +115,8 @@ func _step(delta: float) -> void:
 func _push_core(pos: Vector2i, delta: float) -> void:
 	_direct_left = maxf(_direct_left - delta, 0.0)
 	var dir := _direct_dir(pos) if _direct_left > 0.0 else _intent_dir(pos)
+	if _swing_at_player():
+		return
 	var entity := _attackable_entity(pos, dir)
 	if entity != null:
 		velocity.x = 0.0
@@ -270,6 +273,28 @@ func _actuate(decision: Dictionary, pos: Vector2i, delta: float) -> void:
 			)
 		_:
 			velocity.x = 0.0
+
+
+## Attack of opportunity: a mob swings at the player who walks into its reach,
+## no threat required. Without this a player who never attacks is invisible to
+## the whole wave, since the player isn't in the terrain entity dict and threat
+## only ever comes from damage dealt. Returns true when it took the swing, so
+## the caller stops pushing the Core this frame.
+func _swing_at_player() -> bool:
+	var player := _find_player()
+	if player == null or global_position.distance_to(player.global_position) > ATTACK_RANGE_PX:
+		return false
+	velocity.x = 0.0
+	_try_attack(player)
+	return true
+
+
+func _find_player() -> Node2D:
+	if not is_inside_tree():
+		return null # Unit tests drive a bare Enemy with no tree to search.
+	if _player == null or not is_instance_valid(_player):
+		_player = get_tree().get_first_node_in_group(&"player") as Node2D
+	return _player
 
 
 ## An adjacent entity that can be hit (the Core today, deployables Day 3):

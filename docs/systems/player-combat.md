@@ -39,5 +39,10 @@ Hold-to-mine on the targeted tile (under mouse) within **reach 4.5 tiles** (play
   - ❗️**`monitorable` must stay true on any combat area.** Setting it false silently stops an `Area2D` detecting `StaticBody2D` at all — `body_entered` never fires and `get_overlapping_bodies()` comes back empty — while `CharacterBody2D` keeps working, which is what makes it so easy to miss. Terrain is static tile bodies, so a projectile with `monitorable = false` flies through the world. Cost an hour to find; don't re-litigate it.
   - Contact is resolved by **polling `get_overlapping_bodies()`**, not `body_entered`, in both the projectile and the swing arc: pooled/reused areas depend on no signal timing that way, and a body already overlapping at launch needs no special case.
 
+## Taking damage (locked, 2.5)
+A single `Hurtbox` Area2D on the **player** polls for overlapping mobs and deals `EnemyStats.damage` on contact — one area total however many mobs are alive, rather than one per mob. The mob's own swing is the other path ([enemies.md](enemies.md) attack of opportunity); both call `Player.take_damage`, so one gate covers both.
+
+**Grace window 0.6 s** after any hit: that gate is what stops contact and a swing double-dipping on the same frame, and it caps one walker (8 damage) at ~13 dps — about 7.5 s to kill a full-HP player. The body **blinks** for the window's duration (alpha 1.0 ↔ 0.3 every 0.08 s, not a hard hide — at 12×22 px a vanishing player reads as a glitch), and always ends fully opaque. A hit also shoves: 140 px/s away + 80 lift, with input suppressed for 0.15 s so the movement code can't overwrite `velocity.x` on the tick the hit lands.
+
 ## Death & respawn
 Carried inventory drops into a **loot bag** entity at the death position (persists, retrievable); respawn at the Core — or a crafted **beacon** override — after a short timer. Hotbar-equipped items kept (kindness tweak; confirm during tuning). Core destruction, not player death, is the game-over condition ([plan.md](../plan.md)).
