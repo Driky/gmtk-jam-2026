@@ -5,6 +5,8 @@ Owner of: player controller, mining interaction, inventory & pickups, placement,
 ## Controller & stats
 `CharacterBody2D`, standard platformer controller with coyote time + jump buffer (30 minutes that make the whole jam feel better). Stats read from `Progression.get_stat`: max HP, max mana, move speed.
 
+**HP/mana stub (1.7):** `current_hp` / `current_mana` on the player — clamped setters emitting `health_changed(current, max_value)` / `mana_changed(current, max_value)`, seeded from `Progression.get_stat` in `_ready`. Combat (Day 2) only mutates the fields; HUD binding is owned by [ui.md](ui.md).
+
 **Locked numbers (1.6 — feel defaults, tune freely):** move 110 px/s instant (no accel) · gravity 1200, max fall 700 px/s (< 1 tile/frame at 60 fps — no tunneling) · jump −370 (~3.6-tile apex: clears 3, not 4) · coyote 0.10 s · jump buffer 0.12 s · collision box 12×22 px (fits 1-wide tunnels).
 
 **Camera:** on the player scene; limits computed from `WorldConfig` (playable band × world height — never hardcoded pixels), position smoothing speed 8. Zoom cycling owned by [ui.md](ui.md).

@@ -11,8 +11,16 @@ Navigable via tab buttons and cycling keys; each tab ALSO has a direct shortcut 
 ## World camera zoom (locked)
 `Z` cycles the world camera zoom **1× → 1.5× → 2×** (default **1×**). Affects only the game world; HUD/UI stays native 720p ([tech-design.md](../tech-design.md) display constraint). Implemented on the player camera ([player-combat.md](player-combat.md), Day 1 step 1.6).
 
+## HUD (1.7, locked)
+`scenes/ui/hud.tscn` (CanvasLayer + `scripts/ui/hud.gd`), instanced in main.tscn, hidden until `main.gd::_finish_generation()` shows it and hands over the player via `bind_player` (same ownership moment as the LoadingUI toggle). Native 720p, stock Controls, no theme resource. Testability: the HUD takes its `Inventory` via a settable property defaulting to `Items.player_inventory`; formatting and icon lookup are static funcs.
+- **Bars (top-left):** HP red, mana blue ProgressBars with a centered "current / max" label, driven by the player's `health_changed` / `mana_changed` signals ([player-combat.md](player-combat.md) HP/mana stub).
+- **Hotbar (bottom-center):** 10 slots (Inventory 0–9), key labels 1–9 then 0, item icon + count, selected slot highlighted via `selected_changed`. Icons: the fully-surrounded autotile frame (`TileLayout.LAYOUT[15][0]`) cut as an AtlasTexture from `terrain_tileset.tres` (atlas source id = `Materials.ORDER` index); ids without tile art fall back to a 16×16 `base_color` swatch (gray when unknown).
+- **Elevation (top-right):** `Elevation: <row> — <biome name>` — row is the **raw tile row** (`floori(global_position.y / 16)`, not depth-below-surface), biome from `Biomes.BANDS`; label repaints only on row change. Also feeds the game-over stats screen (2.1).
+
+Later HUD residents (owned by their systems): countdown / wave banner, XP bar + level, Core HP.
+
 ## Other screens
-HUD (countdown / wave banner, HP/mana bars, XP bar + level, hotbar, Core HP) · pause menu · placement mode overlay · **power overlay** on its own hotkey, togglable anytime ([automation.md](automation.md)) · debug overlay (slot occupancy, fortification score) · death & game-over screens · main menu with seed input (stretch: seedless "New Run" only). Keyboard + mouse only. Toasts for rejected placements (buffer zone, light cap — [terrain.md](terrain.md)).
+Pause menu · placement mode overlay · **power overlay** on its own hotkey, togglable anytime ([automation.md](automation.md)) · debug overlay (slot occupancy, fortification score) · death & game-over screens · main menu with seed input (stretch: seedless "New Run" only). Keyboard + mouse only. Toasts for rejected placements (buffer zone, light cap — [terrain.md](terrain.md)).
 
 ## Pause (locked)
 `SceneTree.paused` + `process_mode`: gameplay pauses; the pause menu stays **fully interactive** (resume, settings, save during build phase, quit). Forbidden while paused: *gameplay* actions — placing/removing deployables, inventory/crafting manipulation, skill-tree spending. Enforcement: opening pause closes gameplay screens; gameplay input handlers live under paused `process_mode`.

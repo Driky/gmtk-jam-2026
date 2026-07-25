@@ -11,6 +11,7 @@ var _gen: WorldGen
 
 @onready var _loading_ui: CanvasLayer = %LoadingUI
 @onready var _loading_bar: ProgressBar = %LoadingBar
+@onready var _hud: CanvasLayer = %HUD
 @onready var _camera: Camera2D = $Camera2D
 
 
@@ -37,5 +38,7 @@ func _finish_generation() -> void:
 	# Feet on the surface tile top (center is 11 px up), 1 px slack against overlap.
 	player.position = Vector2((cx + 0.5) * TILE, surface_row * TILE - 12)
 	add_child(player)
+	_hud.bind_player(player)
+	_hud.visible = true
 	Game.set_state(Game.State.BUILD_PHASE)
 	_gen = null

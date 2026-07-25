@@ -1,5 +1,6 @@
-## Unit tests for placement validity + tile-rect math (roadmap 1.6).
-## Terrain is a fresh instance per test — never the live autoload.
+## Unit tests for placement validity + tile-rect math (roadmap 1.6) and the
+## HP/mana stub (roadmap 1.7). Terrain is a fresh instance per test — never
+## the live autoload.
 extends GdUnitTestSuite
 
 const TerrainScript := preload("res://scripts/terrain/terrain.gd")
@@ -87,3 +88,38 @@ func test_mined_drop_id_places_back() -> void:
 	_terrain.set_tile(P, drops[0])
 	assert_bool(_terrain.is_solid(P)).is_true()
 	assert_str(_terrain.get_material_id(P)).is_equal("dirt")
+
+# --- HP/mana stub (1.7) ------------------------------------------------------
+
+
+func test_ready_seeds_full_hp_and_mana() -> void:
+	var player: CharacterBody2D = auto_free(PlayerScript.new())
+	add_child(player)
+	assert_float(player.current_hp).is_equal(Progression.get_stat("max_hp"))
+	assert_float(player.current_mana).is_equal(Progression.get_stat("max_mana"))
+
+
+func test_current_hp_clamps_and_signals() -> void:
+	var player: CharacterBody2D = auto_free(PlayerScript.new())
+	var max_hp := Progression.get_stat("max_hp")
+	var events: Array = []
+	player.health_changed.connect(
+		func(current: float, max_value: float) -> void:
+			events.append([current, max_value]),
+	)
+	player.current_hp = 30.0
+	player.current_hp = -10.0 # Clamped to 0.
+	player.current_hp = max_hp + 999.0 # Clamped to max.
+	assert_float(player.current_hp).is_equal(max_hp)
+	assert_array(events).contains_exactly(
+		[[30.0, max_hp], [0.0, max_hp], [max_hp, max_hp]],
+	)
+
+
+func test_current_mana_clamps() -> void:
+	var player: CharacterBody2D = auto_free(PlayerScript.new())
+	var max_mana := Progression.get_stat("max_mana")
+	player.current_mana = max_mana + 5.0
+	assert_float(player.current_mana).is_equal(max_mana)
+	player.current_mana = -1.0
+	assert_float(player.current_mana).is_equal(0.0)

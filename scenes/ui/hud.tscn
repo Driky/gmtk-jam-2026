@@ -1,0 +1,82 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_hud"]
+
+[sub_resource type="StyleBoxFlat" id="hp_fill"]
+bg_color = Color(0.8, 0.2, 0.2, 1)
+
+[sub_resource type="StyleBoxFlat" id="mana_fill"]
+bg_color = Color(0.25, 0.45, 0.9, 1)
+
+[node name="HUD" type="CanvasLayer"]
+visible = false
+script = ExtResource("1_hud")
+
+[node name="Bars" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 188.0
+offset_bottom = 44.0
+theme_override_constants/separation = 4
+
+[node name="HPBar" type="ProgressBar" parent="Bars"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 16)
+layout_mode = 2
+max_value = 100.0
+value = 100.0
+show_percentage = false
+theme_override_styles/fill = SubResource("hp_fill")
+
+[node name="HPLabel" type="Label" parent="Bars/HPBar"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 12
+
+[node name="ManaBar" type="ProgressBar" parent="Bars"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 16)
+layout_mode = 2
+max_value = 50.0
+value = 50.0
+show_percentage = false
+theme_override_styles/fill = SubResource("mana_fill")
+
+[node name="ManaLabel" type="Label" parent="Bars/ManaBar"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 12
+
+[node name="ElevationLabel" type="Label" parent="."]
+unique_name_in_owner = true
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -308.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 31.0
+grow_horizontal = 0
+horizontal_alignment = 2
+
+[node name="Hotbar" type="HBoxContainer" parent="."]
+unique_name_in_owner = true
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_top = -52.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 4
+alignment = 1

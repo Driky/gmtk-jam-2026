@@ -42,7 +42,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Camera follow (clamped to playable width + depth).
 
 ### 1.7 Basic HUD ([ui.md](systems/ui.md))
-- [ ] HP/mana bars (static values ok), hotbar display, depth readout.
+- [x] HP/mana bars (static values ok), hotbar display, depth readout.
 
 **Exit criteria:** in a browser, dig down through ≥2 biomes, collect drops, place blocks, buffers reject player actions.
 

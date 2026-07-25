@@ -3,6 +3,9 @@
 class_name Player
 extends CharacterBody2D
 
+signal health_changed(current: float, max_value: float)
+signal mana_changed(current: float, max_value: float)
+
 const TILE := TileLayout.TILE_SIZE
 
 const GRAVITY := 1200.0
@@ -17,8 +20,25 @@ const COLLISION_EXTENTS := Vector2(6.0, 11.0) ## 12×22 box, fits 1-wide tunnels
 var tool_tier := 1
 var tool_power := 4.0 ## Hardness per second of held mining.
 
+## Combat seam (2.5): damage/spells only mutate these — clamp + HUD notify are
+## in the setters. Maxima live in Progression, not here.
+var current_hp := 0.0:
+	set(value):
+		current_hp = clampf(value, 0.0, Progression.get_stat("max_hp"))
+		health_changed.emit(current_hp, Progression.get_stat("max_hp"))
+
+var current_mana := 0.0:
+	set(value):
+		current_mana = clampf(value, 0.0, Progression.get_stat("max_mana"))
+		mana_changed.emit(current_mana, Progression.get_stat("max_mana"))
+
 var _coyote := 0.0
 var _jump_buffer := 0.0
+
+
+func _ready() -> void:
+	current_hp = Progression.get_stat("max_hp")
+	current_mana = Progression.get_stat("max_mana")
 
 
 func _physics_process(delta: float) -> void:
