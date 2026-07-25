@@ -1,6 +1,8 @@
-## HUD: HP/mana bars, hotbar display, elevation readout. Bars and hotbar are
-## purely signal-driven; only the elevation label polls, and only repaints on
-## row change. Owning doc: docs/systems/ui.md
+## HUD: HP/mana bars, hotbar display, elevation readout, countdown/wave
+## phase label, Core HP bar. Bars, hotbar, and phase widgets are purely
+## signal-driven; only the elevation label polls, and only repaints on row
+## change. The countdown presentation (big timer, last-10s red pulse, wave
+## announce) is a never-cut item — docs/plan.md. Owning doc: docs/systems/ui.md
 extends CanvasLayer
 
 const _TILESET: TileSet = preload("res://assets/generated/terrain_tileset.tres")
@@ -12,13 +14,22 @@ const NORMAL_BG := Color(0, 0, 0, 0.45)
 const SELECTED_BG := Color(0.95, 0.85, 0.3, 0.55)
 const FALLBACK_COLOR := Color(0.6, 0.6, 0.6)
 
+const FINAL_COLOR := Color(1.0, 0.35, 0.3)
+const PULSE_ALPHA := 0.18
+const PULSE_FADE := 0.5
+const BANNER_HOLD := 1.5
+const BANNER_FADE := 0.5
+
 static var _icon_cache: Dictionary = { }
 
 ## Injected by tests before add_child; falls back to the live autoload.
 var inventory: Inventory = null
+## Injected by tests before add_child; falls back to the live autoload.
+var game: Node = null
 
 var _player: Player = null
 var _last_row := -(1 << 30)
+var _banner_tween: Tween = null
 
 var _slot_bgs: Array[ColorRect] = []
 var _slot_icons: Array[TextureRect] = []
@@ -30,11 +41,17 @@ var _slot_counts: Array[Label] = []
 @onready var _mana_label: Label = %ManaLabel
 @onready var _elevation_label: Label = %ElevationLabel
 @onready var _hotbar: HBoxContainer = %Hotbar
+@onready var _phase_label: Label = %PhaseLabel
+@onready var _core_bar: ProgressBar = %CoreBar
+@onready var _wave_banner: Label = %WaveBanner
+@onready var _pulse_overlay: ColorRect = %PulseOverlay
 
 
 func _ready() -> void:
 	if inventory == null:
 		inventory = Items.player_inventory
+	if game == null:
+		game = Game
 	for i in Inventory.HOTBAR_SIZE:
 		_make_slot(i)
 	inventory.slot_changed.connect(_on_slot_changed)
@@ -42,6 +59,9 @@ func _ready() -> void:
 	for i in Inventory.HOTBAR_SIZE:
 		_refresh_slot(i)
 	_on_selected_changed(inventory.selected_slot)
+	game.countdown_tick.connect(_on_countdown_tick)
+	game.wave_started.connect(_on_wave_started)
+	game.wave_cleared.connect(_on_wave_cleared)
 
 
 func _process(_delta: float) -> void:
@@ -62,6 +82,12 @@ func bind_player(player: Player) -> void:
 	player.mana_changed.connect(_on_mana_changed)
 	_on_health_changed(player.current_hp, Progression.get_stat("max_hp"))
 	_on_mana_changed(player.current_mana, Progression.get_stat("max_mana"))
+
+
+## Called by main.gd once the Core exists; seeds the bar like bind_player.
+func bind_core(core: Node) -> void:
+	core.health_changed.connect(_on_core_health_changed)
+	_on_core_health_changed(core.current_hp, core.MAX_HP)
 
 
 ## Icon = fully-surrounded autotile frame (mask 15, variant 0) of the id's
@@ -99,6 +125,10 @@ static func elevation_text(global_y: float) -> String:
 	return "Elevation: %d — %s" % [row, biome_name(row)]
 
 
+static func format_time(seconds_left: int) -> String:
+	return "%d:%02d" % [floori(seconds_left / 60.0), seconds_left % 60]
+
+
 func _on_health_changed(current: float, max_value: float) -> void:
 	_hp_bar.max_value = max_value
 	_hp_bar.value = current
@@ -109,6 +139,53 @@ func _on_mana_changed(current: float, max_value: float) -> void:
 	_mana_bar.max_value = max_value
 	_mana_bar.value = current
 	_mana_label.text = "%d / %d" % [roundi(current), roundi(max_value)]
+
+
+func _on_core_health_changed(current: float, max_value: float) -> void:
+	_core_bar.max_value = max_value
+	_core_bar.value = current
+
+
+func _on_countdown_tick(seconds_left: int) -> void:
+	_phase_label.text = format_time(seconds_left)
+	var final_window: bool = seconds_left <= game.FINAL_WINDOW
+	_phase_label.modulate = FINAL_COLOR if final_window else Color.WHITE
+	if final_window and seconds_left > 0:
+		_pulse()
+
+
+func _on_wave_started(wave_number: int) -> void:
+	_phase_label.text = "Wave %d" % wave_number
+	_phase_label.modulate = Color.WHITE
+	_phase_label.scale = Vector2.ONE
+	_announce("Wave %d" % wave_number)
+
+
+func _on_wave_cleared(wave_number: int) -> void:
+	_announce("Wave %d cleared!" % wave_number)
+
+
+## Screen pulse + label pop for the last-10s countdown (Compatibility-safe:
+## plain alpha/scale tweens, no shaders).
+func _pulse() -> void:
+	_pulse_overlay.color.a = PULSE_ALPHA
+	_phase_label.pivot_offset = _phase_label.size / 2.0
+	_phase_label.scale = Vector2(1.2, 1.2)
+	var tween := create_tween()
+	tween.tween_property(_pulse_overlay, "color:a", 0.0, PULSE_FADE)
+	tween.parallel().tween_property(_phase_label, "scale", Vector2.ONE, PULSE_FADE)
+
+
+func _announce(message: String) -> void:
+	if _banner_tween != null and _banner_tween.is_valid():
+		_banner_tween.kill()
+	_wave_banner.text = message
+	_wave_banner.visible = true
+	_wave_banner.modulate.a = 1.0
+	_banner_tween = create_tween()
+	_banner_tween.tween_interval(BANNER_HOLD)
+	_banner_tween.tween_property(_wave_banner, "modulate:a", 0.0, BANNER_FADE)
+	_banner_tween.tween_callback(func() -> void: _wave_banner.visible = false)
 
 
 func _on_slot_changed(index: int) -> void:

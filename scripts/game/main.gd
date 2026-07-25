@@ -51,6 +51,7 @@ func _finish_generation() -> void:
 	player.position = Vector2((cx + PLAYER_SPAWN_OFFSET_X + 0.5) * TILE, surface_row * TILE - 12)
 	add_child(player)
 	_hud.bind_player(player)
+	_hud.bind_core(core)
 	_hud.visible = true
 	Game.start_build_phase()
 	_gen = null

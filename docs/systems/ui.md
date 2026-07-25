@@ -16,8 +16,11 @@ Navigable via tab buttons and cycling keys; each tab ALSO has a direct shortcut 
 - **Bars (top-left):** HP red, mana blue ProgressBars with a centered "current / max" label, driven by the player's `health_changed` / `mana_changed` signals ([player-combat.md](player-combat.md) HP/mana stub).
 - **Hotbar (bottom-center):** 10 slots (Inventory 0–9), key labels 1–9 then 0, item icon + count, selected slot highlighted via `selected_changed`. Icons: the fully-surrounded autotile frame (`TileLayout.LAYOUT[15][0]`) cut as an AtlasTexture from `terrain_tileset.tres` (atlas source id = `Materials.ORDER` index); ids without tile art fall back to a 16×16 `base_color` swatch (gray when unknown).
 - **Elevation (top-right):** `Elevation: <row> — <biome name>` — row is the **raw tile row** (`floori(global_position.y / 16)`, not depth-below-surface), biome from `Biomes.BANDS`; label repaints only on row change. Also feeds the game-over stats screen (2.1).
+- **Phase label (top-center, 2.1):** big countdown `M:SS` during BUILD_PHASE (from `Game.countdown_tick`), `Wave n` during WAVE_PHASE. Last-`FINAL_WINDOW` seconds: label turns red + scale-pops and a full-screen `PulseOverlay` ColorRect flashes (alpha tween, no shaders — Compatibility-safe). Countdown *presentation* behavior is owned by [plan.md](../plan.md); this section owns the widgets.
+- **Wave banner (centered, 2.1):** announce on `wave_started` / `wave_cleared`, hold-then-fade tween.
+- **Core HP (under phase label, 2.1):** slim bar, seeded/driven via `bind_core(core)` (mirrors `bind_player`). HUD takes its `Game` via a settable `game` property defaulting to the autoload (test seam).
 
-Later HUD residents (owned by their systems): countdown / wave banner, XP bar + level, Core HP.
+Later HUD residents (owned by their systems): XP bar + level (2.6).
 
 ## Other screens
 Pause menu · placement mode overlay · **power overlay** on its own hotkey, togglable anytime ([automation.md](automation.md)) · debug overlay (slot occupancy, fortification score) · death & game-over screens · main menu with seed input (stretch: seedless "New Run" only). Keyboard + mouse only. Toasts for rejected placements (buffer zone, light cap — [terrain.md](terrain.md)).
