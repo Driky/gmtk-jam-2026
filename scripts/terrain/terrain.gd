@@ -12,6 +12,10 @@ signal tile_changed(pos: Vector2i)
 signal drops_spawned(pos: Vector2i, drop_id: String, drop_count: int, source: int)
 ## Mining feedback (ratio = accumulated damage / hardness).
 signal tile_damaged(pos: Vector2i, ratio: float)
+## The cell was destroyed outright (normal break or deposit exhaustion —
+## deposit chips don't emit). The blocks-mined run stat (2.1) hooks here.
+## Fires after the cell is already air.
+signal tile_broken(pos: Vector2i, material_id: String, source: int)
 
 enum Source { PLAYER, MONSTER, MACHINE }
 
@@ -156,6 +160,7 @@ func damage_tile(pos: Vector2i, amount: float, tool_tier: int, source: Source) -
 	assert(state.entity == null)
 	_state.erase(pos)
 	set_tile(pos, "")
+	tile_broken.emit(pos, Materials.ORDER[sid], source)
 	return true
 
 # --- Writes ------------------------------------------------------------------

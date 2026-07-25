@@ -10,6 +10,7 @@ const P := Vector2i(100, 100)
 var _terrain: Node
 var _drops: Array = []
 var _changed: Array = []
+var _broken: Array = []
 
 
 func before_test() -> void:
@@ -17,6 +18,7 @@ func before_test() -> void:
 	add_child(_terrain)
 	_drops = []
 	_changed = []
+	_broken = []
 	_terrain.drops_spawned.connect(
 		func(pos: Vector2i, drop_id: String, drop_count: int, source: int) -> void:
 			_drops.append([pos, drop_id, drop_count, source]),
@@ -24,6 +26,10 @@ func before_test() -> void:
 	_terrain.tile_changed.connect(
 		func(pos: Vector2i) -> void:
 			_changed.append(pos),
+	)
+	_terrain.tile_broken.connect(
+		func(pos: Vector2i, material_id: String, source: int) -> void:
+			_broken.append([pos, material_id, source]),
 	)
 
 
@@ -114,6 +120,7 @@ func test_destroy_drops_and_prunes() -> void:
 	assert_str(_terrain.get_material_id(P)).is_equal("")
 	assert_array(_drops).contains_exactly([[P, "dirt", 1, TerrainScript.Source.PLAYER]])
 	assert_array(_changed).contains([P])
+	assert_array(_broken).contains_exactly([[P, "dirt", TerrainScript.Source.PLAYER]])
 	assert_bool(_terrain._state.is_empty()).is_true() # sparse invariant
 	_terrain.debug_validate()
 
@@ -160,6 +167,7 @@ func test_deposit_chip_yields_and_depletes() -> void:
 	assert_str(_terrain.get_material_id(P)).is_equal("coal_deposit")
 	assert_int(_terrain.get_tile_data(P).reserve).is_equal(45)
 	assert_array(_drops).contains_exactly([[P, "coal", 1, TerrainScript.Source.PLAYER]])
+	assert_array(_broken).is_empty() # chips are not breaks
 
 
 func test_deposit_exhaustion_becomes_air_no_bonus_drop() -> void:
@@ -168,6 +176,8 @@ func test_deposit_exhaustion_becomes_air_no_bonus_drop() -> void:
 		_terrain.damage_tile(P, 2.0, 1, TerrainScript.Source.PLAYER)
 	assert_str(_terrain.get_material_id(P)).is_equal("")
 	assert_array(_drops).has_size(10)
+	# Exhaustion destroys the cell → exactly one break for the whole deposit.
+	assert_array(_broken).contains_exactly([[P, "coal_deposit", TerrainScript.Source.PLAYER]])
 	assert_bool(_terrain._state.is_empty()).is_true()
 
 # --- Abandon timeout ---------------------------------------------------------
