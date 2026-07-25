@@ -51,10 +51,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 ## Day 2 — Fight loop
 
 ### 2.1 Core & state machine ([plan.md](plan.md))
-- [ ] Core scene: pre-placed on the flat spawn area, big HP pool, game-over on death.
-- [ ] `Game` state machine: `BOOT → MENU → GENERATING → BUILD_PHASE ⇄ WAVE_PHASE → GAME_OVER`.
-- [ ] Countdown presentation 🔴: prominent HUD timer, last-10 s audio sting + screen pulse, wave-n announce.
-- [ ] Wave-end settle: loot/XP → grace beat → countdown reset. Game-over stats screen (waves, depth, blocks mined).
+- [x] Core scene: pre-placed on the flat spawn area, big HP pool, game-over on death.
+- [x] `Game` state machine: `BOOT → MENU → GENERATING → BUILD_PHASE ⇄ WAVE_PHASE → GAME_OVER`.
+- [x] Countdown presentation 🔴: prominent HUD timer, last-10 s audio sting + screen pulse, wave-n announce.
+- [x] Wave-end settle: loot/XP → grace beat → countdown reset. Game-over stats screen (waves, depth, blocks mined).
 
 ### 2.2 Flow-field pathfinding ([enemies.md](systems/enemies.md)) 🔴
 - [ ] Ground field: Dijkstra from Core, gravity-aware directional costs, dig-weighted solids, deployable HP costs.

@@ -16,10 +16,13 @@ var _gen: WorldGen
 @onready var _loading_ui: CanvasLayer = %LoadingUI
 @onready var _loading_bar: ProgressBar = %LoadingBar
 @onready var _hud: CanvasLayer = %HUD
+@onready var _game_over_ui: CanvasLayer = %GameOverUI
 @onready var _camera: Camera2D = $Camera2D
 
 
 func _ready() -> void:
+	Game.state_changed.connect(_on_state_changed)
+	_game_over_ui.restart_requested.connect(_restart)
 	Game.world_seed = FORCED_SEED if FORCED_SEED != 0 else randi()
 	# MENU is an instant pass-through until the real main menu lands (4.5).
 	Game.set_state(Game.State.MENU)
@@ -55,3 +58,19 @@ func _finish_generation() -> void:
 	_hud.visible = true
 	Game.start_build_phase()
 	_gen = null
+
+
+func _on_state_changed(state: Game.State) -> void:
+	if state != Game.State.GAME_OVER:
+		return
+	# Freeze gameplay under the stats screen (GameOverUI runs ALWAYS).
+	get_tree().paused = true
+	_game_over_ui.open(Game.get_run_stats())
+
+
+func _restart() -> void:
+	get_tree().paused = false # A reload does NOT unpause — clear it first.
+	Terrain.reset_run()
+	Items.reset_run()
+	Game.reset_run()
+	get_tree().reload_current_scene() # Fresh seed via _ready's randi().

@@ -8,7 +8,7 @@ BOOT → MENU → GENERATING → BUILD_PHASE ⇄ WAVE_PHASE → GAME_OVER
 ```
 - **BUILD_PHASE:** fixed countdown (e.g. 4:00) prominent in HUD; last 10 s = audio sting + screen pulse. Automation runs. Timer 0 → announce wave n.
 - **WAVE_PHASE:** no timer; HUD shows "Wave n — X remaining". Automation keeps running (factories work during combat — that's the fantasy). All spawned dead → loot/XP settle → grace beat → BUILD_PHASE, countdown reset.
-- **GAME_OVER:** Core HP ≤ 0. Stats: waves survived, depth reached, blocks mined.
+- **GAME_OVER:** Core HP ≤ 0. Stats: waves survived, depth reached, blocks mined. Tree pauses under the stats screen; restart = `reset_run()` on every stateful autoload (`Game`, `Terrain`, `Items`, + any future ones — standing convention), then scene reload with a fresh seed.
 
 Endless, score = waves survived; optional final boss is a stretch. Fixed countdown for the jam — the state machine makes scaling/player-influenced timers a data tweak later. Pause behavior owned by [systems/ui.md](systems/ui.md).
 

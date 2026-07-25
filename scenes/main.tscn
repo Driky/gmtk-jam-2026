@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://ky78m7otb228"]
+[gd_scene load_steps=5 format=3 uid="uid://ky78m7otb228"]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/items/pickup_spawner.gd" id="2_pickups"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="3_hud"]
+[ext_resource type="PackedScene" path="res://scenes/ui/game_over.tscn" id="4_game_over"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -54,4 +55,7 @@ max_value = 1.0
 step = 0.001
 
 [node name="HUD" parent="." instance=ExtResource("3_hud")]
+unique_name_in_owner = true
+
+[node name="GameOverUI" parent="." instance=ExtResource("4_game_over")]
 unique_name_in_owner = true

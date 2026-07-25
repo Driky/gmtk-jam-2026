@@ -238,6 +238,15 @@ func apply_autotile_region(rect: Rect2i) -> void:
 		for x in range(rect.position.x, rect.end.x):
 			_apply_mask(Vector2i(x, y))
 
+
+## Wipe all run state ahead of a scene reload (restart flow, 2.1). Every
+## autoload holding run state exposes reset_run() — tech-design.md.
+func reset_run() -> void:
+	_layer.clear()
+	_state.clear()
+	_damaged.clear()
+	_sweep_accum = 0.0
+
 # --- Debug -------------------------------------------------------------------
 
 
