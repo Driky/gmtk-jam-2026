@@ -13,15 +13,20 @@ const COLLECT_RADIUS := 12.0
 
 var item_id := ""
 var count := 1
+## False for the drop of a player-placed block — collecting it pays no loot XP
+## (progression.md). Carried from Terrain.drops_spawned, since the tile's own
+## state is erased right after the drop is emitted.
+var grants_xp := true
 
 var _velocity := Vector2.ZERO
 var _player: Node2D
 
 
 ## Call before add_child; tint happens in _ready.
-func setup(id: String, item_count: int) -> void:
+func setup(id: String, item_count: int, xp_eligible := true) -> void:
 	item_id = id
 	count = item_count
+	grants_xp = xp_eligible
 	_velocity = Vector2(randf_range(-40.0, 40.0), randf_range(-120.0, -60.0))
 
 

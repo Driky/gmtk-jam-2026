@@ -11,8 +11,17 @@ signal tile_changed(pos: Vector2i)
 ## debounce (2.2) treats this like tile_changed.
 signal entity_changed(pos: Vector2i)
 ## A break/chip produced drops — the pickup spawner (1.6) hooks here and owns
-## drop policy (source is in the payload).
-signal drops_spawned(pos: Vector2i, drop_id: String, drop_count: int, source: int)
+## drop policy (source is in the payload). `grants_xp` is false for the drop of
+## a player-placed block, which pays no XP on any channel (progression.md)
+## it rides the payload rather than being looked up later because the tile's
+## state is erased moments after this fires.
+signal drops_spawned(
+		pos: Vector2i,
+		drop_id: String,
+		drop_count: int,
+		source: int,
+		grants_xp: bool,
+)
 ## Mining feedback (ratio = accumulated damage / hardness).
 signal tile_damaged(pos: Vector2i, ratio: float)
 ## The cell was destroyed outright (normal break or deposit exhaustion —
@@ -48,10 +57,16 @@ class TileState:
 	var last_hit_ms := 0
 	var reserve := -1
 	var entity: Node = null
+	## Placed by the player rather than generated. Earns no XP when re-broken
+	## (progression.md) — otherwise walling and re-mining one block is the
+	## cheapest XP in the game. Part of the terrain diff the save writes (save.md).
+	var player_placed := false
 
 
+	## Counted in the sparse-dict invariant: a placed tile that is otherwise
+	## pristine must still keep its entry, or _prune drops the flag.
 	func is_default() -> bool:
-		return damage == 0.0 and reserve == -1 and entity == null
+		return damage == 0.0 and reserve == -1 and entity == null and not player_placed
 
 
 var _layer: TileMapLayer
@@ -118,6 +133,7 @@ func get_tile_data(pos: Vector2i) -> Dictionary:
 		damage = state.damage if state != null else 0.0,
 		reserve = _resolve_reserve(state, mat),
 		entity = state.entity if state != null else null,
+		player_placed = state.player_placed if state != null else false,
 	}
 
 
@@ -174,11 +190,11 @@ func damage_tile(pos: Vector2i, amount: float, tool_tier: int, source: Source) -
 		if state.reserve == -1:
 			state.reserve = mat.base_reserve
 		state.reserve -= DEPOSIT_CHIP_RESERVE_COST
-		_award(pos, mat, source)
+		_award(pos, mat, source, state.player_placed)
 		if state.reserve > 0:
 			return true
 	else:
-		_award(pos, mat, source)
+		_award(pos, mat, source, state.player_placed)
 	# Destroyed (normal break, or deposit chipped to exhaustion — no 2nd drop).
 	assert(state.entity == null)
 	_state.erase(pos)
@@ -191,7 +207,9 @@ func damage_tile(pos: Vector2i, amount: float, tool_tier: int, source: Source) -
 
 ## Set a cell to a material id ("" = air), re-autotile it + its 4 neighbors,
 ## emit tile_changed. Resets any mining damage/reserve on the cell.
-func set_tile(pos: Vector2i, material_id: String) -> void:
+## `player_placed` marks the result as hand-placed (progression.md: no XP when
+## re-broken); it defaults false so world gen and the break path are untouched.
+func set_tile(pos: Vector2i, material_id: String, player_placed := false) -> void:
 	if not WorldConfig.is_in_world(pos):
 		return
 	var state: TileState = _state.get(pos)
@@ -200,8 +218,12 @@ func set_tile(pos: Vector2i, material_id: String) -> void:
 		assert(material_id == "" or state.entity == null)
 		state.damage = 0.0
 		state.reserve = -1
+		# Whatever was here is gone; the new occupant declares its own origin.
+		state.player_placed = false
 		_damaged.erase(pos)
 		_prune(pos, state)
+	if player_placed:
+		_state_for(pos).player_placed = true
 	if material_id == "":
 		_erase_cell(pos)
 	else:
@@ -327,13 +349,16 @@ func _resolve_reserve(state: TileState, mat: Dictionary) -> int:
 	return state.reserve
 
 
-## Drops + XP for one successful break/chip.
-func _award(pos: Vector2i, mat: Dictionary, source: int) -> void:
+## Drops + XP for one successful break/chip. A block the player placed pays
+## nothing on either channel (progression.md), so the drop carries that veto
+## onward to the loot grant.
+func _award(pos: Vector2i, mat: Dictionary, source: int, player_placed: bool) -> void:
 	if mat.drop_id != "":
-		drops_spawned.emit(pos, mat.drop_id, mat.drop_count, source)
-	# XP seam — self-wires when Progression.grant_xp lands (roadmap 2.6).
-	if source == Source.PLAYER and Progression.has_method(&"grant_xp"):
-		Progression.call(&"grant_xp", "mining", mat.hardness)
+		drops_spawned.emit(pos, mat.drop_id, mat.drop_count, source, not player_placed)
+	# Flat per block, NOT per hardness: depth is rewarded through what a block
+	# drops, so a slow tool can't out-earn a fast one (progression.md).
+	if source == Source.PLAYER and not player_placed:
+		Progression.grant_xp("mining", Progression.MINING_XP_PER_BLOCK)
 
 
 ## Clear mining damage on cells not hit within ABANDON_TIMEOUT_MS. The clock

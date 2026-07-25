@@ -328,7 +328,9 @@ func _place() -> void:
 		return
 	var id: String = item.id
 	if Items.player_inventory.consume_selected(1):
-		Terrain.set_tile(target, id)
+		# Flagged as hand-placed: re-mining your own wall earns no XP on either
+		# channel (progression.md).
+		Terrain.set_tile(target, id, true)
 
 # --- Equipment ---------------------------------------------------------------
 

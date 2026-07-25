@@ -77,7 +77,7 @@ func test_tile_rect_flush_edge_claims_single_column() -> void:
 func test_mined_drop_id_places_back() -> void:
 	var drops: Array = []
 	_terrain.drops_spawned.connect(
-		func(_pos: Vector2i, drop_id: String, _count: int, _source: int) -> void:
+		func(_pos: Vector2i, drop_id: String, _count: int, _source: int, _xp: bool) -> void:
 			drops.append(drop_id),
 	)
 	_terrain.set_tile(P, "grass")

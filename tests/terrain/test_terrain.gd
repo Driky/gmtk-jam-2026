@@ -26,8 +26,8 @@ func before_test() -> void:
 			_entity_changed.append(pos),
 	)
 	_terrain.drops_spawned.connect(
-		func(pos: Vector2i, drop_id: String, drop_count: int, source: int) -> void:
-			_drops.append([pos, drop_id, drop_count, source]),
+		func(pos: Vector2i, drop_id: String, drop_count: int, source: int, grants_xp: bool) -> void:
+			_drops.append([pos, drop_id, drop_count, source, grants_xp]),
 	)
 	_terrain.tile_changed.connect(
 		func(pos: Vector2i) -> void:
@@ -124,7 +124,7 @@ func test_destroy_drops_and_prunes() -> void:
 	_terrain.damage_tile(P, 0.4, 1, TerrainScript.Source.PLAYER)
 	_terrain.damage_tile(P, 0.6, 1, TerrainScript.Source.PLAYER)
 	assert_str(_terrain.get_material_id(P)).is_equal("")
-	assert_array(_drops).contains_exactly([[P, "dirt", 1, TerrainScript.Source.PLAYER]])
+	assert_array(_drops).contains_exactly([[P, "dirt", 1, TerrainScript.Source.PLAYER, true]])
 	assert_array(_changed).contains([P])
 	assert_array(_broken).contains_exactly([[P, "dirt", TerrainScript.Source.PLAYER]])
 	assert_bool(_terrain._state.is_empty()).is_true() # sparse invariant
@@ -164,6 +164,76 @@ func test_playable_boundaries_editable_by_player() -> void:
 	assert_bool(_terrain.can_player_edit(Vector2i(49, 100))).is_false()
 	assert_bool(_terrain.can_player_edit(Vector2i(150, 100))).is_false()
 
+# --- Player-placed blocks & mining XP (2.6) ----------------------------------
+
+
+## Lifetime mining XP on the live autoload. Asserted as a DELTA rather than an
+## absolute: Terrain grants through the real Progression singleton, so other
+## suites in the same run have already moved the number.
+func _mining_xp() -> float:
+	return Progression.xp_by_source.get("mining", 0.0)
+
+
+## The flag has to defeat the sparse-dict prune: an otherwise pristine placed
+## tile still needs its entry, or the flag evaporates on the next write.
+func test_player_placed_tile_keeps_its_state_entry() -> void:
+	_terrain.set_tile(P, "dirt", true)
+	assert_bool(_terrain.get_tile_data(P).player_placed).is_true()
+	assert_bool(_terrain._state.is_empty()).is_false()
+	_terrain.debug_validate()
+
+
+func test_natural_tile_is_not_flagged_and_stays_pruned() -> void:
+	_terrain.set_tile(P, "dirt")
+	assert_bool(_terrain.get_tile_data(P).player_placed).is_false()
+	assert_bool(_terrain._state.is_empty()).is_true() # sparse invariant
+
+
+## Whatever occupies the cell next declares its own origin — a placed block
+## broken and regenerated over must not stay poisoned.
+func test_replacing_a_tile_clears_the_flag() -> void:
+	_terrain.set_tile(P, "dirt", true)
+	_terrain.set_tile(P, "stone")
+	assert_bool(_terrain.get_tile_data(P).player_placed).is_false()
+	assert_bool(_terrain._state.is_empty()).is_true()
+
+
+func test_mining_a_natural_block_grants_flat_xp_and_an_eligible_drop() -> void:
+	_terrain.set_tile(P, "dirt")
+	var before := _mining_xp()
+	_terrain.damage_tile(P, 99.0, 1, TerrainScript.Source.PLAYER)
+	var granted := _mining_xp() - before
+	assert_float(granted).is_equal_approx(Progression.MINING_XP_PER_BLOCK, 0.001)
+	assert_bool(_drops[0][4]).is_true()
+
+
+## Flat, not per-hardness: a stone block (hardness 2) pays exactly what dirt
+## (hardness 1) pays, so a slow tool can't out-earn a fast one.
+func test_mining_xp_does_not_scale_with_hardness() -> void:
+	_terrain.set_tile(P, "stone")
+	var before := _mining_xp()
+	_terrain.damage_tile(P, 99.0, 2, TerrainScript.Source.PLAYER)
+	assert_float(_mining_xp() - before).is_equal_approx(Progression.MINING_XP_PER_BLOCK, 0.001)
+
+
+## The anti-farm rule: wall up, mine it back, earn nothing on either channel.
+func test_mining_a_player_placed_block_grants_nothing() -> void:
+	_terrain.set_tile(P, "dirt", true)
+	var before := _mining_xp()
+	_terrain.damage_tile(P, 99.0, 1, TerrainScript.Source.PLAYER)
+	assert_float(_mining_xp() - before).is_equal_approx(0.0, 0.001)
+	assert_array(_drops).contains_exactly([[P, "dirt", 1, TerrainScript.Source.PLAYER, false]])
+
+
+## Monster chew never paid mining XP and still doesn't — but the drop it frees
+## is ordinary loot, so it stays XP-eligible.
+func test_monster_dig_grants_no_mining_xp_but_an_eligible_drop() -> void:
+	_terrain.set_tile(P, "dirt")
+	var before := _mining_xp()
+	_terrain.damage_tile(P, 99.0, 1, TerrainScript.Source.MONSTER)
+	assert_float(_mining_xp() - before).is_equal_approx(0.0, 0.001)
+	assert_bool(_drops[0][4]).is_true()
+
 # --- Deposits ----------------------------------------------------------------
 
 
@@ -172,7 +242,7 @@ func test_deposit_chip_yields_and_depletes() -> void:
 	assert_bool(_terrain.damage_tile(P, 2.0, 1, TerrainScript.Source.PLAYER)).is_true()
 	assert_str(_terrain.get_material_id(P)).is_equal("coal_deposit")
 	assert_int(_terrain.get_tile_data(P).reserve).is_equal(45)
-	assert_array(_drops).contains_exactly([[P, "coal", 1, TerrainScript.Source.PLAYER]])
+	assert_array(_drops).contains_exactly([[P, "coal", 1, TerrainScript.Source.PLAYER, true]])
 	assert_array(_broken).is_empty() # chips are not breaks
 
 

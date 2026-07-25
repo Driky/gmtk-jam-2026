@@ -320,8 +320,5 @@ func _die() -> void:
 		return
 	_dead = true
 	died.emit(self)
-	# XP seam — self-wires when Progression.grant_xp lands (roadmap 2.6)
-	# same pattern as terrain.gd's mining XP.
-	if Progression.has_method(&"grant_xp"):
-		Progression.call(&"grant_xp", "kills", stats.xp)
+	Progression.grant_xp("kills", stats.xp)
 	queue_free()

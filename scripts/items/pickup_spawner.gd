@@ -12,10 +12,16 @@ func _ready() -> void:
 	Terrain.drops_spawned.connect(_on_drops_spawned)
 
 
-func _on_drops_spawned(pos: Vector2i, drop_id: String, drop_count: int, source: int) -> void:
+func _on_drops_spawned(
+		pos: Vector2i,
+		drop_id: String,
+		drop_count: int,
+		source: int,
+		grants_xp: bool,
+) -> void:
 	if source == Terrain.Source.MACHINE:
 		return
 	var pickup: Node2D = PickupScene.instantiate()
-	pickup.setup(drop_id, drop_count)
+	pickup.setup(drop_id, drop_count, grants_xp)
 	pickup.position = (Vector2(pos) + Vector2(0.5, 0.5)) * TILE
 	add_child(pickup)
