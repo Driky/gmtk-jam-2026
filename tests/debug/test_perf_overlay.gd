@@ -14,8 +14,24 @@ class WavesDouble:
 	var flow_field: FlowField = null
 
 
+## Just the two perf counters the overlay diffs.
+class TerrainDouble:
+	extends Node
+
+	var cell_writes := 0
+	var cell_write_usec := 0
+	var cell_write_peak_usec := 0
+
+
+	func write(count: int, usec: int) -> void:
+		cell_writes += count
+		cell_write_usec += usec
+		cell_write_peak_usec = maxi(cell_write_peak_usec, usec)
+
+
 var _game: Node
 var _waves: WavesDouble
+var _terrain: TerrainDouble
 var _overlay: CanvasLayer
 
 
@@ -23,7 +39,9 @@ func before_test() -> void:
 	_game = auto_free(GameScript.new())
 	_waves = auto_free(WavesDouble.new())
 	_overlay = auto_free(PerfOverlayScript.new())
+	_terrain = auto_free(TerrainDouble.new())
 	_overlay.game = _game
+	_overlay.terrain = _terrain
 	_overlay.waves = _waves # Inject before add_child (_ready connects).
 	add_child(_overlay)
 	_game.set_state(GameScript.State.BUILD_PHASE)
@@ -38,13 +56,30 @@ func _field_with_solve(msec: float) -> FlowField:
 
 
 func test_format_stats_shape() -> void:
-	var text := PerfOverlayScript.format_stats(58, 17.2, 214.6, 231.0, 83.2, 121.4, 14, 6)
+	var text := PerfOverlayScript.format_stats(
+		58,
+		17.2,
+		214.6,
+		231.0,
+		83.2,
+		121.4,
+		14,
+		6,
+		40,
+		0.4,
+		22.5,
+		116.7,
+		17.2,
+	)
 	assert_str(text).contains("fps 58")
 	assert_str(text).contains("frame 17.2")
 	assert_str(text).contains("peak 231.0 ms")
 	assert_str(text).contains("field last 83.2")
 	assert_str(text).contains("solves 14")
 	assert_str(text).contains("mobs 6")
+	assert_str(text).contains("cells 40 in 0.4 ms in-call | worst one 22.5 ms")
+	assert_str(text).contains("dirty 116.7")
+	assert_str(text).contains("clean 17.2")
 
 # --- Frame sampling ------------------------------------------------------------
 
@@ -109,3 +144,55 @@ func test_reset_stats_zeroes_everything() -> void:
 	assert_float(_overlay._peak).is_equal(0.0)
 	assert_float(_overlay._solve_peak).is_equal(0.0)
 	assert_int(_overlay._solves).is_equal(0)
+
+# --- Cell-write attribution ----------------------------------------------------
+
+
+## The discriminator: a slow frame next to a cell write lands in "dirty", a
+## slow frame with no write nearby lands in "clean".
+func test_frames_split_by_whether_a_cell_was_written() -> void:
+	_overlay._process(0.016) # Clean.
+	_terrain.write(5, 400)
+	_overlay._process(0.120) # Dirty: writes happened during it.
+	assert_float(_overlay._worst_dirty).is_equal_approx(120.0, 0.1)
+	assert_float(_overlay._worst_clean).is_equal_approx(16.0, 0.1)
+	assert_int(_overlay._writes).is_equal(5)
+
+
+## The engine defers its quadrant rebuild, so the frames just after a write
+## must stay attributed to it.
+func test_dirty_window_outlives_the_writing_frame() -> void:
+	_terrain.write(1, 100)
+	_overlay._process(0.016)
+	for i in PerfOverlayScript.DIRTY_FRAMES:
+		_overlay._process(0.120) # No new writes, but still within the window.
+	assert_float(_overlay._worst_dirty).is_equal_approx(120.0, 0.1)
+	assert_float(_overlay._worst_clean).is_equal(0.0)
+
+
+func test_clean_frames_after_the_window_are_not_blamed_on_writes() -> void:
+	_terrain.write(1, 100)
+	_overlay._process(0.016)
+	for i in PerfOverlayScript.DIRTY_FRAMES + 1:
+		_overlay._process(0.016)
+	_overlay._process(0.120) # Well clear of the write.
+	assert_float(_overlay._worst_clean).is_equal_approx(120.0, 0.1)
+
+
+func test_reset_baselines_against_world_gen_writes() -> void:
+	_terrain.write(240000, 90000) # World gen.
+	_overlay.reset_stats()
+	_overlay._process(0.016)
+	assert_int(_overlay._writes).is_equal(0)
+	assert_float(_overlay._worst_dirty).is_equal(0.0)
+
+
+## Regression: world gen writes ~240k cells before a run starts, and folding
+## their time into the readout made the in-call total read ~10x high.
+func test_reset_baselines_the_in_call_total_too() -> void:
+	_terrain.write(240000, 120000) # World gen: 120 ms of cheap writes.
+	_overlay.reset_stats()
+	_terrain.write(5, 400) # One tile break during play.
+	_overlay._process(0.016)
+	assert_int(_overlay._write_usec).is_equal(400)
+	assert_int(_overlay._writes).is_equal(5)

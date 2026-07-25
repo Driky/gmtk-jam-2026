@@ -62,6 +62,18 @@ var _solid_by_source: Array[bool] = []
 var _source_by_material: Dictionary[String, int] = { }
 var _sweep_accum := 0.0
 
+## Perf counters, read by the F4 overlay (ui.md). Monotonic totals, so the
+## overlay diffs them per frame. `write_usec` measures only the time spent
+## INSIDE set_cell/erase_cell — the engine defers its quadrant rebuild
+## (physics bodies, occluders) to a later frame, so a small number here
+## alongside slow frames after a change is the signature of engine-side cost.
+var cell_writes := 0
+var cell_write_usec := 0
+## Worst single write. The average hides the shape: if one write in fifty
+## costs 20 ms while the rest are free, the fix is "write less often", not
+## "write fewer cells".
+var cell_write_peak_usec := 0
+
 
 func _ready() -> void:
 	_layer = TileMapLayer.new()
@@ -189,11 +201,11 @@ func set_tile(pos: Vector2i, material_id: String) -> void:
 		_damaged.erase(pos)
 		_prune(pos, state)
 	if material_id == "":
-		_layer.erase_cell(pos)
+		_erase_cell(pos)
 	else:
 		assert(_source_by_material.has(material_id))
 		var sid: int = _source_by_material[material_id]
-		_layer.set_cell(pos, sid, TileLayout.LAYOUT[15][TileLayout.variant_hash(pos)])
+		_write_cell(pos, sid, TileLayout.LAYOUT[15][TileLayout.variant_hash(pos)])
 	_refresh_with_neighbors(pos)
 	tile_changed.emit(pos)
 
@@ -242,10 +254,10 @@ func get_entity_cells() -> Array[Vector2i]:
 ## placeholder; pair with apply_autotile_region once a band is filled.
 func set_cell_raw(pos: Vector2i, material_id: String) -> void:
 	if material_id == "":
-		_layer.erase_cell(pos)
+		_erase_cell(pos)
 		return
 	var sid: int = _source_by_material[material_id]
-	_layer.set_cell(pos, sid, TileLayout.LAYOUT[15][TileLayout.variant_hash(pos)])
+	_write_cell(pos, sid, TileLayout.LAYOUT[15][TileLayout.variant_hash(pos)])
 
 
 func set_reserve(pos: Vector2i, amount: int) -> void:
@@ -350,7 +362,27 @@ func _apply_mask(pos: Vector2i) -> void:
 	if sid == -1:
 		return
 	var mask := _neighbor_mask(pos, sid)
-	_layer.set_cell(pos, sid, TileLayout.LAYOUT[mask][TileLayout.variant_hash(pos)])
+	_write_cell(pos, sid, TileLayout.LAYOUT[mask][TileLayout.variant_hash(pos)])
+
+
+## The single instrumented write seam — every cell mutation goes through here
+## or _erase_cell, so the F4 counters can't miss one.
+func _write_cell(pos: Vector2i, sid: int, coords: Vector2i) -> void:
+	var t0 := Time.get_ticks_usec()
+	_layer.set_cell(pos, sid, coords)
+	_note_write(Time.get_ticks_usec() - t0)
+
+
+func _erase_cell(pos: Vector2i) -> void:
+	var t0 := Time.get_ticks_usec()
+	_layer.erase_cell(pos)
+	_note_write(Time.get_ticks_usec() - t0)
+
+
+func _note_write(usec: int) -> void:
+	cell_write_usec += usec
+	cell_write_peak_usec = maxi(cell_write_peak_usec, usec)
+	cell_writes += 1
 
 
 func _refresh_with_neighbors(pos: Vector2i) -> void:
