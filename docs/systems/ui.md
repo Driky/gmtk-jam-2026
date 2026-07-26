@@ -8,6 +8,9 @@ Navigable via tab buttons and cycling keys; each tab ALSO has a direct shortcut 
 - **Crafting tab:** recipes in **category tabs** (Tools & Weapons / Automation / Logistics / Power / Defense / Components…) for findability; filtered by unlocks, greyed when inputs missing (with missing-item highlight); search box if time allows.
 - **Skill tree tab:** node graph ([progression.md](progression.md)).
 
+## Bindings (inventory)
+Movement `WASD`/arrows · `Space` jump · LMB use (mine, swing, un-deploy) · RMB place (and **hand-feed**, [player-combat.md](player-combat.md)) · `1`–`0` hotbar · **`R` rotate placement** ([automation.md](automation.md) §Facing) · `I`/`C`/`K` character-screen tabs · `Z` zoom · `P` power overlay · `Esc` pause · `F3` debug menu · `F4` spawn mob at cursor. Everything else the debug panel owns is a row, not a key.
+
 ## World camera zoom (locked)
 `Z` cycles the world camera zoom **1× → 1.5× → 2×** (default **1×**). Affects only the game world; HUD/UI stays native 720p ([tech-design.md](../tech-design.md) display constraint). Implemented on the player camera ([player-combat.md](player-combat.md), Day 1 step 1.6).
 

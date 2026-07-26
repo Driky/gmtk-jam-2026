@@ -37,6 +37,13 @@ const GHOST_FILL_ALPHA := 0.22
 ## about to place, translucent enough that it can't be mistaken for a placed one.
 const GHOST_ITEM_ALPHA := 0.55
 const RATIO_FILL_ALPHA := 0.35
+## Facing arrow for a directional placeable (conveyor, inserter). Sized as a
+## fraction of the footprint so it reads at 1×1 and does not swamp a 1-cell
+## ghost, and drawn in the SAME validity colour as the outline — a second colour
+## here would read as a second signal.
+const ARROW_LENGTH := 0.34
+const ARROW_HEAD := 0.16
+const ARROW_WIDTH := 2.0
 
 var _target := Vector2i(-1, -1)
 var _ratio := 0.0
@@ -51,6 +58,9 @@ var _ghost_dirs := Deployable.SUPPORT_ALL
 ## "the cursor turned green" rather than "here is your torch".
 var _ghost_item := Rect2()
 var _ghost_item_color := Color.WHITE
+## Draw a facing arrow? True for a conveyor or an inserter, false for a torch or
+## a block. Cached alongside the rest of the placement answer.
+var _ghost_directional := false
 
 @onready var _player: Player = get_parent()
 
@@ -100,6 +110,7 @@ func _refresh_placement() -> void:
 	var id: String = item.get("id", "")
 	_ghost_size = Player.placement_size(id)
 	_ghost_dirs = Player.placement_support_dirs(id)
+	_ghost_directional = Player.placement_directional(id)
 	_ghost_item = Rect2()
 	if _ghost_size == Vector2i.ZERO:
 		return
@@ -176,3 +187,23 @@ func _draw_ghost() -> void:
 			Color(color, GHOST_FILL_ALPHA),
 		)
 	draw_rect(Rect2(Vector2.ZERO, Vector2(_ghost_size) * TILE), color, false, 1.0)
+	if _ghost_directional:
+		_draw_facing_arrow(color)
+
+
+## Which way the thing will point once it is down. Read off the PLAYER's pending
+## facing — the same value `_place_scene` stamps on the instance — so the arrow
+## can no more disagree with the placement than the validity tint can.
+func _draw_facing_arrow(color: Color) -> void:
+	var extent := Vector2(_ghost_size) * TILE
+	var centre := extent * 0.5
+	var span: float = minf(extent.x, extent.y)
+	var dir := Vector2(_player.place_facing)
+	var tip := centre + dir * span * ARROW_LENGTH
+	# Perpendicular, for the two head strokes — a filled triangle at this size
+	# reads as a blob, where three lines read as an arrow.
+	var side := Vector2(-dir.y, dir.x) * span * ARROW_HEAD
+	var back := tip - dir * span * ARROW_HEAD
+	draw_line(centre - dir * span * ARROW_LENGTH, tip, color, ARROW_WIDTH)
+	draw_line(tip, back + side, color, ARROW_WIDTH)
+	draw_line(tip, back - side, color, ARROW_WIDTH)

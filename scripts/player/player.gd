@@ -48,6 +48,10 @@ const HURT_KNOCKBACK := 140.0
 const HURT_LIFT := 80.0
 const HURT_STUN := 0.15
 
+## What `rotate_placement` (R) cycles through, in order. Clockwise on screen,
+## which is what "R again" reads as when you are laying a line.
+const FACING_CYCLE: Array[Vector2i] = [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
+
 const LOOT_BAG := preload("res://scenes/loot_bag.tscn")
 ## Long enough to register the death, short enough that a wave doesn't resolve
 ## itself without you. The Core is what ends a run, not this.
@@ -67,6 +71,12 @@ var current_mana := 0.0:
 	set(value):
 		current_mana = clampf(value, 0.0, Progression.get_stat("max_mana"))
 		mana_changed.emit(current_mana, Progression.get_stat("max_mana"))
+
+## Facing stamped onto the next directional placement, cycled with R and read by
+## the ghost. Held on the PLAYER rather than per item: the pending rotation is a
+## property of the hand, so switching hotbar slots keeps it and a whole downward
+## conveyor line is one R press, not one per belt.
+var place_facing := Vector2i.RIGHT
 
 var _coyote := 0.0
 var _jump_buffer := 0.0
@@ -359,10 +369,21 @@ func _on_target_hit(body: Node2D) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("rotate_placement"):
+		rotate_placement()
+		return
 	for i in Inventory.HOTBAR_SIZE:
 		if event.is_action_pressed("hotbar_%d" % (i + 1)):
 			Items.player_inventory.selected_slot = i
 			return
+
+
+## Advance the pending placement facing one step round the cycle. Public so a
+## test drives it without synthesising input, and so the binding is the only
+## thing that would have to change to add a counter-clockwise one.
+func rotate_placement() -> void:
+	var next := FACING_CYCLE.find(place_facing) + 1
+	place_facing = FACING_CYCLE[next % FACING_CYCLE.size()]
 
 
 func _move(delta: float) -> void:
@@ -445,6 +466,10 @@ func _place() -> void:
 ## unit-tests on a fresh instance rather than against the live world.
 func _place_scene(terrain: Node, cell: Vector2i, scene: PackedScene) -> void:
 	var node: Deployable = scene.instantiate()
+	# Stamped before anything else looks at the node, so `on_placed()` and every
+	# later reader see the facing the ghost was showing. Harmlessly ignored by a
+	# non-directional deployable.
+	node.facing = place_facing
 	node.setup(cell) # Before add_child, per the Core/loot-bag convention.
 	if not can_place_at(terrain, cell, tile_rect(), node.size, node.support_dirs):
 		node.free()
@@ -566,3 +591,12 @@ static func placement_support_dirs(item_id: String) -> int:
 	if scene == null:
 		return Deployable.SUPPORT_ALL
 	return Deployable.scene_support_dirs(scene)
+
+
+## Whether the ghost should show a facing arrow for this item. A block never
+## points anywhere, so the two branches mirror `placement_size`'s exactly.
+static func placement_directional(item_id: String) -> bool:
+	if item_id == "":
+		return false
+	var scene := Items.stats_for(item_id).place_scene
+	return scene != null and Deployable.scene_directional(scene)

@@ -338,6 +338,15 @@ func test_scene_size_matches_a_live_instance() -> void:
 	var live: Deployable = auto_free(TorchScene.instantiate())
 	assert_vector(Deployable.scene_size(TorchScene)).is_equal(live.size)
 	assert_int(Deployable.scene_support_dirs(TorchScene)).is_equal(live.support_dirs)
+	assert_bool(Deployable.scene_directional(TorchScene)).is_equal(live.directional)
+
+
+## Facing is runtime state the player stamps on, so the base has to hand out a
+## usable default — a ZERO facing would make an inserter read its own cell.
+func test_facing_defaults_to_right() -> void:
+	var node: Deployable = auto_free(DeployableScript.new())
+	assert_vector(node.facing).is_equal(Vector2i.RIGHT)
+	assert_bool(node.directional).is_false()
 
 
 ## Same contract for the item preview: it is read off the scene's own ColorRect,

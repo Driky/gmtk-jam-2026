@@ -144,6 +144,31 @@ func test_placement_support_dirs_follows_the_item() -> void:
 	)
 	assert_int(PlayerScript.placement_support_dirs("dirt")).is_equal(Deployable.SUPPORT_ALL)
 
+
+## Only a directional scene placeable gets an arrow. A block never points
+## anywhere, and neither does a torch.
+func test_placement_directional_follows_the_item() -> void:
+	assert_bool(PlayerScript.placement_directional("torch")).is_false()
+	assert_bool(PlayerScript.placement_directional("dirt")).is_false()
+	assert_bool(PlayerScript.placement_directional("")).is_false()
+
+# --- Placement facing (3.2) --------------------------------------------------
+
+
+## R cycles clockwise on screen and wraps. The order is what "R again" means
+## while laying a line, so it is pinned rather than left to the array literal.
+func test_rotate_placement_cycles_clockwise_and_wraps() -> void:
+	var player: Player = auto_free(PlayerScene.instantiate())
+	assert_vector(player.place_facing).is_equal(Vector2i.RIGHT)
+	player.rotate_placement()
+	assert_vector(player.place_facing).is_equal(Vector2i.DOWN)
+	player.rotate_placement()
+	assert_vector(player.place_facing).is_equal(Vector2i.LEFT)
+	player.rotate_placement()
+	assert_vector(player.place_facing).is_equal(Vector2i.UP)
+	player.rotate_placement()
+	assert_vector(player.place_facing).is_equal(Vector2i.RIGHT)
+
 # --- tile_rect_at ------------------------------------------------------------
 
 

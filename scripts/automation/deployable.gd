@@ -36,6 +36,17 @@ const MAX_DRAIN_STEPS := 4096
 @export var removal_hits := 1
 ## What it pops out as — both when removed on purpose and when it is destroyed.
 @export var item_id := ""
+## Does this care which way it points? A torch does not; a conveyor and an
+## inserter do. Authored per scene, and read by the ghost through
+## `scene_directional` so the arrow appears for exactly the items that use one.
+@export var directional := false
+
+## Which way it points. RIGHT by default, so a non-directional deployable still
+## has a defined facing that nobody reads. Runtime rather than authored: the
+## player stamps its pending rotation on the instance at placement, which is why
+## it is a plain var and not an export ([save.md](../../docs/systems/save.md)
+## already lists rotation as entity state).
+var facing := Vector2i.RIGHT
 
 ## Seeded from the AUTHORED max_hp by _ensure_hp, not by this initializer: a
 ## member initializer runs before the scene loader applies the exports, so a
@@ -243,6 +254,7 @@ func _find_spawner() -> Node:
 static var _scene_size_cache := { }
 static var _scene_dirs_cache := { }
 static var _scene_visual_cache := { }
+static var _scene_directional_cache := { }
 
 
 ## A scene's authored footprint, for the placement ghost. The ghost redraws
@@ -258,6 +270,14 @@ static func scene_size(scene: PackedScene) -> Vector2i:
 static func scene_support_dirs(scene: PackedScene) -> int:
 	_cache_scene(scene)
 	return _scene_dirs_cache[scene]
+
+
+## Whether the ghost should draw a facing arrow for this scene. Same anti-drift
+## contract as `scene_size`: read off the authored instance, never a second copy
+## of the answer kept somewhere the ghost can disagree with.
+static func scene_directional(scene: PackedScene) -> bool:
+	_cache_scene(scene)
+	return _scene_directional_cache[scene]
 
 
 ## The authored look, so the ghost can show WHAT is being placed rather than
@@ -276,6 +296,7 @@ static func _cache_scene(scene: PackedScene) -> void:
 	var probe: Deployable = scene.instantiate()
 	_scene_size_cache[scene] = probe.size
 	_scene_dirs_cache[scene] = probe.support_dirs
+	_scene_directional_cache[scene] = probe.directional
 	_scene_visual_cache[scene] = _probe_visual(probe)
 	probe.free()
 
