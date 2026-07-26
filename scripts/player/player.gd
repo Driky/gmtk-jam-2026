@@ -541,3 +541,28 @@ static func can_place_at(
 		if occupied.has_point(cell):
 			return false
 	return Deployable.is_supported_at(terrain, origin, size, support_dirs)
+
+
+## What placing this item id would occupy. `ZERO` means "not placeable at all",
+## which is how the ghost knows to draw nothing for a pickaxe — there is no mode
+## to toggle, only an answer to this question ([automation.md](../../docs/systems/automation.md)).
+##
+## The two branches mirror `_place`'s dispatch exactly: a scene placeable wins
+## over the material-id block path, and a block is always a 1×1.
+static func placement_size(item_id: String) -> Vector2i:
+	if item_id == "":
+		return Vector2i.ZERO
+	var scene := Items.stats_for(item_id).place_scene
+	if scene != null:
+		return Deployable.scene_size(scene)
+	return Vector2i.ONE if Materials.MATERIALS.has(item_id) else Vector2i.ZERO
+
+
+## Mounting rule for the same item. Blocks keep the cardinal-adjacency default.
+static func placement_support_dirs(item_id: String) -> int:
+	if item_id == "":
+		return Deployable.SUPPORT_ALL
+	var scene := Items.stats_for(item_id).place_scene
+	if scene == null:
+		return Deployable.SUPPORT_ALL
+	return Deployable.scene_support_dirs(scene)

@@ -123,6 +123,27 @@ func test_a_zero_support_deployable_places_in_mid_air() -> void:
 		),
 	).is_true()
 
+# --- What the ghost asks (3.1) -----------------------------------------------
+
+
+## The ghost is modeless: there is no toggle, only this question. ZERO means
+## "draw nothing", which is what a pickaxe has to answer or hovering with a tool
+## would paint a placement outline over every tile you meant to mine.
+func test_placement_size_answers_for_each_kind_of_item() -> void:
+	assert_vector(PlayerScript.placement_size("dirt")).is_equal(Vector2i.ONE)
+	assert_vector(PlayerScript.placement_size("torch")).is_equal(Vector2i.ONE)
+	assert_vector(PlayerScript.placement_size("pickaxe_t1")).is_equal(Vector2i.ZERO)
+	assert_vector(PlayerScript.placement_size("")).is_equal(Vector2i.ZERO) # Bare hands.
+
+
+## A scene placeable's mounting rule comes off the scene; a block keeps the
+## cardinal-adjacency default, so the ghost and the click agree for both paths.
+func test_placement_support_dirs_follows_the_item() -> void:
+	assert_int(PlayerScript.placement_support_dirs("torch")).is_equal(
+		Deployable.scene_support_dirs(TorchScene),
+	)
+	assert_int(PlayerScript.placement_support_dirs("dirt")).is_equal(Deployable.SUPPORT_ALL)
+
 # --- tile_rect_at ------------------------------------------------------------
 
 

@@ -326,6 +326,29 @@ func test_partial_damage_leaves_it_standing() -> void:
 	assert_float(node.current_hp).is_equal(1.0)
 	assert_object(_terrain.get_entity(CELL)).is_same(node)
 
+# --- Reading a scene without instantiating it (the ghost's input) ------------
+
+const TorchScene := preload("res://scenes/torch.tscn")
+
+
+## ❗️The one way the ghost can lie about what will be placed: read the authored
+## exports off a real instance and pin them against the cached answer. A cache
+## that drifts from the scene draws one shape and places another.
+func test_scene_size_matches_a_live_instance() -> void:
+	var live: Deployable = auto_free(TorchScene.instantiate())
+	assert_vector(Deployable.scene_size(TorchScene)).is_equal(live.size)
+	assert_int(Deployable.scene_support_dirs(TorchScene)).is_equal(live.support_dirs)
+
+
+## The ghost redraws every frame, so the second call must come off the cache
+## rather than instantiating again — and must still give the same answer.
+func test_a_second_read_returns_the_same_answer() -> void:
+	var first := Deployable.scene_size(TorchScene)
+	assert_vector(Deployable.scene_size(TorchScene)).is_equal(first)
+	assert_int(Deployable.scene_support_dirs(TorchScene)).is_equal(
+		Deployable.scene_support_dirs(TorchScene),
+	)
+
 # --- Virtuals ----------------------------------------------------------------
 
 

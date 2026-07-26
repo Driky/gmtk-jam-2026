@@ -222,3 +222,37 @@ func _find_spawner() -> Node:
 	if not is_inside_tree():
 		return null
 	return get_tree().get_first_node_in_group(&"pickup_spawner")
+
+# --- Reading a scene's authoring without instantiating it ---------------------
+
+## Keyed by the PackedScene reference, which the `.tres` already `preload`s, so
+## the key is stable for the life of the run and the cache can never grow past
+## the number of placeable types. Untyped on purpose — a Dictionary typed by an
+## object key refuses to erase a freed instance in 4.6, and there is no reason
+## to court that here.
+static var _scene_size_cache := { }
+static var _scene_dirs_cache := { }
+
+
+## A scene's authored footprint, for the placement ghost. The ghost redraws
+## every frame and a per-frame `instantiate()` would be absurd, so this builds
+## ONE instance, reads the exports off it and frees it. Reading the authored
+## value rather than a second copy of the number is the point: the ghost cannot
+## draw a shape different from the one that will actually be placed.
+static func scene_size(scene: PackedScene) -> Vector2i:
+	_cache_scene(scene)
+	return _scene_size_cache[scene]
+
+
+static func scene_support_dirs(scene: PackedScene) -> int:
+	_cache_scene(scene)
+	return _scene_dirs_cache[scene]
+
+
+static func _cache_scene(scene: PackedScene) -> void:
+	if _scene_size_cache.has(scene):
+		return
+	var probe: Deployable = scene.instantiate()
+	_scene_size_cache[scene] = probe.size
+	_scene_dirs_cache[scene] = probe.support_dirs
+	probe.free()
