@@ -5,7 +5,15 @@
 class_name ThreatTable
 extends RefCounted
 
-var _threat: Dictionary[Node2D, float] = { }
+## ❗️Deliberately UNTYPED — do not "improve" this to Dictionary[Node2D, float].
+## A typed dictionary validates the key on erase(), and a freed instance fails
+## that check: erase() returns false, the entry survives, and Godot prints
+## "Attempted to erase an invalid (previously freed?) object instance" every
+## time. Since decay() runs per mob per physics frame, one dead attacker would
+## spam that forever and never be pruned. Untyped erase handles freed keys fine.
+## Every write goes through add_threat(attacker: Node2D), so the key type is
+## still enforced where it matters.
+var _threat: Dictionary = { }
 
 
 func add_threat(attacker: Node2D, amount: float) -> void:

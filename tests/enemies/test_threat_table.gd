@@ -43,3 +43,18 @@ func test_freed_attacker_is_pruned() -> void:
 	_table.add_threat(doomed, 50.0)
 	doomed.free()
 	assert_that(_table.top_target(8.0)).is_null()
+	# ❗️The entry must actually LEAVE the dict, not merely be skipped. This
+	# assertion is the point: a typed dictionary refuses to erase a freed key,
+	# so the table used to leak the entry and print an engine error on every
+	# decay tick — per mob, per frame, forever — while still reporting null here.
+	assert_int(_table._threat.size()).is_equal(0)
+
+
+## decay() is the hot path (every mob, every physics frame), so it is the one
+## that turns a leaked entry into unbounded error spam.
+func test_decay_prunes_a_freed_attacker() -> void:
+	var doomed := Node2D.new()
+	_table.add_threat(doomed, 50.0)
+	doomed.free()
+	_table.decay(1.0, 4.0)
+	assert_int(_table._threat.size()).is_equal(0)
