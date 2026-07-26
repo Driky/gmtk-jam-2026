@@ -224,3 +224,36 @@ const MATERIALS: Dictionary = {
 		is_deposit = false,
 	},
 }
+
+## XP for collecting one of an item — the "looting" channel
+## ([progression.md](../docs/systems/progression.md) owns the rule; this is its
+## data). Deliberately ONE compact table rather than a field on each MATERIALS
+## entry: it's the curve, and the Day-4 balance pass wants to read it top to
+## bottom in one glance.
+##
+## Keyed by ITEM id (a drop id), not tile id — which is why deposits are absent:
+## they drop their base ore and are never collected as themselves. An id with no
+## entry is worth 0, so mob drops and authored items opt in rather than leak XP.
+##
+## Shape: ore beats rock, and rarer ore beats common ore, by a wide margin. This
+## is the channel that pays for digging deep, so the top of it has to be worth
+## leaving the Core for.
+const LOOT_XP: Dictionary = {
+	dirt = 1.0,
+	stone = 1.0,
+	wood = 2.0,
+	ice_stone = 2.0,
+	magma_stone = 2.0,
+	wall = 2.0,
+	coal = 4.0,
+	copper = 6.0,
+	iron = 12.0,
+	gold = 25.0,
+	magmatite = 40.0,
+}
+
+
+## Loot XP for one unit of `id`; 0 for anything not in the table.
+static func loot_xp(id: String) -> float:
+	var value: float = LOOT_XP.get(id, 0.0)
+	return value

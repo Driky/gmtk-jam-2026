@@ -58,10 +58,21 @@ func _magnet(delta: float) -> void:
 	var to_player := _player.global_position - global_position
 	var dist := to_player.length()
 	if dist <= COLLECT_RADIUS:
-		var leftover: int = Items.player_inventory.add_item(item_id, count)
-		if leftover == 0:
-			queue_free()
-		else:
-			count = leftover # Inventory full — stays in the world.
+		collect()
 	elif dist <= MAGNET_RADIUS:
 		global_position += to_player / dist * MAGNET_SPEED * delta
+
+
+## Hand the stack over and pay the looting XP. Public so tests can trigger a
+## collection without staging a player at the right distance.
+func collect() -> void:
+	var leftover: int = Items.player_inventory.add_item(item_id, count)
+	# Only what the inventory actually took is worth XP — a full inventory
+	# leaves the rest on the ground, and it must still pay when picked up later.
+	var accepted := count - leftover
+	if grants_xp and accepted > 0:
+		Progression.grant_xp("looting", Materials.loot_xp(item_id) * accepted)
+	if leftover == 0:
+		queue_free()
+	else:
+		count = leftover # Inventory full — stays in the world.

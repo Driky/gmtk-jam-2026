@@ -48,6 +48,11 @@ func _fall(delta: float) -> void:
 
 ## Hands back everything that fits and keeps the rest — same contract as
 ## pickup.gd, so recovering a bag with a full inventory doesn't delete items.
+##
+## Deliberately NOT routed through a Pickup: a bag hands items straight to the
+## inventory, so it misses the looting XP channel by construction. That's the
+## point — this haul was already paid for when it was first collected, and
+## re-paying would make "die next to the Core" an XP button (progression.md).
 func _try_collect() -> void:
 	if _player == null or not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group(&"player")
