@@ -357,6 +357,8 @@ func test_the_base_refuses_every_transfer() -> void:
 	assert_int(node.accept_item("stone", 5)).is_equal(0)
 	assert_dict(node.extract_item()).is_empty()
 	assert_dict(node.extract_item(99)).is_empty()
+	# And it is carrying nothing, so a pop drops only the deployable itself.
+	assert_array(node.take_cargo()).is_empty()
 
 
 ## Same contract for the item preview: it is read off the scene's own ColorRect,

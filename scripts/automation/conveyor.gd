@@ -49,6 +49,20 @@ func on_placed() -> void:
 func on_removed() -> void:
 	_automation().unregister_conveyor(self)
 
+
+## Drained through `extract_item`, so the slot is genuinely empty afterwards and
+## the stack cannot be dropped twice — the belt itself pops as one `conveyor_t1`,
+## and the ore it was carrying lands beside it instead of evaporating.
+func take_cargo() -> Array[Dictionary]:
+	# Built up rather than returned as a ternary: an `[] if … else [stack]` is an
+	# UNTYPED Array literal and 4.x rejects it against Array[Dictionary] at runtime,
+	# not at parse time.
+	var cargo: Array[Dictionary] = []
+	var stack := extract_item(Inventory.STACK_SIZE)
+	if not stack.is_empty():
+		cargo.append(stack)
+	return cargo
+
 # --- Slot state --------------------------------------------------------------
 
 

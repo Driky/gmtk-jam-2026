@@ -17,11 +17,27 @@ const ORIGIN := Vector2i(100, 100)
 
 var _terrain: Node
 var _automation: Node
+var _spawner: SpawnerDouble
+
+
+## Records what the real spawner would have dropped, without the autoload wiring
+## or a Pickup in the tree.
+class SpawnerDouble:
+	extends Node
+
+	var drops: Array = []
+
+
+	func spawn_at(world_pos: Vector2, id: String, count: int, grants_xp := true) -> void:
+		drops.append({ pos = world_pos, id = id, count = count, grants_xp = grants_xp })
 
 
 func before_test() -> void:
 	_terrain = auto_free(TerrainScript.new())
 	add_child(_terrain)
+	_spawner = auto_free(SpawnerDouble.new())
+	_spawner.add_to_group(&"pickup_spawner")
+	add_child(_spawner)
 	var game: Node = auto_free(GameScript.new()) # Out of the tree: only `state` is read.
 	game.state = GameScript.State.BUILD_PHASE
 	_automation = auto_free(AutomationScript.new())
@@ -321,6 +337,44 @@ func test_a_placed_conveyor_joins_the_tick_and_a_popped_one_leaves_it() -> void:
 	assert_int(_automation.conveyors().size()).is_equal(0)
 	_automation.step_tick() # Must not touch the freed node.
 	assert_int(_automation.tick_count).is_equal(1)
+
+
+## ❗️A belt that pops must drop what it was CARRYING, not just itself. Losing the
+## cargo is a silent item sink: nothing reports it, and a wave chewing through a
+## loaded line would quietly eat the haul it was carrying.
+func test_popping_a_loaded_conveyor_drops_its_cargo_too() -> void:
+	var belt := _belt(ORIGIN, Vector2i.RIGHT)
+	belt.accept_item("copper", 7)
+
+	belt.pop_to_pickup()
+
+	assert_int(_spawner.drops.size()).is_equal(2)
+	assert_str(_spawner.drops[0].id).is_equal("conveyor_t1") # The belt itself.
+	assert_int(_spawner.drops[0].count).is_equal(1)
+	assert_str(_spawner.drops[1].id).is_equal("copper") # What it was carrying.
+	assert_int(_spawner.drops[1].count).is_equal(7)
+	# ❗️No XP on either: the ore already paid when it was mined, so belt → pop →
+	# re-place must not be a fresh looting-XP loop.
+	assert_bool(_spawner.drops[1].grants_xp).is_false()
+
+
+## An empty belt drops exactly one thing. `take_cargo` returning an empty stack
+## must not become a zero-count pickup.
+func test_popping_an_empty_conveyor_drops_only_itself() -> void:
+	_belt(ORIGIN, Vector2i.RIGHT).pop_to_pickup()
+	assert_int(_spawner.drops.size()).is_equal(1)
+	assert_str(_spawner.drops[0].id).is_equal("conveyor_t1")
+
+
+## `take_cargo` is destructive on purpose. `pop_to_pickup` re-enters itself
+## through `entity_changed`, so a pure read would be one re-entry away from
+## duplicating the stack.
+func test_taking_the_cargo_empties_the_slot() -> void:
+	var belt := _belt(ORIGIN, Vector2i.RIGHT)
+	belt.accept_item("copper", 7)
+	assert_int(belt.take_cargo().size()).is_equal(1)
+	assert_bool(belt.slot_empty()).is_true()
+	assert_array(belt.take_cargo()).is_empty()
 
 
 func test_has_items_in_transit_answers_for_the_whole_registry() -> void:

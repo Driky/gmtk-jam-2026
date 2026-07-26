@@ -195,8 +195,13 @@ func pop_to_pickup(spawner: Node = null) -> void:
 		_terrain = null
 	on_removed()
 	var sink := spawner if spawner != null else _find_spawner()
-	if sink != null and item_id != "":
-		sink.spawn_at(global_position, item_id, 1, false)
+	if sink != null:
+		if item_id != "":
+			sink.spawn_at(global_position, item_id, 1, false)
+		# Whatever it was CARRYING lands on the floor beside it, through the same
+		# sink — one drop path, no second exit for cargo.
+		for stack: Dictionary in take_cargo():
+			sink.spawn_at(global_position, stack.id, stack.count, false)
 	queue_free()
 
 # --- Virtuals ----------------------------------------------------------------
@@ -212,6 +217,23 @@ func on_placed() -> void:
 ## deployable in it rather than one where it half-exists.
 func on_removed() -> void:
 	pass
+
+
+## Everything this was HOLDING, handed over so `pop_to_pickup` can drop it beside
+## the deployable itself. Empty for anything that holds nothing (a torch, a wall,
+## an inserter — the inserter's transfer is atomic by design, so there is never a
+## stack on the arm). 3.3's furnace returns its input, fuel and output slots here.
+##
+## ❗️Named `take_cargo`, not `cargo`, because it is DESTRUCTIVE: an override hands
+## the stacks over and is left empty. A pure read would dupe the cargo the moment
+## anything called it twice, and this is a path that already re-enters itself
+## through `entity_changed`.
+##
+## Dropped with `grants_xp = false` like the deployable itself: the ore on a belt
+## already paid XP when it was mined, and belt → pop → re-place would otherwise be
+## a fresh looting-XP loop ([progression.md](../../docs/systems/progression.md)).
+func take_cargo() -> Array[Dictionary]:
+	return []
 
 # --- The item-transfer seam --------------------------------------------------
 #
