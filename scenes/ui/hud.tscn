@@ -148,6 +148,22 @@ offset_bottom = 31.0
 grow_horizontal = 0
 horizontal_alignment = 2
 
+[node name="IdleAlert" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -308.0
+offset_top = 34.0
+offset_right = -8.0
+offset_bottom = 57.0
+grow_horizontal = 0
+horizontal_alignment = 2
+theme_override_colors/font_color = Color(1, 0.72, 0.3, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+
 [node name="Hotbar" type="HBoxContainer" parent="."]
 unique_name_in_owner = true
 anchors_preset = 7

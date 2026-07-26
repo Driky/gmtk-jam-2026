@@ -384,3 +384,84 @@ func test_reset_run_empties_the_registries_and_zeroes_the_tick() -> void:
 	_order.clear()
 	_automation.step_tick()
 	assert_array(_order).is_empty()
+
+# --- Idle machines (3.3) -----------------------------------------------------
+
+
+## Reports whatever a test tells it to, so the counter is exercised without
+## building a miner and a deposit for it.
+class Idler:
+	extends Deployable
+
+	var idle := false
+
+
+	func is_idle() -> bool:
+		return idle
+
+
+func _idler_at(cell: Vector2i, idle: bool) -> Idler:
+	var node: Idler = auto_free(Idler.new())
+	node.idle = idle
+	node.setup(cell)
+	add_child(node)
+	return node
+
+
+func test_the_idle_count_tallies_only_the_idle_machines() -> void:
+	var dry := _idler_at(CELL, true)
+	_automation.register_machine(dry)
+	_automation.register_machine(_idler_at(CELL + Vector2i(2, 0), false))
+
+	_automation.step_tick()
+	assert_int(_automation.idle_machines()).is_equal(1)
+
+	dry.idle = false
+	_automation.step_tick()
+	assert_int(_automation.idle_machines()).is_equal(0)
+
+
+## ❗️Emitted on a TRANSITION, not every tick — the signal drives a HUD label,
+## and 10 repaints a second for an unchanged number is a redraw for nothing.
+func test_the_idle_signal_fires_only_on_a_change() -> void:
+	var counts: Array[int] = []
+	_automation.idle_machines_changed.connect(
+		func(count: int) -> void:
+			counts.append(count),
+	)
+	var dry := _idler_at(CELL, true)
+	_automation.register_machine(dry)
+
+	for i in 5:
+		_automation.step_tick()
+	dry.idle = false
+	for i in 5:
+		_automation.step_tick()
+
+	assert_array(counts).contains_exactly([1, 0])
+
+
+## A machine that goes away stops being counted — a popped miner must not leave
+## a permanent alert on screen.
+func test_a_popped_machine_leaves_the_idle_count() -> void:
+	var dry := _idler_at(CELL, true)
+	dry.register(_terrain)
+	_automation.register_machine(dry)
+	_automation.step_tick()
+	assert_int(_automation.idle_machines()).is_equal(1)
+
+	_automation.unregister_machine(dry)
+	_automation.step_tick()
+
+	assert_int(_automation.idle_machines()).is_equal(0)
+
+
+func test_reset_run_zeroes_the_idle_count() -> void:
+	_automation.register_machine(_idler_at(CELL, true))
+	_automation.step_tick()
+	assert_int(_automation.idle_machines()).is_equal(1)
+
+	_automation.reset_run()
+
+	assert_int(_automation.idle_machines()).is_equal(0)
+	assert_array(_automation.machines()).is_empty()

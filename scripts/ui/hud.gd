@@ -44,6 +44,9 @@ var game: Node = null
 var waves: Node = null
 ## Injected by tests before add_child; falls back to the live autoload.
 var progression: Node = null
+## Injected by tests before add_child; falls back to the live autoload. Drives
+## the idle-machine counter, same test seam as `game`/`waves`/`progression`.
+var automation: Node = null
 
 var _player: Player = null
 var _last_row := -(1 << 30)
@@ -69,6 +72,7 @@ var _slot_counts: Array[Label] = []
 @onready var _xp_bar: ProgressBar = %XPBar
 @onready var _xp_label: Label = %XPLabel
 @onready var _toast: Label = %Toast
+@onready var _idle_alert: Label = %IdleAlert
 
 
 func _ready() -> void:
@@ -81,6 +85,8 @@ func _ready() -> void:
 		waves = Waves
 	if progression == null:
 		progression = Progression
+	if automation == null:
+		automation = Automation
 	for i in Inventory.HOTBAR_SIZE:
 		_make_slot(i)
 	inventory.slot_changed.connect(_on_slot_changed)
@@ -94,6 +100,10 @@ func _ready() -> void:
 	waves.wave_progress_changed.connect(_on_wave_progress_changed)
 	progression.xp_changed.connect(_on_xp_changed)
 	progression.leveled_up.connect(_on_leveled_up)
+	automation.idle_machines_changed.connect(_on_idle_machines_changed)
+	# Seeded like the XP bar rather than waiting for a transition: a run resumed
+	# with an already-exhausted miner (4.3) must show the alert immediately.
+	_on_idle_machines_changed(automation.idle_machines())
 	# Seeded here rather than waiting for the first grant: a run that starts
 	# mid-level (a reload, 4.3) must not show an empty bar until something dies.
 	_on_xp_changed(progression.xp, progression.xp_needed(), progression.level)
@@ -208,6 +218,12 @@ static func elevation_text(global_y: float) -> String:
 	return "Elevation: %d — %s" % [row, biome_name(row)]
 
 
+## ❗️ASCII on purpose. The bundled Open Sans has no U+26A0 warning sign, and a
+## missing glyph renders as a blank box — a "warning" that looks like a bug.
+static func idle_text(count: int) -> String:
+	return "[!] %d idle machine%s" % [count, "" if count == 1 else "s"]
+
+
 static func format_time(seconds_left: int) -> String:
 	return "%d:%02d" % [floori(seconds_left / 60.0), seconds_left % 60]
 
@@ -261,6 +277,16 @@ func _on_player_died(respawn_seconds: float) -> void:
 
 func _on_player_respawned() -> void:
 	_announce("Respawned at the Core")
+
+
+## A PERSISTENT count, not a toast. A miner runs its deposit dry while you are
+## somewhere else entirely — a toast that fires the moment it happens is a
+## notification you were never looking at, where a count is still there when you
+## come back. Hidden at zero, so a factory with nothing wrong shows nothing.
+func _on_idle_machines_changed(count: int) -> void:
+	_idle_alert.visible = count > 0
+	if count > 0:
+		_idle_alert.text = idle_text(count)
 
 
 func _on_countdown_tick(seconds_left: int) -> void:

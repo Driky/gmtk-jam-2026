@@ -28,10 +28,30 @@ class WavesStub:
 		wave_progress_changed.emit(value)
 
 
+## Just the idle-machine surface the HUD reads (roadmap 3.3) — a real Automation
+## would drag Terrain and Game in behind it for one integer.
+class AutomationStub:
+	extends Node
+
+	signal idle_machines_changed(count: int)
+
+	var idle := 0
+
+
+	func idle_machines() -> int:
+		return idle
+
+
+	func set_idle(value: int) -> void:
+		idle = value
+		idle_machines_changed.emit(value)
+
+
 var _inv: Inventory
 var _game: Node
 var _waves: WavesStub
 var _progression: Node
+var _automation: AutomationStub
 var _hud: CanvasLayer
 
 
@@ -55,6 +75,8 @@ func before_test() -> void:
 	_hud.game = _game
 	_hud.waves = _waves
 	_hud.progression = _progression
+	_automation = auto_free(AutomationStub.new())
+	_hud.automation = _automation
 	add_child(_hud)
 
 # --- Elevation formatting ----------------------------------------------------
@@ -303,3 +325,45 @@ func test_a_toast_does_not_disturb_the_wave_banner() -> void:
 	_hud.toast("rejected")
 	assert_bool(_hud._wave_banner.visible).is_true()
 	assert_str(_hud._wave_banner.text).is_equal("Wave 4")
+
+# --- Idle machines (3.3) -----------------------------------------------------
+
+
+## Hidden at zero: a factory with nothing wrong shows nothing at all.
+func test_the_idle_alert_is_hidden_with_no_idle_machines() -> void:
+	assert_bool(_hud._idle_alert.visible).is_false()
+
+
+## ❗️A PERSISTENT count, not a toast. A miner runs its deposit dry while you
+## are somewhere else — a toast fires at a screen nobody is looking at, where a
+## count is still there when you come back.
+func test_the_idle_alert_appears_with_a_count_and_goes_away_again() -> void:
+	_automation.set_idle(2)
+	assert_bool(_hud._idle_alert.visible).is_true()
+	assert_str(_hud._idle_alert.text).is_equal(Hud.idle_text(2))
+
+	_automation.set_idle(0)
+	assert_bool(_hud._idle_alert.visible).is_false()
+
+
+## ASCII, singular/plural. The bundled Open Sans has no U+26A0, so a real
+## warning sign would render as a blank box.
+func test_idle_text_reads_as_a_warning_in_both_numbers() -> void:
+	assert_str(Hud.idle_text(1)).is_equal("[!] 1 idle machine")
+	assert_str(Hud.idle_text(3)).is_equal("[!] 3 idle machines")
+
+
+## Seeded in _ready like the XP bar, so a run resumed with an already-exhausted
+## miner shows the alert immediately rather than on the next transition.
+func test_the_idle_alert_is_seeded_from_the_current_count() -> void:
+	_hud.free()
+	var automation: AutomationStub = auto_free(AutomationStub.new())
+	automation.idle = 1
+	_hud = HudScene.instantiate()
+	_hud.inventory = _inv
+	_hud.game = _game
+	_hud.waves = _waves
+	_hud.progression = _progression
+	_hud.automation = automation
+	add_child(_hud)
+	assert_bool(_hud._idle_alert.visible).is_true()

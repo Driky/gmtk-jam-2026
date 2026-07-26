@@ -3,6 +3,11 @@
 ## Owning doc: docs/systems/automation.md
 extends Node
 
+## How many registered machines have nothing to do (a miner whose deposit ran
+## out, today). Emitted **only on change** rather than every tick, and read by
+## the HUD's idle counter ([ui.md](../../docs/systems/ui.md) §HUD).
+signal idle_machines_changed(count: int)
+
 const GameScript := preload("res://scripts/game/game.gd")
 
 const TICK_HZ := 10
@@ -39,6 +44,9 @@ var _conveyors: Array[Deployable] = []
 ## A placement or removal invalidates the row-major order; the sort is deferred
 ## to the next tick so twenty placements in one frame cost one sort.
 var _order_dirty := false
+## Last count emitted, so `idle_machines_changed` fires on a transition rather
+## than 10×/second.
+var _idle_machines := 0
 
 var _tick_accum := 0.0
 
@@ -100,6 +108,7 @@ func step_tick() -> void:
 	for inserter: Deployable in _inserters:
 		inserter.on_tick(terrain)
 	_advance_conveyors()
+	_refresh_idle_count()
 	Perf.end()
 
 
@@ -152,6 +161,10 @@ func inserters() -> Array[Deployable]:
 
 func machines() -> Array[Deployable]:
 	return _machines
+
+
+func idle_machines() -> int:
+	return _idle_machines
 
 
 ## Cheap "is anything on a belt" probe, so the item layer can skip a redraw on an
@@ -219,6 +232,7 @@ func reset_run() -> void:
 	_inserters.clear()
 	_conveyors.clear()
 	_order_dirty = false
+	_idle_machines = 0
 	tick_count = 0
 	_tick_accum = 0.0
 
@@ -244,6 +258,23 @@ func _probe(cell: Vector2i) -> void:
 ## Conveyor — it is a property of the group, not of the tick driver.
 func _advance_conveyors() -> void:
 	Conveyor.advance_all(terrain, _conveyors)
+
+
+## Tally machines with nothing to do, at the tail of the tick. Free in practice:
+## it walks a list the tick has just walked anyway, and `is_idle()` is a flag the
+## machine recomputed a few microseconds ago rather than a fresh terrain probe.
+##
+## Emitted only on CHANGE, so the HUD repaints on a transition instead of ten
+## times a second.
+func _refresh_idle_count() -> void:
+	var idle := 0
+	for machine: Deployable in _machines:
+		if machine.is_idle():
+			idle += 1
+	if idle == _idle_machines:
+		return
+	_idle_machines = idle
+	idle_machines_changed.emit(idle)
 
 
 func _register(registry: Array[Deployable], node: Deployable) -> void:
