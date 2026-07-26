@@ -63,6 +63,8 @@ One fixed 10 Hz tick in `Automation` advances the whole logistics sim determinis
 
 **Tick order (fixed, save/load depends on it):** `machines craft → inserters transfer → conveyors advance` — a crafted item can leave the same tick.
 
+**The transfer seam** is two virtuals on `Deployable`, both defaulting to refuse: `accept_item(id, count) -> int` (how many it took; a partial accept is legal and the caller keeps the remainder) and `extract_item(max_count) -> Dictionary` (a detached `{id, count}`, already gone from the source; `{}` for nothing). This is the seam every later consumer uses — 3.3's furnace routes them to input/output slots, 3.5's turret accepts ammo, RMB hand-feed is a single `accept_item(id, 1)`. ❗️**The refusing default is the load-bearing part**: it is what lets an inserter point at a torch and do nothing with no type check anywhere, the same rule that keeps the Core un-removable without a special case. **Two virtuals, not three — there is no `peek`**; the inserter extracts before it knows the destination will take it and hands the remainder back through the source's own `accept_item`, which is safe *precisely because* of the locked order above. Belt-to-belt moves deliberately do **not** go through this seam and cannot: simultaneity needs the whole-group snapshot below. That looks like duplication and is not — unifying them reintroduces the dupe bug.
+
 **Debug:** hotkey overlay drawing slot occupancy + stack counts (tick bugs are the top-listed risk in [plan.md](../plan.md)).
 
 ## Power — radius coverage grids

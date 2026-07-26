@@ -349,6 +349,16 @@ func test_facing_defaults_to_right() -> void:
 	assert_bool(node.directional).is_false()
 
 
+## ❗️The whole "no branches in the inserter" claim rests on this default: an
+## inserter pointed at a torch does nothing because the torch refuses, not
+## because anything type-checked it.
+func test_the_base_refuses_every_transfer() -> void:
+	var node: Deployable = auto_free(DeployableScript.new())
+	assert_int(node.accept_item("stone", 5)).is_equal(0)
+	assert_dict(node.extract_item()).is_empty()
+	assert_dict(node.extract_item(99)).is_empty()
+
+
 ## Same contract for the item preview: it is read off the scene's own ColorRect,
 ## so the ghost draws the thing that will actually be placed rather than a second
 ## copy of its look that could drift.

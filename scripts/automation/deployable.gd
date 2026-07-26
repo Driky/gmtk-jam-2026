@@ -214,6 +214,40 @@ func on_removed() -> void:
 	pass
 
 
+# --- The item-transfer seam --------------------------------------------------
+#
+# The ENTIRE interface between deployables. An inserter, 3.3's miner and furnace,
+# 3.5's ammo turret, 3.6's chest and the player's own hand all move items through
+# exactly these two, so none of them ever asks WHAT it is talking to — the same
+# "one base, no branches in the player" bargain `place_scene` already made.
+#
+# ❗️Both default to REFUSE, and that default is the load-bearing part: it is
+# what lets an inserter point at a torch and simply do nothing, with no type
+# check anywhere. Every deployable that exists and every one that ever will is a
+# legal, safe neighbour that happens to take nothing — exactly as there is no
+# "is this the Core" test in the removal path.
+#
+# Two virtuals rather than three: there is no `peek`. The inserter extracts
+# before it knows the destination will take it and hands the remainder back
+# through the source's own `accept_item`, which is safe *because* of the locked
+# tick order (inserters run before conveyors, so the slot it just emptied is
+# still free). See automation.md.
+
+
+## How many of `id` this will take. 0 = none. A partial accept is legal and the
+## caller keeps the remainder — the one place items go missing if this returns
+## void instead of a count.
+func accept_item(_id: String, _count: int) -> int:
+	return 0
+
+
+## Hand back at most `max_count`, as a DETACHED `{id, count}`; `{}` when there is
+## nothing to give. What is returned is already gone from here — there is no
+## confirm step to forget.
+func extract_item(_max_count := 1) -> Dictionary:
+	return { }
+
+
 ## One 10 Hz tick, for whichever registry this joined in `on_placed()`. Terrain
 ## is handed in rather than reached for, so the whole sim unit-tests against a
 ## fresh world (`Automation.step_tick`).
