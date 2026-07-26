@@ -276,3 +276,40 @@ func test_respawn_restores_full_hp_and_grants_grace() -> void:
 	assert_bool(player.is_invulnerable()).is_true()
 	assert_int(respawns.size()).is_equal(1)
 	assert_bool(player.visible).is_true()
+
+# --- Level-up (2.6) ----------------------------------------------------------
+
+
+## Drives the LIVE Progression: the player wires to the autoload in _ready, and
+## a stub would prove nothing about that wiring. Bracketed by reset_run() so it
+## hands the singleton back the way it found it.
+func test_level_up_grants_the_delta_rather_than_healing() -> void:
+	Progression.reset_run()
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.take_damage(40.0)
+	var hp_before := player.current_hp
+	var max_before := Progression.get_stat("max_hp")
+
+	Progression.grant_xp("kills", Progression.xp_to_level(1))
+
+	var gained := Progression.get_stat("max_hp") - max_before
+	assert_float(gained).is_greater(0.0)
+	assert_float(player.current_hp).is_equal_approx(hp_before + gained, 0.001)
+	# Still wounded — a level-up must not double as a heal button.
+	assert_float(player.current_hp).is_less(Progression.get_stat("max_hp"))
+	Progression.reset_run()
+
+
+func test_level_up_raises_mana_the_same_way() -> void:
+	Progression.reset_run()
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.current_mana = 10.0
+	var max_before := Progression.get_stat("max_mana")
+
+	Progression.grant_xp("kills", Progression.xp_to_level(1))
+
+	var gained := Progression.get_stat("max_mana") - max_before
+	assert_float(player.current_mana).is_equal_approx(10.0 + gained, 0.001)
+	Progression.reset_run()

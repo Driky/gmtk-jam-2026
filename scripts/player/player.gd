@@ -73,6 +73,11 @@ var _hitbox: SwingHitbox = null
 var _hitbox_scene: PackedScene = null
 var _invuln_left := 0.0
 var _stun_left := 0.0
+## Maxima as of the last level-up, so a level can grant exactly the increase.
+## Cached here rather than asked of Progression: it reports the NEW maximum by
+## the time leveled_up fires, so the delta is unrecoverable otherwise.
+var _last_max_hp := 0.0
+var _last_max_mana := 0.0
 var _blink_left := 0.0
 ## > 0 while dead. Doubles as the is_dead() flag so there's one source of truth.
 var _respawn_left := 0.0
@@ -84,6 +89,9 @@ var _respawn_left := 0.0
 func _ready() -> void:
 	current_hp = Progression.get_stat("max_hp")
 	current_mana = Progression.get_stat("max_mana")
+	_last_max_hp = current_hp
+	_last_max_mana = current_mana
+	Progression.leveled_up.connect(_on_leveled_up)
 	var inventory := Items.player_inventory
 	inventory.selected_changed.connect(_on_selection_changed)
 	inventory.slot_changed.connect(_on_slot_changed)
@@ -132,6 +140,18 @@ func take_damage(amount: float, _attacker: Node2D = null) -> void:
 
 func is_dead() -> bool:
 	return _respawn_left > 0.0
+
+
+## A level raises the ceiling and current rises by exactly that much — NOT a
+## full heal. Healing to full would make leveling a heal button you farm
+## mid-wave by mining a few blocks (progression.md).
+func _on_leveled_up(_level: int, _points: int) -> void:
+	var max_hp := Progression.get_stat("max_hp")
+	var max_mana := Progression.get_stat("max_mana")
+	current_hp += max_hp - _last_max_hp
+	current_mana += max_mana - _last_max_mana
+	_last_max_hp = max_hp
+	_last_max_mana = max_mana
 
 
 ## Shove taken from a hit, mirroring Enemy.apply_knockback so both sides of a

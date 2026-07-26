@@ -1,4 +1,4 @@
-## HUD: HP/mana bars, hotbar display, elevation readout, phase label
+## HUD: HP/mana/XP bars, hotbar display, elevation readout, phase label
 ## (countdown, then "Wave n — X remaining"), Core HP bar. Bars, hotbar, and
 ## phase widgets are purely
 ## signal-driven; only the elevation label polls, and only repaints on row
@@ -31,6 +31,8 @@ var game: Node = null
 ## remaining-mob count is Waves' own data, not phase flow, so it doesn't route
 ## through Game (signal-hub note in game.gd).
 var waves: Node = null
+## Injected by tests before add_child; falls back to the live autoload.
+var progression: Node = null
 
 var _player: Player = null
 var _last_row := -(1 << 30)
@@ -51,6 +53,8 @@ var _slot_counts: Array[Label] = []
 @onready var _core_bar: ProgressBar = %CoreBar
 @onready var _wave_banner: Label = %WaveBanner
 @onready var _pulse_overlay: ColorRect = %PulseOverlay
+@onready var _xp_bar: ProgressBar = %XPBar
+@onready var _xp_label: Label = %XPLabel
 
 
 func _ready() -> void:
@@ -60,6 +64,8 @@ func _ready() -> void:
 		game = Game
 	if waves == null:
 		waves = Waves
+	if progression == null:
+		progression = Progression
 	for i in Inventory.HOTBAR_SIZE:
 		_make_slot(i)
 	inventory.slot_changed.connect(_on_slot_changed)
@@ -71,6 +77,11 @@ func _ready() -> void:
 	game.wave_started.connect(_on_wave_started)
 	game.wave_cleared.connect(_on_wave_cleared)
 	waves.wave_progress_changed.connect(_on_wave_progress_changed)
+	progression.xp_changed.connect(_on_xp_changed)
+	progression.leveled_up.connect(_on_leveled_up)
+	# Seeded here rather than waiting for the first grant: a run that starts
+	# mid-level (a reload, 4.3) must not show an empty bar until something dies.
+	_on_xp_changed(progression.xp, progression.xp_needed(), progression.level)
 
 
 func _process(_delta: float) -> void:
@@ -148,6 +159,12 @@ static func wave_text(wave_number: int, remaining: int) -> String:
 	return "Wave %d — %d remaining" % [wave_number, remaining]
 
 
+## Level first: it's the number worth reading at a glance, and the raw XP
+## behind it is only interesting while you're watching the bar fill.
+static func xp_text(level: int, current: float, needed: float) -> String:
+	return "Lv %d — %d / %d" % [level, floori(current), roundi(needed)]
+
+
 func _on_health_changed(current: float, max_value: float) -> void:
 	_hp_bar.max_value = max_value
 	_hp_bar.value = current
@@ -163,6 +180,19 @@ func _on_mana_changed(current: float, max_value: float) -> void:
 func _on_core_health_changed(current: float, max_value: float) -> void:
 	_core_bar.max_value = max_value
 	_core_bar.value = current
+
+
+func _on_xp_changed(current: float, needed: float, level: int) -> void:
+	_xp_bar.max_value = needed
+	_xp_bar.value = current
+	_xp_label.text = xp_text(level, current, needed)
+
+
+## Reuses the wave banner rather than growing a screen: a level-up is worth
+## announcing, not worth interrupting a fight for. The upgrade point it grants
+## has nowhere to be spent until the skill tree (3.7), so it isn't advertised.
+func _on_leveled_up(level: int, _points: int) -> void:
+	_announce("Level %d!" % level)
 
 
 ## Reuses the wave banner rather than growing a screen — a run continues
