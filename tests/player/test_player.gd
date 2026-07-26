@@ -55,6 +55,74 @@ func test_rejects_cell_overlapping_player() -> void:
 	var occupied := Rect2i(P, Vector2i(1, 1))
 	assert_bool(PlayerScript.can_place_at(_terrain, P, occupied)).is_false()
 
+# --- Multi-cell footprints (3.1) ---------------------------------------------
+
+## A 2×2 anchored at P, resting on a floor under its bottom-left cell.
+const BIG := Vector2i(2, 2)
+
+
+func _floor_under_a_two_by_two() -> void:
+	_terrain.set_tile(P + Vector2i(0, 2), "dirt")
+
+
+func test_accepts_a_supported_two_by_two() -> void:
+	_floor_under_a_two_by_two()
+	assert_bool(PlayerScript.can_place_at(_terrain, P, NOWHERE, BIG)).is_true()
+
+
+## Every cell has to be free, not just the origin — a machine half-buried in
+## rock is the failure the all-or-nothing register exists to prevent, and the
+## ghost has to say no before the claim ever runs.
+func test_rejects_a_two_by_two_when_any_one_cell_is_solid() -> void:
+	_floor_under_a_two_by_two()
+	_terrain.set_tile(P + Vector2i(1, 1), "dirt")
+	assert_bool(PlayerScript.can_place_at(_terrain, P, NOWHERE, BIG)).is_false()
+
+
+func test_rejects_a_two_by_two_when_any_one_cell_is_occupied() -> void:
+	_floor_under_a_two_by_two()
+	var blocker: Node2D = auto_free(Node2D.new())
+	_terrain.place_entity(P + Vector2i(1, 0), blocker)
+	assert_bool(PlayerScript.can_place_at(_terrain, P, NOWHERE, BIG)).is_false()
+
+
+## The buffer test is per-cell too: a footprint that only CLIPS the buffer with
+## its far column still edits a cell the world refuses to hand over.
+func test_rejects_a_two_by_two_reaching_into_a_buffer() -> void:
+	var edge := Vector2i(49, 100) # Column 50 is the first playable one.
+	_terrain.set_tile(edge + Vector2i(0, 2), "dirt")
+	assert_bool(PlayerScript.can_place_at(_terrain, edge, NOWHERE, BIG)).is_false()
+
+
+func test_rejects_a_two_by_two_overlapping_the_player() -> void:
+	_floor_under_a_two_by_two()
+	var occupied := Rect2i(P + Vector2i(1, 1), Vector2i(1, 2))
+	assert_bool(PlayerScript.can_place_at(_terrain, P, NOWHERE, BIG)).is_true()
+	assert_bool(PlayerScript.can_place_at(_terrain, P, occupied, BIG)).is_false()
+
+
+## ❗️Direction bits reach placement, not just the re-check. A ceiling-only
+## machine (dirs = 1, Up) must refuse a floor, or the two disagree the moment
+## the support pass runs and it pops the frame after it is placed.
+func test_an_up_only_deployable_needs_a_ceiling() -> void:
+	_terrain.set_tile(P + Vector2i.DOWN, "dirt")
+	assert_bool(PlayerScript.can_place_at(_terrain, P, NOWHERE, Vector2i.ONE, 1)).is_false()
+	_terrain.set_tile(P + Vector2i.UP, "dirt")
+	assert_bool(PlayerScript.can_place_at(_terrain, P, NOWHERE, Vector2i.ONE, 1)).is_true()
+
+
+## Zero dirs is the opt-out — a machine that mounts on nothing places in a void.
+func test_a_zero_support_deployable_places_in_mid_air() -> void:
+	assert_bool(
+		PlayerScript.can_place_at(
+			_terrain,
+			P,
+			NOWHERE,
+			Vector2i.ONE,
+			Deployable.SUPPORT_NONE,
+		),
+	).is_true()
+
 # --- tile_rect_at ------------------------------------------------------------
 
 
@@ -444,6 +512,111 @@ func test_a_multi_hit_deployable_reports_progress_before_coming_off() -> void:
 		assert_bool(torch.take_removal_hit()).is_false()
 	assert_float(torch.removal_ratio()).is_less(1.0)
 	assert_bool(torch.take_removal_hit()).is_true()
+
+# --- Placing a scene (3.1) ---------------------------------------------------
+
+const DeployableScript := preload("res://scripts/automation/deployable.gd")
+
+const BIG_FOOTPRINT := Vector2i(2, 2)
+## Somewhere the player can stand without ever overlapping the footprint at P.
+const CLEAR_OF_P := Vector2i(120, 120)
+
+
+## Reports when on_placed ran and what the tree looked like at the time.
+class Observer:
+	extends Deployable
+
+	var placed_calls := 0
+	var parent_at_placed: Node = null
+
+
+	func on_placed() -> void:
+		placed_calls += 1
+		parent_at_placed = get_parent()
+
+
+## A 2×2 built from the base script, packed so `instantiate()` reproduces the
+## real authoring path: the player reads `size`/`support_dirs` off the INSTANCE,
+## so only a scene is a faithful input here.
+func _big_scene() -> PackedScene:
+	var template := DeployableScript.new()
+	template.size = BIG_FOOTPRINT
+	template.item_id = "torch"
+	var scene := PackedScene.new()
+	scene.pack(template)
+	template.free()
+	return scene
+
+
+## The floor the 2×2 at P rests on, under its bottom-left cell.
+func _placeable_ground() -> void:
+	_terrain.set_tile(P + Vector2i(0, 2), "dirt")
+
+
+func _place_big(player: Player) -> Deployable:
+	player._place_scene(_terrain, P, _big_scene())
+	return _terrain.get_entity(P) as Deployable
+
+
+func test_placing_a_scene_claims_its_whole_footprint_and_costs_one_item() -> void:
+	Items.reset_run()
+	Items.player_inventory.add_item("torch", 2)
+	_placeable_ground()
+	var placed := _place_big(_swinger_at(CLEAR_OF_P))
+	assert_object(placed).is_not_null()
+	for cell: Vector2i in Deployable.footprint_at(P, BIG_FOOTPRINT):
+		assert_object(_terrain.get_entity(cell)).is_same(placed)
+	# One item for the whole machine, whatever its footprint.
+	assert_int(Items.player_inventory.count_of("torch")).is_equal(1)
+	placed.pop_to_pickup()
+	Items.reset_run()
+
+
+## An invalid target must not consume the item — the whole reason the order is
+## reversed from the block path.
+func test_an_unsupported_placement_consumes_nothing() -> void:
+	Items.reset_run()
+	Items.player_inventory.add_item("torch", 1)
+	# No solid anywhere: the 2×2 would be floating.
+	var placed := _place_big(_swinger_at(CLEAR_OF_P))
+	assert_object(placed).is_null()
+	assert_int(Items.player_inventory.count_of("torch")).is_equal(1)
+	Items.reset_run()
+
+
+## on_placed is the hook 3.4's power graph lands on, so it has to run with the
+## node actually in the world — an override that walks the tree for neighbouring
+## emitters would see nothing if it fired before add_child.
+func test_on_placed_runs_after_the_node_is_in_the_tree() -> void:
+	Items.reset_run()
+	Items.player_inventory.add_item("torch", 1)
+	_placeable_ground()
+	var template := Observer.new()
+	template.size = BIG_FOOTPRINT
+	template.item_id = "torch"
+	var scene := PackedScene.new()
+	scene.pack(template)
+	template.free()
+
+	var player := _swinger_at(CLEAR_OF_P)
+	player._place_scene(_terrain, P, scene)
+	var placed: Observer = _terrain.get_entity(P)
+	assert_int(placed.placed_calls).is_equal(1)
+	assert_object(placed.parent_at_placed).is_same(player.get_parent())
+	placed.pop_to_pickup()
+	Items.reset_run()
+
+
+## ❗️The claim happens BEFORE the item is consumed, so a consume that fails has
+## to give back EVERY cell — one leaked cell of a 2×2 is a hole nothing can ever
+## occupy again, and nothing in the game would report it.
+func test_a_failed_consume_rolls_back_every_footprint_cell() -> void:
+	Items.reset_run() # Empty inventory: consume_selected must fail.
+	_placeable_ground()
+	assert_object(_place_big(_swinger_at(CLEAR_OF_P))).is_null()
+	for cell: Vector2i in Deployable.footprint_at(P, BIG_FOOTPRINT):
+		assert_object(_terrain.get_entity(cell)).is_null()
+	_terrain.debug_validate()
 
 
 ## A removed cell has to be re-placeable on the SAME frame — queue_free defers

@@ -413,7 +413,7 @@ func _place() -> void:
 	# path. Day 3's miner/conveyor/turret are .tres rows, not branches here.
 	var stats := Items.stats_for(item.id)
 	if stats.place_scene != null:
-		_place_scene(target, stats.place_scene)
+		_place_scene(Terrain, target, stats.place_scene)
 		return
 	if not Materials.MATERIALS.has(item.id):
 		return
@@ -426,28 +426,41 @@ func _place() -> void:
 		Terrain.set_tile(target, id, true)
 
 
-## Put a placeable scene in a cell. Validity is `can_place_at` verbatim — its
-## cardinal-adjacency rule is not a compromise borrowed from blocks, it is the
-## right rule: no torches floating in mid-air, mount them on a wall.
+## Put a placeable scene down at a cell. Validity is `can_place_at` again — the
+## same rule blocks get, widened to the deployable's own footprint and mounting
+## directions rather than a relaxed copy.
+##
+## The instance is made FIRST and asked what shape it is: `size` and
+## `support_dirs` are authored per scene, so the player never learns a machine's
+## dimensions. A rejected placement frees the node, which costs one instantiate
+## on a click the player already got wrong.
 ##
 ## Order matters and is the reverse of the block path. `set_tile` cannot fail so
-## blocks consume first and write second; `register` CAN fail, so the cell is
-## claimed first and the item is only consumed once it is ours. A failed claim
-## hands the item back instead of eating it.
-func _place_scene(cell: Vector2i, scene: PackedScene) -> void:
-	if not can_place_at(Terrain, cell, tile_rect()):
-		return
-	var node: Node2D = scene.instantiate()
+## blocks consume first and write second; `register` CAN fail, so the cells are
+## claimed first and the item is only consumed once they are ours. A failed
+## claim hands the item back instead of eating it, and a failed CONSUME rolls
+## the whole footprint back via unregister().
+##
+## Terrain is a parameter for the same reason `_hit_deployable` takes one: this
+## unit-tests on a fresh instance rather than against the live world.
+func _place_scene(terrain: Node, cell: Vector2i, scene: PackedScene) -> void:
+	var node: Deployable = scene.instantiate()
 	node.setup(cell) # Before add_child, per the Core/loot-bag convention.
-	if not node.register(Terrain):
+	if not can_place_at(terrain, cell, tile_rect(), node.size, node.support_dirs):
+		node.free()
+		return
+	if not node.register(terrain):
 		node.free()
 		return
 	if not Items.player_inventory.consume_selected(1):
-		Terrain.remove_entity(cell)
+		node.unregister(terrain)
 		node.free()
 		return
 	# Parent is Main, like _drop_loot_bag — the same canvas as the tilemap.
 	get_parent().add_child(node)
+	# After add_child, so an override (3.4's power graph) reads a node that is
+	# actually in the world rather than one halfway into it.
+	node.on_placed()
 
 # --- Equipment ---------------------------------------------------------------
 
@@ -500,18 +513,31 @@ func tile_rect() -> Rect2i:
 	return tile_rect_at(global_position)
 
 
-## Placement validity. Terrain is injected so tests run on fresh instances.
-## Adjacency rule (locked): a placed block must touch a solid tile cardinally.
-static func can_place_at(terrain: Node, pos: Vector2i, occupied: Rect2i) -> bool:
-	if not terrain.can_player_edit(pos):
-		return false
-	if terrain.is_solid(pos):
-		return false
-	if terrain.get_entity(pos) != null:
-		return false
-	if occupied.has_point(pos):
-		return false
-	for offset: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
-		if terrain.is_solid(pos + offset):
-			return true
-	return false
+## Placement validity for a W×H footprint anchored at its TOP-LEFT cell.
+## Terrain is injected so tests run on fresh instances.
+##
+## Every cell has to be free, editable and clear of the player; support is one
+## question asked of the footprint as a whole, delegated to the SAME static
+## predicate the post-mine re-check calls ([automation.md](../../docs/systems/automation.md)),
+## so a machine can never be placeable somewhere it would immediately pop.
+##
+## `size` and `support_dirs` default to a 1×1 that mounts in any direction —
+## the block rule, unchanged, so every block call site stays a three-argument
+## call and the 2.7 behaviour is preserved by construction.
+static func can_place_at(
+		terrain: Node,
+		origin: Vector2i,
+		occupied: Rect2i,
+		size := Vector2i.ONE,
+		support_dirs := Deployable.SUPPORT_ALL,
+) -> bool:
+	for cell: Vector2i in Deployable.footprint_at(origin, size):
+		if not terrain.can_player_edit(cell):
+			return false
+		if terrain.is_solid(cell):
+			return false
+		if terrain.get_entity(cell) != null:
+			return false
+		if occupied.has_point(cell):
+			return false
+	return Deployable.is_supported_at(terrain, origin, size, support_dirs)
