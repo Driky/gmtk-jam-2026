@@ -26,6 +26,10 @@ const DEFAULT_HITBOX := preload("res://scenes/combat/swing_hitbox_default.tscn")
 ## Muzzle distance: clear of the 12×22 body, so a shot never spawns inside the
 ## tile the player is standing in and dies on frame one.
 const MUZZLE_OFFSET_PX := 14.0
+## Reach of the default swing arc (its Area2D sits at x = 20 with a 20×14 box,
+## so it lands out to 30 px), plus slack. A mob inside this counts as "in the
+## swing" and shields whatever deployable is behind it — see _hit_deployable.
+const MELEE_PRECEDENCE_PX := 34.0
 
 ## Grace window after any hit. Also what stops a mob's swing and its contact
 ## damage double-dipping on the same frame — both route through take_damage,
@@ -266,8 +270,48 @@ func _use(delta: float) -> void:
 	_use_left = stats.effective_cooldown()
 	if stats.use_kind == ItemStats.UseKind.SWING:
 		_swing(stats)
+		_hit_deployable(Terrain, target_tile())
 	else:
 		_shoot(stats)
+
+
+## Un-deploying is the SAME swing that mines tiles and hits mobs, so it works
+## with bare hands, a tool, a weapon or a fistful of stone — there is no
+## dedicated removal tool to carry, and no extra button to learn. Point at the
+## deployable (it highlights) and swing; each one takes a set number of hits.
+##
+## ❗️**A mob in swing range takes precedence and the deployable takes nothing.**
+## That rule is the whole reason removal can live on the busy button at all:
+## torches and machines survive a fight you have standing next to them. Tile
+## mining is deliberately NOT suppressed — only the deployable is protected.
+##
+## Terrain and the target cell are both parameters so this unit-tests on a
+## fresh instance without a mouse. `as Torch` rather than a group check is what
+## keeps the Core un-removable with no special case anywhere, and is exactly
+## what 3.1 generalises to `as Deployable`.
+func _hit_deployable(terrain: Node, cell: Vector2i) -> bool:
+	if _enemy_in_swing_range():
+		return false
+	if not in_reach(cell):
+		return false
+	var deployable := terrain.get_entity(cell) as Torch
+	if deployable == null:
+		return false
+	if deployable.take_removal_hit():
+		deployable.remove(terrain, get_tree().get_first_node_in_group(&"pickup_spawner"))
+	return true
+
+
+## Generous on purpose: protecting a deployable is the safe wrong answer, and
+## losing one mid-fight is the annoying one.
+func _enemy_in_swing_range() -> bool:
+	for node: Node in get_tree().get_nodes_in_group(&"enemies"):
+		var enemy := node as Node2D
+		if enemy == null:
+			continue
+		if enemy.global_position.distance_to(global_position) <= MELEE_PRECEDENCE_PX:
+			return true
+	return false
 
 
 func _swing(stats: ItemStats) -> void:

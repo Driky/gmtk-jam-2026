@@ -313,3 +313,144 @@ func test_level_up_raises_mana_the_same_way() -> void:
 	var gained := Progression.get_stat("max_mana") - max_before
 	assert_float(player.current_mana).is_equal_approx(10.0 + gained, 0.001)
 	Progression.reset_run()
+
+# --- Un-deploying with the use verb (2.7) ------------------------------------
+
+const TorchScene := preload("res://scenes/torch.tscn")
+
+
+## Records what the real spawner would have dropped, without the autoload
+## wiring or a Pickup in the tree.
+class SpawnerDouble:
+	extends Node
+
+	var drops: Array = []
+
+
+	func spawn_at(world_pos: Vector2, id: String, count: int, grants_xp := true) -> void:
+		drops.append({ pos = world_pos, id = id, count = count, grants_xp = grants_xp })
+
+
+var _spawner: SpawnerDouble
+
+
+func _torch_at(cell: Vector2i) -> Torch:
+	var torch: Torch = TorchScene.instantiate()
+	torch.setup(cell)
+	add_child(torch)
+	torch.register(_terrain)
+	return torch
+
+
+## Player standing on the cell, so the target is trivially within reach.
+func _swinger_at(cell: Vector2i) -> Player:
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.global_position = (Vector2(cell) + Vector2(0.5, 0.5)) * Player.TILE
+	return player
+
+
+func _make_spawner() -> SpawnerDouble:
+	_spawner = auto_free(SpawnerDouble.new())
+	_spawner.add_to_group(&"pickup_spawner")
+	add_child(_spawner)
+	return _spawner
+
+
+func test_a_swing_un_deploys_a_torch_and_pops_it_out_as_a_pickup() -> void:
+	var spawner := _make_spawner()
+	var torch := _torch_at(P)
+	var player := _swinger_at(P)
+	assert_bool(player._hit_deployable(_terrain, P)).is_true()
+	assert_object(_terrain.get_entity(P)).is_null()
+	assert_int(spawner.drops.size()).is_equal(1)
+	assert_str(spawner.drops[0].id).is_equal("torch")
+	# Queued, not gone: queue_free runs at end of frame. That deferral is the
+	# entire reason remove() clears the terrain entry eagerly instead.
+	assert_bool(torch.is_queued_for_deletion()).is_true()
+
+
+## place → remove → place must not be an XP fountain, so the dropped pickup
+## carries the same veto a player-placed block's drop does.
+func test_an_un_deployed_torch_pays_no_xp() -> void:
+	var spawner := _make_spawner()
+	_torch_at(P)
+	_swinger_at(P)._hit_deployable(_terrain, P)
+	assert_bool(spawner.drops[0].grants_xp).is_false()
+
+
+## The rule that lets removal share the busy button at all: a mob in swing range
+## shields whatever is behind it, so a fight next to your torches costs nothing.
+func test_a_mob_in_swing_range_shields_the_deployable() -> void:
+	_make_spawner()
+	_torch_at(P)
+	var player := _swinger_at(P)
+	var mob: Node2D = auto_free(Node2D.new())
+	mob.add_to_group(&"enemies")
+	add_child(mob)
+	mob.global_position = player.global_position + Vector2(Player.MELEE_PRECEDENCE_PX - 4.0, 0.0)
+	assert_bool(player._hit_deployable(_terrain, P)).is_false()
+	assert_object(_terrain.get_entity(P)).is_not_null() # Survived the fight.
+
+
+func test_a_mob_out_of_swing_range_does_not_shield_it() -> void:
+	_make_spawner()
+	_torch_at(P)
+	var player := _swinger_at(P)
+	var mob: Node2D = auto_free(Node2D.new())
+	mob.add_to_group(&"enemies")
+	add_child(mob)
+	mob.global_position = player.global_position + Vector2(Player.MELEE_PRECEDENCE_PX + 40.0, 0.0)
+	assert_bool(player._hit_deployable(_terrain, P)).is_true()
+
+
+## `as Torch` is the whole mechanism keeping the Core un-removable — there is
+## deliberately no special case for it anywhere.
+func test_a_non_torch_entity_is_not_removable() -> void:
+	_make_spawner()
+	var core: Node2D = auto_free(Node2D.new())
+	core.add_to_group(&"core")
+	_terrain.place_entity(P, core)
+	assert_bool(_swinger_at(P)._hit_deployable(_terrain, P)).is_false()
+	assert_object(_terrain.get_entity(P)).is_same(core)
+
+
+func test_removal_respects_reach() -> void:
+	_make_spawner()
+	_torch_at(P)
+	var player := _swinger_at(P)
+	player.global_position = Vector2.ZERO # Miles away; target_tile follows the mouse.
+	assert_bool(player._hit_deployable(_terrain, P)).is_false()
+	assert_object(_terrain.get_entity(P)).is_not_null()
+
+
+## Hit counting, not damage accumulation — a swing is a discrete beat, and
+## "three hits" is something a player can feel and count. A torch is one.
+func test_a_torch_comes_off_in_one_hit() -> void:
+	var torch := _torch_at(P)
+	assert_bool(torch.take_removal_hit()).is_true()
+	assert_float(torch.removal_ratio()).is_equal(1.0)
+
+
+## A tougher deployable must survive its first hits, and report progress for the
+## cursor highlight while it does. Drives the counter directly, since the torch
+## is deliberately a one-hit item.
+func test_a_multi_hit_deployable_reports_progress_before_coming_off() -> void:
+	var torch := _torch_at(P)
+	torch._removal_hits = 0
+	var needed := Torch.REMOVAL_HITS
+	for i in needed - 1:
+		assert_bool(torch.take_removal_hit()).is_false()
+	assert_float(torch.removal_ratio()).is_less_equal(1.0)
+
+
+## A removed cell has to be re-placeable on the SAME frame — queue_free defers
+## to end of frame, so an entity entry cleared only by _exit_tree would still
+## be there when the player re-places into it.
+func test_a_removed_cell_is_free_immediately() -> void:
+	_make_spawner()
+	_torch_at(P)
+	_swinger_at(P)._hit_deployable(_terrain, P)
+	var replacement: Torch = auto_free(TorchScene.instantiate())
+	replacement.setup(P)
+	assert_bool(replacement.register(_terrain)).is_true()

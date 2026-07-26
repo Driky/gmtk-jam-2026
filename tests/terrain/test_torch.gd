@@ -49,29 +49,52 @@ func test_register_fails_on_an_occupied_cell() -> void:
 	assert_bool(second.register(_terrain)).is_false()
 	assert_object(_terrain.get_entity(CELL)).is_same(first)
 
-# --- Pick-up -----------------------------------------------------------------
+# --- Removal -----------------------------------------------------------------
+
+
+## Hit counting, not damage accumulation: a swing is a discrete beat on the
+## item's cooldown, and "three hits" is something a player can feel and count.
+func test_a_torch_comes_off_in_one_hit() -> void:
+	var torch := _torch(CELL)
+	assert_bool(torch.take_removal_hit()).is_true()
+	assert_float(torch.removal_ratio()).is_equal(1.0)
+
+
+func test_removal_ratio_starts_empty() -> void:
+	assert_float(_torch(CELL).removal_ratio()).is_equal(0.0)
 
 
 ## The deferred-free trap: queue_free runs at end of frame, so an entity entry
 ## cleared only by _exit_tree would still be there when the player re-places
-## into the same cell on the very next physics tick.
-func test_pick_up_frees_the_cell_immediately() -> void:
+## into the same cell on the very next tick.
+func test_removal_frees_the_cell_immediately() -> void:
 	var torch: Torch = TorchScene.instantiate()
 	torch.setup(CELL)
 	add_child(torch)
 	assert_bool(torch.register(_terrain)).is_true()
-	torch.pick_up(_terrain)
+	torch.remove(_terrain, null)
 	assert_object(_terrain.get_entity(CELL)).is_null() # Before any frame boundary.
 
 
-func test_a_cell_freed_by_pick_up_accepts_a_new_torch() -> void:
+func test_a_cell_freed_by_removal_accepts_a_new_torch() -> void:
 	var first: Torch = TorchScene.instantiate()
 	first.setup(CELL)
 	add_child(first)
 	first.register(_terrain)
-	first.pick_up(_terrain)
+	first.remove(_terrain, null)
 	var second := _torch(CELL)
 	assert_bool(second.register(_terrain)).is_true()
+
+
+## A missing spawner must not crash the removal — the cell still has to be
+## freed, or a failed drop would leave an un-placeable hole in the world.
+func test_removal_without_a_spawner_still_frees_the_cell() -> void:
+	var torch: Torch = TorchScene.instantiate()
+	torch.setup(CELL)
+	add_child(torch)
+	torch.register(_terrain)
+	torch.remove(_terrain, null)
+	assert_object(_terrain.get_entity(CELL)).is_null()
 
 # --- Lighting seam -----------------------------------------------------------
 
