@@ -19,6 +19,16 @@ const InserterScene := preload("res://scenes/automation/inserter.tscn")
 
 ## Playable (x in [50, 150)) and far from world edges.
 const ORIGIN := Vector2i(80, 100)
+## Where the chain's power comes from — above the line, well inside its own reach
+## of every machine on it.
+const POWER_CELL := ORIGIN + Vector2i(2, -3)
+## Far enough that no footprint cell of the chain is inside the disc, so the
+## negative twin is genuinely "out of radius" rather than "just barely".
+const FAR_POWER_CELL := ORIGIN + Vector2i(60, 0)
+const POWER_RADIUS := 12.0 ## Tiles; covers the whole line from POWER_CELL.
+## Comfortably above the chain's demand (one miner + one furnace), so these tests
+## measure the chain and not the brownout arithmetic.
+const POWER_OUTPUT := 10.0
 ## Generous: the chain has three cooldowns in series (miner 10, three inserters
 ## at 5) plus a 20-tick smelt, and this asserts arrival, not throughput.
 const RUN_TICKS := 200
@@ -38,6 +48,26 @@ func before_test() -> void:
 	_automation.game = _game
 	add_child(_automation)
 	_automation.set_process(false)
+
+
+## Stands in for the generator until it ships: a fuelled emitter with a radius.
+## The chain's own suite has no business modelling a fuel economy — what it needs
+## is "there is power here".
+class Supply:
+	extends PowerEmitter
+
+	func power_supply() -> float:
+		return POWER_OUTPUT
+
+
+func _power_at(cell: Vector2i) -> PowerEmitter:
+	var node: Supply = auto_free(Supply.new())
+	node.automation = _automation
+	node.power_radius = POWER_RADIUS
+	node.setup(cell)
+	add_child(node)
+	node.on_placed()
+	return node
 
 
 func _place(scene: PackedScene, cell: Vector2i, dir := Vector2i.RIGHT) -> Deployable:
@@ -64,7 +94,14 @@ func _place(scene: PackedScene, cell: Vector2i, dir := Vector2i.RIGHT) -> Deploy
 ## a belt facing a machine JAMS ([automation.md](../../docs/systems/automation.md)
 ## §Categories → Inserter), and that rule is deliberately unchanged at 3.3. The
 ## jam is what the second inserter then pulls from.
-func _build() -> Dictionary:
+##
+## ❗️**Since 3.4 the chain also needs POWER.** The miner and the furnace both
+## draw, and `is_powered()` is no longer a stub — so an emitter over the line is
+## as structural to this fixture as the floor under it. `power_cell` is a
+## parameter for exactly one reason: the negative twin below moves it out of
+## range and asserts the chain produces nothing.
+func _build(power_cell := POWER_CELL) -> Dictionary:
+	_power_at(power_cell)
 	var miner_cell := ORIGIN + Vector2i(-3, 0) # 3×2 at x 77..79, rows 100–101.
 	for ore: Vector2i in Deployable.harvest_cells_at(miner_cell, Vector2i(3, 2), Vector2i.LEFT):
 		_terrain.set_tile(ore, "copper_deposit")
@@ -104,6 +141,36 @@ func test_ore_becomes_bars_at_the_far_end_with_nobody_clicking() -> void:
 		"Nothing reached the end of the chain in %d ticks" % RUN_TICKS,
 	).is_false()
 	assert_str(out.slot().id).is_equal("copper_bar")
+
+
+## ❗️**The negative twin, and the reason the one above proves anything.** Same
+## chain, same ore, same 200 ticks — with the power moved out of reach. Without
+## this the end-to-end test would pass just as happily against an `is_powered()`
+## that still returned `true` unconditionally.
+func test_the_same_chain_out_of_radius_produces_nothing() -> void:
+	var chain := _build(FAR_POWER_CELL)
+
+	_run()
+
+	var miner: Miner = chain.miner
+	assert_bool(miner.is_powered()).is_false()
+	assert_bool(miner.slot_empty()).override_failure_message(
+		"An unpowered miner extracted ore",
+	).is_true()
+	assert_bool((chain.belt_out as Conveyor).slot_empty()).is_true()
+
+
+## And the gate is not one-way: the chain that was dead comes back the moment a
+## generator lands in reach, with no re-placement of anything.
+func test_the_dead_chain_starts_the_moment_power_arrives() -> void:
+	var chain := _build(FAR_POWER_CELL)
+	_run(20)
+	assert_bool((chain.miner as Miner).slot_empty()).is_true()
+
+	_power_at(POWER_CELL)
+	_run()
+
+	assert_str((chain.belt_out as Conveyor).slot().get("id", "")).is_equal("copper_bar")
 
 
 ## The intermediate hop has to move too — a belt that never receives means the

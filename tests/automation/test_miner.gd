@@ -18,6 +18,21 @@ const MinerScene := preload("res://scenes/automation/miner.tscn")
 const ORIGIN := Vector2i(100, 100)
 ## The authored footprint, restated so a test reads without opening the scene.
 const SIZE := Vector2i(3, 2)
+## Deliberately huge: this suite is about extraction, not about geometry, so the
+## fixture's only job is "there is power here".
+const POWER_RADIUS := 64.0
+
+
+## ❗️Since 3.4 a miner on no grid does not extract at all, so every test here
+## needs a supply. Kept as a local double rather than the real generator: this
+## suite has no business modelling a fuel economy, and the repo already
+## duplicates small doubles per suite (`SpawnerDouble`) rather than sharing them.
+class Supply:
+	extends PowerEmitter
+
+	func power_supply() -> float:
+		return 100.0
+
 
 var _terrain: Node
 var _automation: Node
@@ -45,6 +60,16 @@ func before_test() -> void:
 		func(pos: Vector2i, material_id: String, source: int) -> void:
 			_broken.append([pos, material_id, source]),
 	)
+	_power_the_world()
+
+
+func _power_the_world() -> void:
+	var node: Supply = auto_free(Supply.new())
+	node.automation = _automation
+	node.power_radius = POWER_RADIUS
+	node.setup(ORIGIN)
+	add_child(node)
+	node.on_placed()
 
 
 ## A miner at `cell` facing `dir`, with `deposit` filling its whole harvest block

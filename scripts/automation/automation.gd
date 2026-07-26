@@ -10,6 +10,8 @@ signal idle_machines_changed(count: int)
 
 const GameScript := preload("res://scripts/game/game.gd")
 
+const TILE := TileLayout.TILE_SIZE
+
 const TICK_HZ := 10
 const TICK_INTERVAL := 1.0 / TICK_HZ
 ## Frames longer than a tick are caught up, but only this many at once.
@@ -44,6 +46,20 @@ var _conveyors: Array[Deployable] = []
 ## A placement or removal invalidates the row-major order; the sort is deferred
 ## to the next tick so twenty placements in one frame cost one sort.
 var _order_dirty := false
+
+## The fourth registry (3.4): generators and relays, the only things that emit a
+## coverage disc. Kept apart from `_machines` because it is walked for a
+## different reason — supply, not work.
+var _emitters: Array[PowerEmitter] = []
+## Same deferral as `_order_dirty`, for the same reason: the graph is rebuilt on
+## place/remove only, never per tick
+## ([automation.md](../../docs/systems/automation.md) §Power).
+var _power_dirty := false
+var _grid: PowerGrid = null
+## Component per machine, parallel to `_machines`, filled by the demand pass and
+## read by the stamping pass — so the disc walk happens once per machine per
+## tick rather than twice.
+var _machine_grids: PackedInt32Array = PackedInt32Array()
 ## Last count emitted, so `idle_machines_changed` fires on a transition rather
 ## than 10×/second.
 var _idle_machines := 0
@@ -97,12 +113,16 @@ func advance(delta: float) -> void:
 ## and the inserter's give-back-on-refusal is only safe because conveyors have
 ## not advanced yet ([automation.md](../../docs/systems/automation.md)).
 ##
+## Power resolves BEFORE all three (3.4): a machine's tick asks what its ratio
+## is, so the answer has to already be stamped on it.
+##
 ## Public so tests can drive it without waiting a frame, mirroring
 ## `drain_support_queue()`.
 func step_tick() -> void:
 	Perf.begin(&"automation.tick")
 	tick_count += 1
 	_ensure_order()
+	_refresh_power()
 	for machine: Deployable in _machines:
 		machine.on_tick(terrain)
 	for inserter: Deployable in _inserters:
@@ -149,6 +169,20 @@ func unregister_conveyor(conveyor: Deployable) -> void:
 	_conveyors.erase(conveyor)
 
 
+## ❗️Marks the graph dirty rather than rebuilding: twenty relays placed in one
+## frame cost one rebuild, exactly as twenty placements cost one sort.
+func register_emitter(emitter: PowerEmitter) -> void:
+	if _emitters.has(emitter):
+		return
+	_emitters.append(emitter)
+	_power_dirty = true
+
+
+func unregister_emitter(emitter: PowerEmitter) -> void:
+	_emitters.erase(emitter)
+	_power_dirty = true
+
+
 ## Read-only views for the item renderer and the debug slot overlay. Handed out
 ## rather than copied: both are per-frame readers of a list of a few hundred.
 func conveyors() -> Array[Deployable]:
@@ -161,6 +195,16 @@ func inserters() -> Array[Deployable]:
 
 func machines() -> Array[Deployable]:
 	return _machines
+
+
+func emitters() -> Array[PowerEmitter]:
+	return _emitters
+
+
+## The live graph, for the power overlay. Never null once a tick has run; null
+## before the first one, which is exactly when there is nothing to draw.
+func power_grid() -> PowerGrid:
+	return _grid
 
 
 func idle_machines() -> int:
@@ -231,6 +275,12 @@ func reset_run() -> void:
 	_machines.clear()
 	_inserters.clear()
 	_conveyors.clear()
+	# Same argument as the other three, plus one more: the grid is DERIVED from
+	# these nodes' positions, so a surviving graph would hand out coverage from
+	# generators that no longer exist.
+	_emitters.clear()
+	_grid = null
+	_power_dirty = false
 	_order_dirty = false
 	_idle_machines = 0
 	tick_count = 0
@@ -259,10 +309,92 @@ func _probe(cell: Vector2i) -> void:
 func _advance_conveyors() -> void:
 	Conveyor.advance_all(terrain, _conveyors)
 
+# --- Power (3.4) --------------------------------------------------------------
+
+
+## The power pass, at the TOP of the tick: rebuild the graph if it moved, burn
+## fuel, then supply → demand → ratio.
+##
+## ❗️**Two machine passes, and they cannot be folded into one.** A grid's ratio
+## is `supply / total demand`, so no machine's ratio exists until every machine
+## on that grid has declared what it draws. Stamping as we go would give the
+## first machine walked a ratio computed from a partial denominator — the whole
+## factory would then run at a rate that depends on row-major order.
+##
+## Its own `Perf` section inside `automation.tick`: the disc walk is the one part
+## of the tick whose cost scales with emitters × machines rather than with either.
+func _refresh_power() -> void:
+	Perf.begin(&"automation.power")
+	if _grid == null or _power_dirty:
+		_rebuild_power_grid()
+	# Before supply is read, so a generator running dry stops powering on this
+	# tick rather than one tick late.
+	for emitter: PowerEmitter in _emitters:
+		emitter.burn_tick()
+	_grid.begin_tick()
+	for i in _emitters.size():
+		_grid.add_supply(_grid.component_of(i), _emitters[i].power_supply())
+	_machine_grids.resize(_machines.size())
+	for i in _machines.size():
+		var machine := _machines[i]
+		# A machine that draws nothing is skipped in BOTH passes, so its ratio
+		# stays at the base's 1.0 and no overlay reports a free machine as
+		# browned out.
+		if machine.power_demand <= 0.0:
+			_machine_grids[i] = PowerGrid.NO_GRID
+			continue
+		var component := _grid_of_machine(machine)
+		_machine_grids[i] = component
+		_grid.add_demand(component, machine.power_demand)
+	_grid.resolve()
+	for i in _machines.size():
+		if _machines[i].power_demand <= 0.0:
+			continue
+		_machines[i].set_power_ratio(_grid.ratio_of(_machine_grids[i]))
+	Perf.end()
+
+
+## ❗️Sorted row-major first, so component NUMBERING is derived from the world
+## rather than from placement order — the same argument `_ensure_order` makes for
+## the tick. It changes no ratio, but the overlay colours a grid by its index,
+## and a save/load that restored emitters in file order would otherwise repaint
+## the whole factory for no reason ([save.md](../../docs/systems/save.md)).
+func _rebuild_power_grid() -> void:
+	_power_dirty = false
+	_emitters.sort_custom(_row_major)
+	var centres := PackedVector2Array()
+	var radii := PackedFloat32Array()
+	centres.resize(_emitters.size())
+	radii.resize(_emitters.size())
+	for i in _emitters.size():
+		# The node's own anchor, which `setup()` puts at the footprint centre —
+		# the same point the overlay draws the circle around.
+		centres[i] = _emitters[i].global_position
+		radii[i] = _emitters[i].power_radius * TILE
+	if _grid == null:
+		_grid = PowerGrid.new()
+	_grid.build(centres, radii)
+
+
+## ❗️**ANY footprint cell inside a disc powers the whole machine.** A 3×2 miner
+## with one corner in the circle is fair — the alternative (its centre only) puts
+## a machine's power on a point the player cannot see, and a big machine that is
+## visibly half-covered but dead reads as a bug.
+func _grid_of_machine(machine: Deployable) -> int:
+	for cell: Vector2i in machine.footprint():
+		var component := _grid.grid_of_point((Vector2(cell) + Vector2(0.5, 0.5)) * TILE)
+		if component != PowerGrid.NO_GRID:
+			return component
+	return PowerGrid.NO_GRID
+
 
 ## Tally machines with nothing to do, at the tail of the tick. Free in practice:
 ## it walks a list the tick has just walked anyway, and `is_idle()` is a flag the
 ## machine recomputed a few microseconds ago rather than a fresh terrain probe.
+##
+## ❗️**Emitters are tallied too**, though they are not machines: a generator with
+## no fuel is the same "come and feed me" signal as a miner over bare rock, and
+## it is the one that stops the whole factory rather than one machine.
 ##
 ## Emitted only on CHANGE, so the HUD repaints on a transition instead of ten
 ## times a second.
@@ -270,6 +402,9 @@ func _refresh_idle_count() -> void:
 	var idle := 0
 	for machine: Deployable in _machines:
 		if machine.is_idle():
+			idle += 1
+	for emitter: PowerEmitter in _emitters:
+		if emitter.is_idle():
 			idle += 1
 	if idle == _idle_machines:
 		return

@@ -10,6 +10,7 @@ support_dirs = 15
 removal_hits = 2
 item_id = "furnace"
 directional = false
+power_demand = 1.0
 station_id = "furnace"
 
 [node name="Visual" type="ColorRect" parent="."]

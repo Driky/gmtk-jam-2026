@@ -46,6 +46,16 @@ const MAX_DRAIN_STEPS := 4096
 ## sets it, and the player never learns that: it asks the scene, not the class
 ## ([automation.md](../../docs/systems/automation.md) §Categories).
 @export var harvests_deposits := false
+## Power drawn per tick while running. **0 means it runs everywhere, for free**
+## — and that is the authored answer for conveyors, inserters and torches, not a
+## special case in the tick: neither of them ever asks `is_powered()`, so
+## "machines only draw power" costs no code at all
+## ([automation.md](../../docs/systems/automation.md) §Power).
+@export var power_demand := 0.0
+## Coverage radius in TILES; `> 0` is what makes something an emitter. Authored
+## in tiles and multiplied by `TILE` at the one place the graph is built, so no
+## reader has to remember which unit it is holding.
+@export var power_radius := 0.0
 
 ## Which way it points. RIGHT by default, so a non-directional deployable still
 ## has a defined facing that nobody reads. Runtime rather than authored: the
@@ -62,6 +72,15 @@ var current_hp := max_hp
 ## A plain var rather than an @export — cross-class enum exports are finicky in
 ## 4.x and there is no authoring need until a turret picks a side.
 var faction := Projectile.Faction.PLAYER
+
+## Stamped by `Automation` before every machine pass. ❗️Defaults to **1.0**, and
+## that default is deliberate rather than optimistic: the only reader that ever
+## sees it is a machine that was never ticked through `Automation` — i.e. a unit
+## test driving `on_tick` by hand. Anything in a real world is re-stamped ten
+## times a second, so a machine cannot silently run on this value.
+var _power_ratio := 1.0
+## Fractional tick budget — see `spend_power_tick`.
+var _power_accum := 0.0
 
 var _cell := Vector2i.ZERO
 var _removal_hits := 0
@@ -259,8 +278,8 @@ func pop_to_pickup(spawner: Node = null) -> void:
 # --- Virtuals ----------------------------------------------------------------
 
 
-## After the cells are claimed and the node is in the tree. 3.4's power graph
-## hooks here; empty in 3.1 on purpose.
+## After the cells are claimed and the node is in the tree. Every registry joins
+## here — the three tick phases and (3.4) the emitter list.
 func on_placed() -> void:
 	pass
 
@@ -343,13 +362,55 @@ func on_tick(_terrain: Node) -> void:
 func is_idle() -> bool:
 	return false
 
+# --- Power (3.4) --------------------------------------------------------------
+#
+# Three reads and one stateful spend, all on the BASE, so every machine gets the
+# whole brownout rule by calling one function and no machine ever implements it.
 
-## The 3.4 seam, stubbed. Every machine's `on_tick` already early-outs on it, so
-## power lands as a real implementation here plus the coverage graph and nothing
-## else changes. ⚠️ Until 3.4 this is always true, which means **nothing in 3.3
-## runs against its real gate** — known and accepted
-## ([automation.md](../../docs/systems/automation.md) §Power).
+
+## Is this machine running at all? A `power_demand` of 0 is always true — that
+## is what makes a torch, a belt and an inserter free — and anything drawing
+## power needs a non-zero ratio, i.e. a fuelled grid covering it.
+##
+## ⚠️ **This is a state question, not a permission to act.** A machine's tick
+## gate is `spend_power_tick()`; this one is for the overlays and the tests,
+## which want "is it dead" rather than "may it run this tick".
 func is_powered() -> bool:
+	return power_demand <= 0.0 or _power_ratio > 0.0
+
+
+## `min(1, supply/demand)` for the grid covering this machine, 0.0 when nothing
+## covers it. Read by the power overlay (amber vs red) and the slot overlay.
+func power_ratio() -> float:
+	return _power_ratio
+
+
+func set_power_ratio(ratio: float) -> void:
+	_power_ratio = clampf(ratio, 0.0, 1.0)
+
+
+## ❗️**STATEFUL — call exactly once per tick, from `on_tick` only.** A second
+## call in the same tick spends a second tick's worth of budget and makes the
+## machine run fast under a brownout.
+##
+## A fractional accumulator: each tick banks `ratio`, and the machine acts on the
+## tick that carries the running total past 1.0. At ratio 1.0 that is *exactly*
+## every tick with no float drift; at 0.5 it is every other tick, i.e. five
+## actions in ten ticks.
+##
+## ❗️**Why this and not scaling each machine's own cooldown.** One gate on the
+## base that every machine reuses unchanged, versus the brownout rule copied into
+## N machines. Every machine's timing also stays in whole ticks, so 4.3
+## serializes an int and 3.3's cooldown/progress tests keep their exact numbers.
+func spend_power_tick() -> bool:
+	if power_demand <= 0.0:
+		return true
+	if _power_ratio <= 0.0:
+		return false
+	_power_accum += _power_ratio
+	if _power_accum < 1.0:
+		return false
+	_power_accum -= 1.0
 	return true
 
 # --- Internals ---------------------------------------------------------------
@@ -385,6 +446,8 @@ static var _scene_dirs_cache := { }
 static var _scene_visual_cache := { }
 static var _scene_directional_cache := { }
 static var _scene_harvests_cache := { }
+static var _scene_power_radius_cache := { }
+static var _scene_power_demand_cache := { }
 
 
 ## A scene's authored footprint, for the placement ghost. The ghost redraws
@@ -419,6 +482,22 @@ static func scene_harvests(scene: PackedScene) -> bool:
 	return _scene_harvests_cache[scene]
 
 
+## The coverage radius (in TILES) placing this scene would emit, `0.0` for
+## anything that is not an emitter. Same anti-drift contract as `scene_size`:
+## the ghost's prospective circle is the authored number, not a second copy of it.
+static func scene_power_radius(scene: PackedScene) -> float:
+	_cache_scene(scene)
+	return _scene_power_radius_cache[scene]
+
+
+## What placing this scene would draw off a grid, `0.0` for anything that runs
+## free. Read by the ghost to decide whether existing coverage is worth showing:
+## "will this land powered" is only a question for something that needs power.
+static func scene_power_demand(scene: PackedScene) -> float:
+	_cache_scene(scene)
+	return _scene_power_demand_cache[scene]
+
+
 ## The authored look, so the ghost can show WHAT is being placed rather than
 ## only where and how big. `{}` when the scene has no coloured rect to preview.
 ##
@@ -437,6 +516,8 @@ static func _cache_scene(scene: PackedScene) -> void:
 	_scene_dirs_cache[scene] = probe.support_dirs
 	_scene_directional_cache[scene] = probe.directional
 	_scene_harvests_cache[scene] = probe.harvests_deposits
+	_scene_power_radius_cache[scene] = probe.power_radius
+	_scene_power_demand_cache[scene] = probe.power_demand
 	_scene_visual_cache[scene] = _probe_visual(probe)
 	probe.free()
 

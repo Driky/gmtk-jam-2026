@@ -465,3 +465,256 @@ func test_reset_run_zeroes_the_idle_count() -> void:
 
 	assert_int(_automation.idle_machines()).is_equal(0)
 	assert_array(_automation.machines()).is_empty()
+
+# --- Power (3.4) --------------------------------------------------------------
+
+
+## Stands in for a generator without the fuel economy: it reports whatever
+## supply a test says, and records that the tick asked it to burn.
+class Supply:
+	extends PowerEmitter
+
+	var output := 0.0
+	var burns := 0
+	var dry := false
+
+
+	func burn_tick() -> void:
+		burns += 1
+
+
+	func power_supply() -> float:
+		return output
+
+
+	func is_idle() -> bool:
+		return dry
+
+
+## A machine that only exists to draw power, so the demand and ratio arithmetic
+## is exercised without a miner and a deposit.
+class Drawing:
+	extends Deployable
+
+	var seen_ratio := -1.0
+	var acted := 0
+
+
+	func on_tick(_terrain: Node) -> void:
+		seen_ratio = power_ratio()
+		if spend_power_tick():
+			acted += 1
+
+
+## `radius` is in TILES, exactly as a scene authors it.
+func _emitter_at(cell: Vector2i, radius: float, output := 0.0) -> Supply:
+	var node: Supply = auto_free(Supply.new())
+	node.automation = _automation
+	node.power_radius = radius
+	node.output = output
+	node.setup(cell)
+	add_child(node)
+	node.on_placed()
+	return node
+
+
+func _drawing_at(cell: Vector2i, demand := 1.0) -> Drawing:
+	var node: Drawing = auto_free(Drawing.new())
+	node.power_demand = demand
+	node.setup(cell)
+	add_child(node)
+	_automation.register_machine(node)
+	return node
+
+
+func test_an_emitter_joins_and_leaves_the_registry_through_the_virtuals() -> void:
+	var emitter := _emitter_at(CELL, 4.0)
+	assert_array(_automation.emitters()).contains_exactly([emitter])
+
+	emitter.on_removed()
+
+	assert_array(_automation.emitters()).is_empty()
+
+
+## Fuel burns whether or not anything is drawing — [terrain.md] says so, and it
+## is what makes the coal deposit tier mean something.
+func test_every_emitter_is_asked_to_burn_once_per_tick() -> void:
+	var emitter := _emitter_at(CELL, 4.0, 5.0)
+	_automation.step_tick()
+	_automation.step_tick()
+	assert_int(emitter.burns).is_equal(2)
+
+
+## ❗️The graph is rebuilt on place/remove ONLY, never per tick. Proved by
+## sliding an emitter behind the registry's back: the grid keeps the position it
+## was built with, because nothing told it anything moved.
+func test_the_graph_is_rebuilt_only_when_the_emitter_set_changes() -> void:
+	var emitter := _emitter_at(CELL, 4.0, 5.0)
+	_automation.step_tick()
+	var built_at: Vector2 = _automation.power_grid().centre_of(0)
+
+	emitter.global_position += Vector2(500.0, 0.0)
+	_automation.step_tick()
+
+	assert_vector(_automation.power_grid().centre_of(0)).is_equal(built_at)
+
+
+func test_placing_a_second_emitter_rebuilds_the_graph() -> void:
+	_emitter_at(CELL, 4.0, 5.0)
+	_automation.step_tick()
+	assert_int(_automation.power_grid().emitter_count()).is_equal(1)
+
+	_emitter_at(CELL + Vector2i(50, 0), 4.0, 5.0)
+	_automation.step_tick()
+
+	assert_int(_automation.power_grid().emitter_count()).is_equal(2)
+	assert_int(_automation.power_grid().component_count()).is_equal(2)
+
+
+func test_a_machine_inside_a_fuelled_radius_is_stamped_at_full_rate() -> void:
+	_emitter_at(CELL, 4.0, 10.0)
+	var machine := _drawing_at(CELL + Vector2i(2, 0))
+
+	_automation.step_tick()
+
+	assert_float(machine.power_ratio()).is_equal_approx(1.0, 0.0001)
+	assert_bool(machine.is_powered()).is_true()
+
+
+## ❗️The seam 3.3 shipped stubbed: outside every circle, a machine that draws
+## power does nothing at all.
+func test_a_machine_outside_every_radius_is_stamped_dead() -> void:
+	_emitter_at(CELL, 4.0, 10.0)
+	var machine := _drawing_at(CELL + Vector2i(40, 0))
+
+	for i in 10:
+		_automation.step_tick()
+
+	assert_float(machine.power_ratio()).is_equal_approx(0.0, 0.0001)
+	assert_bool(machine.is_powered()).is_false()
+	assert_int(machine.acted).is_equal(0)
+
+
+## A relay covers, but supplies nothing — coverage alone does not run a factory.
+func test_a_radius_with_no_supply_powers_nothing() -> void:
+	_emitter_at(CELL, 4.0) # output 0.0: a relay.
+	var machine := _drawing_at(CELL + Vector2i(1, 0))
+
+	_automation.step_tick()
+
+	assert_bool(machine.is_powered()).is_false()
+
+
+## Demand is summed across every machine on the component before any ratio
+## exists — which is why the pass is two loops, not one.
+func test_demand_is_summed_per_component() -> void:
+	_emitter_at(CELL, 4.0, 2.0)
+	var a := _drawing_at(CELL + Vector2i(1, 0))
+	var b := _drawing_at(CELL + Vector2i(2, 0))
+	var c := _drawing_at(CELL + Vector2i(3, 0))
+	var d := _drawing_at(CELL + Vector2i(-1, 0))
+
+	_automation.step_tick()
+
+	var grid: PowerGrid = _automation.power_grid()
+	assert_float(grid.demand_of(0)).is_equal_approx(4.0, 0.0001)
+	for machine: Drawing in [a, b, c, d]:
+		assert_float(machine.power_ratio()).is_equal_approx(0.5, 0.0001)
+
+
+## ❗️The ordering proof: every machine sees the SAME ratio on the tick it runs,
+## whichever position it holds in the row-major walk. A single-pass solver would
+## give the first machine 1.0 and the last one 0.25.
+func test_every_machine_sees_the_final_ratio_on_the_tick_it_runs() -> void:
+	_emitter_at(CELL, 4.0, 2.0)
+	var first := _drawing_at(CELL + Vector2i(-1, 0))
+	var last := _drawing_at(CELL + Vector2i(3, 0))
+	_drawing_at(CELL + Vector2i(1, 0))
+	_drawing_at(CELL + Vector2i(2, 0))
+
+	_automation.step_tick()
+
+	assert_float(first.seen_ratio).is_equal_approx(0.5, 0.0001)
+	assert_float(last.seen_ratio).is_equal_approx(0.5, 0.0001)
+
+
+## Two generators too far apart to touch are two economies: starving one must
+## not slow the other.
+func test_separate_grids_do_not_share_supply() -> void:
+	_emitter_at(CELL, 4.0, 10.0)
+	_emitter_at(CELL + Vector2i(60, 0), 4.0, 0.0)
+	var fed := _drawing_at(CELL + Vector2i(1, 0))
+	var starved := _drawing_at(CELL + Vector2i(61, 0))
+
+	_automation.step_tick()
+
+	assert_float(fed.power_ratio()).is_equal_approx(1.0, 0.0001)
+	assert_float(starved.power_ratio()).is_equal_approx(0.0, 0.0001)
+
+
+## ❗️ANY footprint cell inside the disc powers the whole machine — a 3×2 with one
+## corner covered is fair, and a visibly half-covered machine that is dead reads
+## as a bug.
+func test_a_machine_with_one_footprint_cell_in_range_is_powered() -> void:
+	_emitter_at(CELL, 2.0, 10.0)
+	var machine: Drawing = auto_free(Drawing.new())
+	machine.power_demand = 1.0
+	machine.size = Vector2i(3, 2)
+	# ❗️Anchored so the origin cell — the FIRST one the walk visits — is outside
+	# the circle and only the far column is inside. A check that stopped at the
+	# origin (or at the centre) would pass every other test here and fail this one.
+	machine.setup(CELL + Vector2i(-3, 0))
+	add_child(machine)
+	_automation.register_machine(machine)
+
+	_automation.step_tick()
+
+	assert_bool(machine.is_powered()).is_true()
+
+
+## A machine authored with no demand keeps the base's 1.0 rather than being
+## stamped dead for standing outside every circle — otherwise the slot overlay
+## would report a free machine as browned out.
+func test_a_zero_demand_machine_is_never_stamped() -> void:
+	_emitter_at(CELL, 2.0, 10.0)
+	var free := _drawing_at(CELL + Vector2i(40, 0), 0.0)
+
+	_automation.step_tick()
+
+	assert_float(free.power_ratio()).is_equal_approx(1.0, 0.0001)
+	assert_int(free.acted).is_equal(1)
+	assert_float(_automation.power_grid().demand_of(0)).is_equal_approx(0.0, 0.0001)
+
+
+## ❗️A generator with no fuel joins the HUD's idle tally beside a dry miner: both
+## mean "come and feed me", and this one stops the whole factory.
+func test_a_dry_emitter_is_counted_by_the_idle_tally() -> void:
+	var generator := _emitter_at(CELL, 4.0)
+	generator.dry = true
+	_automation.register_machine(_idler_at(CELL + Vector2i(6, 0), true))
+
+	_automation.step_tick()
+
+	assert_int(_automation.idle_machines()).is_equal(2)
+
+	generator.dry = false
+	_automation.step_tick()
+
+	assert_int(_automation.idle_machines()).is_equal(1)
+
+
+## ❗️Emitters die with the scene reload without ever being popped, exactly like
+## the other three registries — and the grid is derived from their positions, so
+## a surviving graph would hand out coverage from generators that are gone.
+func test_reset_run_clears_the_emitters_and_drops_the_grid() -> void:
+	_emitter_at(CELL, 4.0, 10.0)
+	_automation.step_tick()
+	assert_object(_automation.power_grid()).is_not_null()
+
+	_automation.reset_run()
+
+	assert_array(_automation.emitters()).is_empty()
+	assert_object(_automation.power_grid()).is_null()
+	# And the next run's first tick builds a fresh, empty one rather than faulting.
+	_automation.step_tick()
+	assert_int(_automation.power_grid().component_count()).is_equal(0)

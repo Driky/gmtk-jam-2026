@@ -11,6 +11,7 @@ removal_hits = 2
 item_id = "miner"
 directional = true
 harvests_deposits = true
+power_demand = 1.0
 extract_ticks = 10
 extract_count = 1
 

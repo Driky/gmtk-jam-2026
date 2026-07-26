@@ -417,14 +417,98 @@ func test_the_base_refuses_every_transfer() -> void:
 	assert_array(node.take_cargo()).is_empty()
 
 
-## The other two defaults 3.3 adds. `is_idle` false is what lets the HUD counter
-## walk every machine with no type check; `is_powered` true is the 3.4 stub every
-## machine tick already asks.
-func test_the_base_is_never_idle_and_always_powered() -> void:
+## `is_idle` false is what lets the HUD counter walk every machine with no type
+## check. A default `power_demand` of 0 is what makes a torch, a belt and an
+## inserter run everywhere for free — "machines only draw power" is authoring,
+## not a branch in the tick ([automation.md](../../docs/systems/automation.md)).
+func test_the_base_is_never_idle_and_draws_no_power() -> void:
 	var node: Deployable = auto_free(DeployableScript.new())
 	assert_bool(node.is_idle()).is_false()
-	assert_bool(node.is_powered()).is_true()
 	assert_bool(node.harvests_deposits).is_false()
+	assert_float(node.power_demand).is_equal_approx(0.0, 0.0001)
+	assert_float(node.power_radius).is_equal_approx(0.0, 0.0001)
+	assert_bool(node.is_powered()).is_true()
+
+# --- The power gate (3.4) ----------------------------------------------------
+
+
+func _drawing(demand := 1.0) -> Deployable:
+	var node: Deployable = auto_free(DeployableScript.new())
+	node.power_demand = demand
+	return node
+
+
+## Counts the ticks a machine would actually have ACTED on, which is the only
+## observable the brownout rule has.
+func _fired_in(node: Deployable, ticks: int) -> int:
+	var fired := 0
+	for i in ticks:
+		if node.spend_power_tick():
+			fired += 1
+	return fired
+
+
+## Demand 0 is powered no matter what the grid says — including a ratio of zero,
+## which is what a belt outside every circle is stamped with if anything ever
+## stamps it.
+func test_a_machine_that_draws_nothing_is_always_powered() -> void:
+	var node := _drawing(0.0)
+	node.set_power_ratio(0.0)
+	assert_bool(node.is_powered()).is_true()
+	assert_int(_fired_in(node, 10)).is_equal(10)
+
+
+## ❗️The gate 3.3 never ran against: a machine that DOES draw power and sits on
+## no grid is dead.
+func test_a_machine_that_draws_power_at_ratio_zero_is_not_powered() -> void:
+	var node := _drawing()
+	node.set_power_ratio(0.0)
+	assert_bool(node.is_powered()).is_false()
+	assert_int(_fired_in(node, 10)).is_equal(0)
+
+
+## Full power is EXACTLY every tick — no float drift, which is what keeps every
+## machine's authored cooldown meaning what it says.
+func test_full_power_fires_every_single_tick() -> void:
+	var node := _drawing()
+	node.set_power_ratio(1.0)
+	assert_bool(node.is_powered()).is_true()
+	assert_int(_fired_in(node, 100)).is_equal(100)
+
+
+## ❗️The brownout: half the supply is half the rate, and exactly half — five
+## actions in ten ticks, not four and not six.
+func test_half_power_fires_exactly_five_times_in_ten_ticks() -> void:
+	var node := _drawing()
+	node.set_power_ratio(0.5)
+	assert_bool(node.is_powered()).is_true() # Slowed, never hard-stopped.
+	assert_int(_fired_in(node, 10)).is_equal(5)
+
+
+## A ratio no binary float holds exactly still has to average out over a run
+## rather than drift — the accumulator carries its remainder, it never resets.
+func test_a_ragged_ratio_averages_out_over_a_hundred_ticks() -> void:
+	var node := _drawing()
+	node.set_power_ratio(0.3)
+	assert_int(_fired_in(node, 100)).is_between(29, 31)
+
+
+## The ratio is clamped on the way in, so a solver bug cannot hand a machine a
+## rate above 1 and make it run faster than its authored cooldown.
+func test_the_ratio_is_clamped_to_zero_one() -> void:
+	var node := _drawing()
+	node.set_power_ratio(4.0)
+	assert_float(node.power_ratio()).is_equal_approx(1.0, 0.0001)
+	assert_int(_fired_in(node, 10)).is_equal(10)
+	node.set_power_ratio(-1.0)
+	assert_float(node.power_ratio()).is_equal_approx(0.0, 0.0001)
+
+
+## ❗️The default is 1.0 deliberately: `Automation` re-stamps every machine before
+## every machine pass, so this value is only ever read by a machine driven by
+## hand — which is what keeps 3.3's miner and furnace suites green unchanged.
+func test_an_unstamped_machine_defaults_to_full_power() -> void:
+	assert_float(_drawing().power_ratio()).is_equal_approx(1.0, 0.0001)
 
 
 ## Same contract for the item preview: it is read off the scene's own ColorRect,

@@ -5,8 +5,7 @@
 ##
 ## ❗️**No fuel slot.** A furnace runs on the power grid (3.4), not on coal in a
 ## third slot — [automation.md](../../docs/systems/automation.md) §Categories
-## records that resolution. ⚠️ Until 3.4 lands `is_powered()` stubs true, so this
-## gate is written but not yet exercised.
+## records that resolution. The coal goes in the *generator*.
 ##
 ## Owning doc: docs/systems/automation.md
 class_name CraftingStation
@@ -111,7 +110,10 @@ func take_cargo() -> Array[Dictionary]:
 ## is drained. Consuming on start would need a third place an item can live, plus
 ## a rule for what happens to it when the machine is knocked down.
 func on_tick(_terrain: Node) -> void:
-	if not is_powered():
+	# ❗️Exactly once per tick, and only here — see `Deployable.spend_power_tick`.
+	# A brownout costs the station whole ticks of progress, so a 20-tick smelt on
+	# a half-fed grid takes 40 and the slowdown is visible rather than inferred.
+	if not spend_power_tick():
 		return
 	var recipe := _active_recipe()
 	if recipe.is_empty():

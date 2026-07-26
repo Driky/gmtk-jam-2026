@@ -16,6 +16,21 @@ const FurnaceScene := preload("res://scenes/automation/furnace.tscn")
 
 ## Playable (x in [50, 150)) and far from world edges.
 const ORIGIN := Vector2i(100, 100)
+## Deliberately huge: this suite is about smelting, not about geometry, so the
+## fixture's only job is "there is power here".
+const POWER_RADIUS := 64.0
+
+
+## ❗️Since 3.4 a furnace on no grid does not tick at all, so every test here
+## needs a supply. Kept as a local double rather than the real generator: this
+## suite has no business modelling a fuel economy, and the repo already
+## duplicates small doubles per suite (`SpawnerDouble`) rather than sharing them.
+class Supply:
+	extends PowerEmitter
+
+	func power_supply() -> float:
+		return 100.0
+
 
 var _terrain: Node
 var _automation: Node
@@ -31,6 +46,16 @@ func before_test() -> void:
 	_automation.game = game
 	add_child(_automation)
 	_automation.set_process(false)
+	_power_the_world()
+
+
+func _power_the_world() -> void:
+	var node: Supply = auto_free(Supply.new())
+	node.automation = _automation
+	node.power_radius = POWER_RADIUS
+	node.setup(ORIGIN)
+	add_child(node)
+	node.on_placed()
 
 
 func _furnace(cell := ORIGIN) -> CraftingStation:

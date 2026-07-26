@@ -112,7 +112,10 @@ func on_tick(terrain: Node) -> void:
 	# Before the power gate: an unpowered miner over bare rock is still a miner
 	# the player has to come and move.
 	_idle = not has_deposit_in(terrain, cells)
-	if not is_powered():
+	# ❗️Exactly once per tick, and only here: `spend_power_tick` is the stateful
+	# half of the brownout rule, so a second call would run the miner fast on a
+	# half-powered grid.
+	if not spend_power_tick():
 		return
 	_cooldown = maxi(_cooldown - 1, 0)
 	if _cooldown > 0:
