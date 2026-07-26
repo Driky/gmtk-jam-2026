@@ -6,6 +6,7 @@ const TILE := TileLayout.TILE_SIZE
 const PlayerScene := preload("res://scenes/player.tscn")
 const CoreScene := preload("res://scenes/core.tscn")
 const FlowFieldOverlay := preload("res://scripts/waves/flow_field_overlay.gd")
+const ConveyorItemLayer := preload("res://scripts/automation/conveyor_item_layer.gd")
 const PerfOverlay := preload("res://scripts/debug/perf_overlay.gd")
 const DebugMenuScript := preload("res://scripts/debug/debug_menu.gd")
 ## The Core owns the exact center column (flow-field origin, 2.2); the
@@ -54,6 +55,9 @@ func _finish_generation() -> void:
 	core.died.connect(Game.game_over)
 	# Field + untouched-terrain baseline: Core registered, zero player edits.
 	Waves.initialize_flow_field(core)
+	# Items on belts: a world-space layer like the tilemap, under the light map so
+	# they are lit rather than glowing ([automation.md](../../docs/systems/automation.md)).
+	add_child(ConveyorItemLayer.new())
 	# Debug overlays own no keybindings — the F3 menu drives their visibility.
 	var flow_overlay := FlowFieldOverlay.new()
 	add_child(flow_overlay)
