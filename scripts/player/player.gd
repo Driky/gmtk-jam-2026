@@ -289,19 +289,21 @@ func _use(delta: float) -> void:
 ## mining is deliberately NOT suppressed — only the deployable is protected.
 ##
 ## Terrain and the target cell are both parameters so this unit-tests on a
-## fresh instance without a mouse. `as Torch` rather than a group check is what
-## keeps the Core un-removable with no special case anywhere, and is exactly
-## what 3.1 generalises to `as Deployable`.
+## fresh instance without a mouse. `as Deployable` rather than a group check is
+## what keeps the Core un-removable with no special case anywhere: the Core is a
+## plain Node2D and owns its footprint registration itself.
 func _hit_deployable(terrain: Node, cell: Vector2i) -> bool:
 	if _enemy_in_swing_range():
 		return false
 	if not in_reach(cell):
 		return false
-	var deployable := terrain.get_entity(cell) as Torch
+	var deployable := terrain.get_entity(cell) as Deployable
 	if deployable == null:
 		return false
 	if deployable.take_removal_hit():
-		deployable.remove(terrain, get_tree().get_first_node_in_group(&"pickup_spawner"))
+		# Same exit a mob kill and a lost support take — the deployable finds
+		# the spawner itself, so there is one drop path and no caller variant.
+		deployable.pop_to_pickup()
 	return true
 
 

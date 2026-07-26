@@ -37,8 +37,9 @@ enum UseKind { SWING, PROJECTILE }
 ## Non-null makes `place` (RMB) put this SCENE in the target cell instead of
 ## writing a tile — the seam Day 3's deployables land on, so a miner or a turret
 ## is a .tres row rather than another branch in the player. It wins over the
-## material-id block path, and the scene must expose setup(cell) / register(terrain)
-## / pick_up(terrain) ([player-combat.md](../../docs/systems/player-combat.md) §Placement).
+## material-id block path, and the scene's root must be a `Deployable`
+## ([automation.md](../../docs/systems/automation.md)) — the player reads its
+## `size` and `support_dirs` to validate the placement before claiming a cell.
 @export var place_scene: PackedScene = null
 
 @export_group("Ranged")

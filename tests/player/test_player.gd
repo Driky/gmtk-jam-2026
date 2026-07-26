@@ -404,9 +404,10 @@ func test_a_mob_out_of_swing_range_does_not_shield_it() -> void:
 	assert_bool(player._hit_deployable(_terrain, P)).is_true()
 
 
-## `as Torch` is the whole mechanism keeping the Core un-removable — there is
+## `as Deployable` is the whole mechanism keeping the Core un-removable — the
+## Core is a plain Node2D that registers its own footprint, and there is
 ## deliberately no special case for it anywhere.
-func test_a_non_torch_entity_is_not_removable() -> void:
+func test_a_non_deployable_entity_is_not_removable() -> void:
 	_make_spawner()
 	var core: Node2D = auto_free(Node2D.new())
 	core.add_to_group(&"core")
@@ -433,15 +434,16 @@ func test_a_torch_comes_off_in_one_hit() -> void:
 
 
 ## A tougher deployable must survive its first hits, and report progress for the
-## cursor highlight while it does. Drives the counter directly, since the torch
-## is deliberately a one-hit item.
+## cursor highlight while it does. Raises the count on the instance, since the
+## torch is deliberately a one-hit item — `removal_hits` is a per-type export
+## now, which is how 3.3's furnace gets to be heavier than a stick.
 func test_a_multi_hit_deployable_reports_progress_before_coming_off() -> void:
 	var torch := _torch_at(P)
-	torch._removal_hits = 0
-	var needed := Torch.REMOVAL_HITS
-	for i in needed - 1:
+	torch.removal_hits = 3
+	for i in torch.removal_hits - 1:
 		assert_bool(torch.take_removal_hit()).is_false()
-	assert_float(torch.removal_ratio()).is_less_equal(1.0)
+	assert_float(torch.removal_ratio()).is_less(1.0)
+	assert_bool(torch.take_removal_hit()).is_true()
 
 
 ## A removed cell has to be re-placeable on the SAME frame — queue_free defers

@@ -47,8 +47,9 @@ func _draw() -> void:
 	var color := OK_COLOR if actionable else REJECT_COLOR
 	var width := 1.0
 	var ratio := _ratio
-	# `as Torch`, so the Core is never advertised as something you can take back.
-	var deployable := Terrain.get_entity(_target) as Torch
+	# `as Deployable`, so the Core is never advertised as something you can take
+	# back — it is a plain Node2D and deliberately not one of these.
+	var deployable := Terrain.get_entity(_target) as Deployable
 	if deployable != null and actionable:
 		color = DEPLOYABLE_COLOR
 		width = DEPLOYABLE_WIDTH

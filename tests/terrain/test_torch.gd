@@ -72,7 +72,7 @@ func test_removal_frees_the_cell_immediately() -> void:
 	torch.setup(CELL)
 	add_child(torch)
 	assert_bool(torch.register(_terrain)).is_true()
-	torch.remove(_terrain, null)
+	torch.pop_to_pickup()
 	assert_object(_terrain.get_entity(CELL)).is_null() # Before any frame boundary.
 
 
@@ -81,7 +81,7 @@ func test_a_cell_freed_by_removal_accepts_a_new_torch() -> void:
 	first.setup(CELL)
 	add_child(first)
 	first.register(_terrain)
-	first.remove(_terrain, null)
+	first.pop_to_pickup()
 	var second := _torch(CELL)
 	assert_bool(second.register(_terrain)).is_true()
 
@@ -93,7 +93,7 @@ func test_removal_without_a_spawner_still_frees_the_cell() -> void:
 	torch.setup(CELL)
 	add_child(torch)
 	torch.register(_terrain)
-	torch.remove(_terrain, null)
+	torch.pop_to_pickup()
 	assert_object(_terrain.get_entity(CELL)).is_null()
 
 # --- Lighting seam -----------------------------------------------------------
@@ -112,12 +112,46 @@ func test_torch_light_is_warm() -> void:
 	var torch := _torch(CELL)
 	assert_float(torch.light_color.r).is_greater(torch.light_color.b)
 
+# --- The Deployable fold (3.1) -----------------------------------------------
+
+
+## Everything structural now comes from the base. Losing the inheritance would
+## keep the torch placeable (setup/register still exist by name) while silently
+## dropping HP, support and the pop path — and `_hit_deployable`'s `as
+## Deployable` would quietly stop matching it.
+func test_a_torch_is_a_deployable() -> void:
+	assert_bool(_torch(CELL) is Deployable).is_true()
+
+
+func test_a_torch_occupies_exactly_one_cell() -> void:
+	var torch := _torch(CELL)
+	assert_vector(torch.size).is_equal(Vector2i.ONE)
+	assert_array(torch.footprint()).contains_exactly([CELL])
+
+
+## All four directions: a torch mounts on a wall, a floor OR a ceiling. Narrowing
+## this would make relighting a shaft you are re-digging a chore.
+func test_a_torch_mounts_in_any_direction() -> void:
+	assert_int(_torch(CELL).support_dirs).is_equal(Deployable.SUPPORT_ALL)
+
+
+## ❗️Pins the .tscn authoring, not the script: `item_id` lives in scene data, and
+## a stray `git checkout` silently emptied exactly this kind of data once. An
+## empty id pops nothing, so removing a torch would delete it.
+func test_the_scene_authors_the_torch_item_id() -> void:
+	assert_str(_torch(CELL).item_id).is_equal("torch")
+
 # --- Flow field --------------------------------------------------------------
 
 
-## Load-bearing absence: flow_field.gd reads `current_hp` and skips entities
-## that return null, so a torch costs the field nothing and mobs walk through
-## it. 3.1 giving torches HP is what changes this, deliberately.
-func test_a_torch_has_no_hp_so_it_costs_the_flow_field_nothing() -> void:
+## The inverse of 2.7's load-bearing absence. flow_field.gd reads `current_hp`
+## and skips entities that return null; a torch now answers, so it costs the
+## field `hp * ENTITY_HP_COST_FACTOR` and — the part that actually shows —
+## mobs stop and hit it instead of walking through. That is the intended 3.1
+## behaviour; `max_hp` is the knob if a lit tunnel gets too sticky.
+func test_a_torch_has_hp_so_mobs_stop_for_it() -> void:
 	var torch := _torch(CELL)
-	assert_object(torch.get(&"current_hp")).is_null()
+	# Probed exactly the way flow_field.gd does it, not as a typed field access.
+	assert_bool(torch.get(&"current_hp") != null).is_true()
+	assert_float(torch.current_hp).is_equal(torch.max_hp)
+	assert_float(torch.max_hp).is_greater(0.0)
