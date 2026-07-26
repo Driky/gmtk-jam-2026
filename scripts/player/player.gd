@@ -191,6 +191,8 @@ func _die() -> void:
 	_respawn_left = RESPAWN_TIME
 	velocity = Vector2.ZERO
 	_drop_loot_bag()
+	# Also puts the Light child out — a corpse must not keep glowing. That's why
+	# there is no light code here; don't "fix" it by reaching into the node.
 	visible = false
 	# Deferred: _step runs inside physics, and changing collision mid-flush is
 	# an error. A corpse must not block mobs or take further hits either way.
