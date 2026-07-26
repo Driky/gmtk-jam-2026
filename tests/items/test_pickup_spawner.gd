@@ -35,6 +35,23 @@ func test_machine_source_spawns_nothing() -> void:
 	assert_int(_spawner.get_child_count()).is_equal(0)
 
 
+## Tile-less loot (mob drops, 2.6) shares this one spawn path, so everything
+## droppable becomes the same Pickup.
+func test_spawn_at_places_loot_at_a_world_position() -> void:
+	_spawner.spawn_at(Vector2(40.0, 90.0), "iron", 3)
+	assert_int(_spawner.get_child_count()).is_equal(1)
+	var pickup: Node2D = _spawner.get_child(0)
+	assert_str(pickup.item_id).is_equal("iron")
+	assert_int(pickup.count).is_equal(3)
+	assert_vector(pickup.position).is_equal(Vector2(40.0, 90.0))
+
+
+func test_spawn_at_ignores_empty_and_zero_drops() -> void:
+	_spawner.spawn_at(Vector2.ZERO, "", 3)
+	_spawner.spawn_at(Vector2.ZERO, "iron", 0)
+	assert_int(_spawner.get_child_count()).is_equal(0)
+
+
 ## The XP veto rides all the way to the pickup: by the time this is collected
 ## the tile it came from is long gone, so the flag can't be looked up later.
 func test_xp_veto_reaches_the_pickup() -> void:

@@ -320,5 +320,18 @@ func _die() -> void:
 		return
 	_dead = true
 	died.emit(self)
+	_drop_loot()
 	Progression.grant_xp("kills", stats.xp)
 	queue_free()
+
+
+## Mob loot lands as ordinary world pickups, so killing something and mining
+## something pay through the same looting channel with no second code path.
+## No spawner in the tree (unit tests, headless tools) simply means no drop.
+func _drop_loot() -> void:
+	if stats.drop_id == "" or not is_inside_tree():
+		return
+	var spawner := get_tree().get_first_node_in_group(&"pickup_spawner")
+	if spawner == null:
+		return
+	spawner.spawn_at(global_position, stats.drop_id, stats.drop_count)

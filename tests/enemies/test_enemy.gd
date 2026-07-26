@@ -3,6 +3,8 @@
 extends GdUnitTestSuite
 
 const EnemyScript := preload("res://scripts/enemies/enemy.gd")
+const EnemyScene := preload("res://scenes/enemies/enemy.tscn")
+const SpawnerScript := preload("res://scripts/items/pickup_spawner.gd")
 
 
 func _make_enemy() -> Enemy:
@@ -112,6 +114,61 @@ func test_lethal_damage_emits_died_once() -> void:
 	enemy.take_damage(999.0) # Already dead: must not re-emit.
 	assert_int(deaths.size()).is_equal(1)
 	assert_that(deaths[0]).is_same(enemy)
+
+# --- Loot drops & kill XP (2.6) ----------------------------------------------
+
+
+## Uses the scene (not a bare script) because a tree-resident Enemy reads its
+## own Visual child in _ready. Stats are a FRESH resource, never walker.tres —
+## mutating the shared preload would leak into every other suite.
+func _make_dropping_enemy(drop_id: String, drop_count := 1) -> Enemy:
+	var enemy: Enemy = auto_free(EnemyScene.instantiate())
+	var stats := EnemyStats.new()
+	stats.drop_id = drop_id
+	stats.drop_count = drop_count
+	enemy.stats = stats
+	add_child(enemy)
+	return enemy
+
+
+func test_death_drops_loot_as_a_world_pickup() -> void:
+	var spawner: Node2D = auto_free(SpawnerScript.new())
+	add_child(spawner)
+	var enemy := _make_dropping_enemy("coal", 2)
+	enemy.global_position = Vector2(64.0, 32.0)
+	enemy.take_damage(999.0)
+	assert_int(spawner.get_child_count()).is_equal(1)
+	var pickup: Node2D = spawner.get_child(0)
+	assert_str(pickup.item_id).is_equal("coal")
+	assert_int(pickup.count).is_equal(2)
+	assert_vector(pickup.position).is_equal(Vector2(64.0, 32.0))
+	# Ordinary loot: mob drops feed the looting channel like any mined drop.
+	assert_bool(pickup.grants_xp).is_true()
+
+
+func test_a_mob_with_no_drop_id_leaves_nothing() -> void:
+	var spawner: Node2D = auto_free(SpawnerScript.new())
+	add_child(spawner)
+	_make_dropping_enemy("").take_damage(999.0)
+	assert_int(spawner.get_child_count()).is_equal(0)
+
+
+## The suites above kill enemies that were never added to the tree; that path
+## must stay drop-free rather than dereferencing a null SceneTree.
+func test_dying_outside_the_tree_is_safe() -> void:
+	var enemy := _make_enemy()
+	enemy.stats.drop_id = "coal"
+	enemy.take_damage(999.0)
+	assert_bool(enemy._dead).is_true()
+
+
+func test_death_grants_kill_xp() -> void:
+	var enemy := _make_enemy()
+	enemy.stats.xp = 7.0
+	var before: float = Progression.xp_by_source.get("kills", 0.0)
+	enemy.take_damage(999.0)
+	var granted: float = Progression.xp_by_source.get("kills", 0.0) - before
+	assert_float(granted).is_equal_approx(7.0, 0.001)
 
 # --- Knockback (2.5) ---------------------------------------------------------
 

@@ -11,9 +11,12 @@ enum MoveClass { GROUND, FLY }
 @export var speed := 40.0 ## px/s (player move_speed is 110).
 @export var damage := 8.0 ## Per melee hit on entities (Core, deployables).
 @export var attack_cooldown := 0.8 ## Seconds between melee hits.
-@export var xp := 5.0 ## Granted through the Progression seam (2.6).
-@export var drop_id := "" ## Loot hookup lands with 2.6.
-@export var drop_count := 0
+@export var xp := 5.0 ## Granted on death via Progression.grant_xp (2.6).
+## Dropped as a world pickup on death, feeding the looting XP channel like any
+## mined drop. "" = drops nothing. Real mob loot is content work (4.2); what's
+## authored today is a placeholder to keep the path exercised.
+@export var drop_id := ""
+@export var drop_count := 1
 
 @export_group("Locomotion")
 @export var move_class := MoveClass.GROUND
