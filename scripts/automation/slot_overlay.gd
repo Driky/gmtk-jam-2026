@@ -108,6 +108,15 @@ func _draw() -> void:
 		# API onto every Deployable to keep one debug node tidy is the wrong
 		# trade. Anything not matched simply draws its box.
 		var lines: Array[String] = []
+		# ❗️First line, above the slots: since 3.4 a machine that produces nothing
+		# has two possible reasons, and "no power" is the one that looks exactly
+		# like a stuck cooldown from the outside. Only for machines that DRAW —
+		# a free machine reporting a power state would be noise.
+		if node.power_demand > 0.0:
+			if not node.is_powered():
+				lines.append("NO POWER")
+			elif node.power_ratio() < 1.0:
+				lines.append("PWR %d%%" % roundi(node.power_ratio() * 100.0))
 		var miner := node as Miner
 		if miner != null:
 			draw_rect(

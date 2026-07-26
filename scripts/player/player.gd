@@ -670,3 +670,23 @@ static func placement_harvests(item_id: String) -> bool:
 		return false
 	var scene := Items.stats_for(item_id).place_scene
 	return scene != null and Deployable.scene_harvests(scene)
+
+
+## Coverage radius (in TILES) placing this item would emit, `0.0` for anything
+## that is not an emitter — the ghost's prospective circle. Same two branches
+## again: a block never powers anything.
+static func placement_power_radius(item_id: String) -> float:
+	if item_id == "":
+		return 0.0
+	var scene := Items.stats_for(item_id).place_scene
+	return 0.0 if scene == null else Deployable.scene_power_radius(scene)
+
+
+## What placing this item would DRAW off a grid. Read by the power overlay to
+## decide whether existing coverage is worth showing: "will this land powered" is
+## only a question for something that needs power.
+static func placement_power_demand(item_id: String) -> float:
+	if item_id == "":
+		return 0.0
+	var scene := Items.stats_for(item_id).place_scene
+	return 0.0 if scene == null else Deployable.scene_power_demand(scene)

@@ -50,6 +50,11 @@ const RATIO_FILL_ALPHA := 0.35
 ## same validity colour: it marks where the ore has to be, not a second thing
 ## being placed.
 const HARVEST_OUTLINE_ALPHA := 0.45
+## The PROSPECTIVE coverage circle of an emitter being placed (3.4), in the same
+## validity colour for the same reason as the harvest block. Drawn thin and
+## unfilled — a filled disc the size of a generator's reach would black out the
+## terrain you are aiming at.
+const POWER_ARC_SEGMENTS := 48
 const ARROW_LENGTH := 0.34
 const ARROW_HEAD := 0.16
 const ARROW_WIDTH := 2.0
@@ -75,6 +80,11 @@ var _ghost_directional := false
 ## harvest block sits three cells to the left is unreadable without it, and the
 ## whole placement rule is "point the arrow at the ore".
 var _ghost_harvests := false
+## Coverage radius in TILES this placement would emit, 0 for anything that is not
+## a generator or a relay. ❗️**One owner per meaning**: existing coverage belongs
+## to the power overlay, your-coverage-to-be belongs here, so the two cannot
+## drift into drawing contradicting circles.
+var _ghost_power_radius := 0.0
 
 @onready var _player: Player = get_parent()
 
@@ -126,6 +136,7 @@ func _refresh_placement() -> void:
 	_ghost_dirs = Player.placement_support_dirs(id)
 	_ghost_directional = Player.placement_directional(id)
 	_ghost_harvests = Player.placement_harvests(id)
+	_ghost_power_radius = Player.placement_power_radius(id)
 	_ghost_item = Rect2()
 	if _ghost_size == Vector2i.ZERO:
 		return
@@ -212,6 +223,8 @@ func _draw_ghost() -> void:
 	draw_rect(Rect2(Vector2.ZERO, Vector2(_ghost_size) * TILE), color, false, 1.0)
 	if _ghost_harvests:
 		_draw_harvest_block(color)
+	if _ghost_power_radius > 0.0:
+		_draw_power_radius(color)
 	if _ghost_directional:
 		_draw_facing_arrow(color)
 
@@ -233,6 +246,16 @@ func _draw_harvest_block(color: Color) -> void:
 		false,
 		1.0,
 	)
+
+
+## What a generator or relay would REACH from here, centred on the ghost
+## footprint exactly as `setup()` anchors the real node. Same validity colour as
+## everything else in the ghost, because it is the same answer — and it is what
+## makes "will this cover the mine" a thing you can see before you click rather
+## than after.
+func _draw_power_radius(color: Color) -> void:
+	var centre := Vector2(_ghost_size) * 0.5 * TILE
+	draw_arc(centre, _ghost_power_radius * TILE, 0.0, TAU, POWER_ARC_SEGMENTS, color, 1.0)
 
 
 ## Which way the thing will point once it is down. Read off the PLAYER's pending

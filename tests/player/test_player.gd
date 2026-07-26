@@ -199,6 +199,33 @@ func test_placement_directional_follows_the_item() -> void:
 	assert_bool(PlayerScript.placement_directional("dirt")).is_false()
 	assert_bool(PlayerScript.placement_directional("")).is_false()
 
+
+## ❗️The ghost's prospective coverage circle comes off the SCENE, so it cannot
+## draw a radius different from the one the placed generator will actually emit.
+## A relay reaches further than a generator, and neither a furnace nor a block
+## emits anything.
+func test_placement_power_radius_follows_the_item() -> void:
+	assert_float(PlayerScript.placement_power_radius("generator")).is_greater(0.0)
+	assert_float(PlayerScript.placement_power_radius("relay")).is_greater(
+		PlayerScript.placement_power_radius("generator"),
+	)
+	assert_float(PlayerScript.placement_power_radius("furnace")).is_equal_approx(0.0, 0.0001)
+	assert_float(PlayerScript.placement_power_radius("dirt")).is_equal_approx(0.0, 0.0001)
+	assert_float(PlayerScript.placement_power_radius("")).is_equal_approx(0.0, 0.0001)
+
+
+## The other half of "is this item power-relevant": what it would DRAW. Together
+## these two decide whether the overlay shows existing coverage while you hold it.
+func test_placement_power_demand_follows_the_item() -> void:
+	assert_float(PlayerScript.placement_power_demand("furnace")).is_greater(0.0)
+	assert_float(PlayerScript.placement_power_demand("miner")).is_greater(0.0)
+	# ❗️Belts and inserters draw nothing and run everywhere — the decision that
+	# costs no code ([automation.md](../../docs/systems/automation.md) §Power).
+	assert_float(PlayerScript.placement_power_demand("conveyor_t1")).is_equal_approx(0.0, 0.0001)
+	assert_float(PlayerScript.placement_power_demand("inserter")).is_equal_approx(0.0, 0.0001)
+	assert_float(PlayerScript.placement_power_demand("torch")).is_equal_approx(0.0, 0.0001)
+	assert_float(PlayerScript.placement_power_demand("")).is_equal_approx(0.0, 0.0001)
+
 # --- Placement facing (3.2) --------------------------------------------------
 
 

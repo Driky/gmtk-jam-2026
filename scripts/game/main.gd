@@ -8,6 +8,7 @@ const CoreScene := preload("res://scenes/core.tscn")
 const FlowFieldOverlay := preload("res://scripts/waves/flow_field_overlay.gd")
 const ConveyorItemLayer := preload("res://scripts/automation/conveyor_item_layer.gd")
 const SlotOverlay := preload("res://scripts/automation/slot_overlay.gd")
+const PowerOverlay := preload("res://scripts/automation/power_overlay.gd")
 const PerfOverlay := preload("res://scripts/debug/perf_overlay.gd")
 const DebugMenuScript := preload("res://scripts/debug/debug_menu.gd")
 ## The Core owns the exact center column (flow-field origin, 2.2); the
@@ -64,6 +65,10 @@ func _finish_generation() -> void:
 	add_child(flow_overlay)
 	var slot_overlay := SlotOverlay.new()
 	add_child(slot_overlay)
+	# ❗️NOT a debug overlay and deliberately not handed to the F3 panel: the bolt
+	# layer is always on, and `P` toggles its coverage circles
+	# ([ui.md](../../docs/systems/ui.md) — the one sanctioned keybinding exception).
+	add_child(PowerOverlay.new())
 	var perf_overlay := PerfOverlay.new()
 	add_child(perf_overlay)
 	var debug_menu: CanvasLayer = DebugMenuScript.new()
