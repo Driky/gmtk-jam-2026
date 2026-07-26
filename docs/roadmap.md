@@ -116,8 +116,9 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Slot overlay reads machines too (it was blind to the only things that create items); end-to-end chain test: miner → inserter → belt → inserter → furnace → inserter → belt.
 
 ### 3.4 Power ([automation.md](systems/automation.md))
-- [ ] Generator (fuel burn, radius) + relay (✂️5); grid graph on place/remove; brownout `supply/demand` scaling.
-- [ ] Coverage circles in placement mode; persistent power-overlay hotkey; unpowered-machine icon.
+- [x] Generator (fuel burn, radius) + relay (✂️5 **not fired**); grid graph on place/remove; brownout `supply/demand` scaling. The gate on the base is `spend_power_tick()`, a fractional accumulator, so every machine's timing stays in whole ticks. ⚠️ `test_miner.gd` / `test_crafting_station.gd` did **not** stay green on the 1.0 default as expected — both drive `step_tick()`, so both grew a supply in their fixture.
+- [x] Coverage circles in placement mode (the ghost's prospective one, the overlay's existing ones); persistent power-overlay hotkey **P** — the one sanctioned exception to [ui.md](systems/ui.md)'s "debug overlays own no keybindings", because this one is player-facing; bolt icon on unpowered and browned-out machines. **Conveyors and inserters draw nothing** and run everywhere free.
+- [x] The F3 factory rig hands a generator, a relay and a stack of coal — it had to: with the gate live, the old kit built a chain that could never run, and an exported build has no other way in.
 
 ### 3.5 Defense
 - [ ] **Projectile pool must scale with spawner count before turrets ship** — the 2.5 pool is a fixed 32 and steals in-flight shots once exceeded ([player-combat.md](systems/player-combat.md)).

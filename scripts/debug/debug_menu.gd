@@ -55,8 +55,28 @@ const RIG_WIDTH := 22
 const RIG_OFFSET := Vector2i(3, 1)
 ## Everything the chain is built from, at a count that leaves room to make
 ## mistakes.
-const RIG_KIT: Array[String] = ["miner", "inserter", "conveyor_t1", "furnace"]
+##
+## ❗️**The generator and the relay are not optional here as of 3.4.** The moment
+## `is_powered()` stopped being a stub, a kit of miner/inserter/belt/furnace
+## became a chain that can never run: `STARTING_KIT` hands out no machines at
+## all, and 3.6's crafting does not exist yet — so an exported build had no way
+## to make a single bar ([automation.md](../../docs/systems/automation.md) §Power).
+const RIG_KIT: Array[String] = [
+	"miner",
+	"inserter",
+	"conveyor_t1",
+	"furnace",
+	"generator",
+	"relay",
+]
 const RIG_KIT_COUNT := 10
+## ❗️Handed over outright rather than mined. Coal is the bootstrap — a miner
+## needs power, a generator needs coal, and coal comes from mining — but the
+## seam this rig lays is COPPER (the chain has to smelt something), so without
+## this the very first thing a browser check would have to do is go and dig for
+## fuel somewhere else.
+const RIG_FUEL := "coal"
+const RIG_FUEL_COUNT := 50
 
 ## Injected by tests; fall back to the autoloads.
 var game: Node = null
@@ -134,6 +154,9 @@ func give_test_loot() -> void:
 ## placement the ghost is trying to teach. The floor under the pocket is stone,
 ## because a `support_dirs = 15` machine standing in a carved hole needs
 ## something solid to hold it up.
+##
+## Since 3.4 it also hands over a generator, a relay and a stack of coal: the
+## chain draws power now, and the rig's whole job is "one press, then build".
 func build_factory_rig() -> Vector2i:
 	var player := get_tree().get_first_node_in_group(&"player") as Node2D
 	if player == null:
@@ -149,6 +172,7 @@ func build_factory_rig() -> Vector2i:
 			terrain.set_tile(ore, RIG_ORE_MATERIAL)
 	for id: String in RIG_KIT:
 		items.player_inventory.add_item(id, RIG_KIT_COUNT)
+	items.player_inventory.add_item(RIG_FUEL, RIG_FUEL_COUNT)
 	return at
 
 

@@ -291,6 +291,14 @@ func test_the_factory_rig_hands_over_the_whole_chain() -> void:
 		assert_int(Items.player_inventory.count_of(id)).override_failure_message(
 			"The rig handed over no %s" % id,
 		).is_equal(DebugMenuScript.RIG_KIT_COUNT)
+	# ❗️A chain with no generator can never run since 3.4, and one with no coal
+	# can never start — the rig is the only way into a production chain in an
+	# exported build, so both are as structural as the miner.
+	assert_bool(DebugMenuScript.RIG_KIT.has("generator")).is_true()
+	assert_bool(DebugMenuScript.RIG_KIT.has("relay")).is_true()
+	assert_int(Items.player_inventory.count_of(DebugMenuScript.RIG_FUEL)).override_failure_message(
+		"The rig handed over no fuel, so nothing it built can ever run",
+	).is_equal(DebugMenuScript.RIG_FUEL_COUNT)
 
 
 ## No player in the tree (a headless tool, or the beat after a death) must be a
