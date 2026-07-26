@@ -12,6 +12,11 @@
 ## machine. The preview reuses the scene's own `ColorRect`, so it cannot drift
 ## from what actually gets placed.
 ##
+## A harvesting placeable (3.3's miner) draws a **second, dimmer outline** for
+## its harvest block, one span along the pending facing. Without it a 3×2 whose
+## ore block sits three cells to the left is unreadable, and "point the arrow at
+## the ore" — the whole placement rule — is invisible.
+##
 ## ❗️The ghost is **modeless**: there is no toggle and no binding, it simply
 ## draws whenever the selected hotbar item is placeable. And it lives here
 ## rather than in a node of its own — this one is already `top_level`, already
@@ -41,6 +46,10 @@ const RATIO_FILL_ALPHA := 0.35
 ## fraction of the footprint so it reads at 1×1 and does not swamp a 1-cell
 ## ghost, and drawn in the SAME validity colour as the outline — a second colour
 ## here would read as a second signal.
+## The harvest block outline (3.3's miner). Dimmer than the footprint's, in the
+## same validity colour: it marks where the ore has to be, not a second thing
+## being placed.
+const HARVEST_OUTLINE_ALPHA := 0.45
 const ARROW_LENGTH := 0.34
 const ARROW_HEAD := 0.16
 const ARROW_WIDTH := 2.0
@@ -61,6 +70,11 @@ var _ghost_item_color := Color.WHITE
 ## Draw a facing arrow? True for a conveyor or an inserter, false for a torch or
 ## a block. Cached alongside the rest of the placement answer.
 var _ghost_directional := false
+## Does this placement need a deposit under its harvest block (3.3's miner)?
+## Cached with the rest, and drawn as a second, dimmer outline — a 3×2 whose
+## harvest block sits three cells to the left is unreadable without it, and the
+## whole placement rule is "point the arrow at the ore".
+var _ghost_harvests := false
 
 @onready var _player: Player = get_parent()
 
@@ -111,6 +125,7 @@ func _refresh_placement() -> void:
 	_ghost_size = Player.placement_size(id)
 	_ghost_dirs = Player.placement_support_dirs(id)
 	_ghost_directional = Player.placement_directional(id)
+	_ghost_harvests = Player.placement_harvests(id)
 	_ghost_item = Rect2()
 	if _ghost_size == Vector2i.ZERO:
 		return
@@ -176,7 +191,15 @@ func _draw_ratio_fill(color: Color, ratio: float) -> void:
 func _draw_ghost() -> void:
 	var valid: bool = (
 		_player.in_reach(_target)
-		and Player.can_place_at(Terrain, _target, _player.tile_rect(), _ghost_size, _ghost_dirs)
+		and Player.can_place_at(
+			Terrain,
+			_target,
+			_player.tile_rect(),
+			_ghost_size,
+			_ghost_dirs,
+			_player.place_facing,
+			_ghost_harvests,
+		)
 	)
 	var color := GHOST_COLOR if valid else REJECT_COLOR
 	if _ghost_item.size != Vector2.ZERO:
@@ -187,8 +210,29 @@ func _draw_ghost() -> void:
 			Color(color, GHOST_FILL_ALPHA),
 		)
 	draw_rect(Rect2(Vector2.ZERO, Vector2(_ghost_size) * TILE), color, false, 1.0)
+	if _ghost_harvests:
+		_draw_harvest_block(color)
 	if _ghost_directional:
 		_draw_facing_arrow(color)
+
+
+## The block of tiles a miner will eat, one span along the pending facing.
+## Dimmer and dashed-thin rather than a second bright box: it is *where the ore
+## has to be*, not a second thing being placed. Same validity colour, because it
+## is the same answer — the red ghost and the empty harvest block are one
+## rejection, and drawing it in a colour of its own would read as two.
+func _draw_harvest_block(color: Color) -> void:
+	# Asked of the SAME static the placement gate calls, anchored at ZERO because
+	# this node is already translated to the target cell. The span rule is not
+	# re-derived here — a second copy of it would be a ghost that promises a
+	# harvest block the miner does not have.
+	var cells := Deployable.harvest_cells_at(Vector2i.ZERO, _ghost_size, _player.place_facing)
+	draw_rect(
+		Rect2(Vector2(cells[0]) * TILE, Vector2(_ghost_size) * TILE),
+		Color(color, HARVEST_OUTLINE_ALPHA),
+		false,
+		1.0,
+	)
 
 
 ## Which way the thing will point once it is down. Read off the PLAYER's pending

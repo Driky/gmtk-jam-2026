@@ -91,6 +91,62 @@ func test_a_two_by_three_footprint_grows_right_and_down() -> void:
 	)
 
 
+# --- Harvest block (3.3) -----------------------------------------------------
+
+
+## ❗️The 3.3 orientation test, and the same silent 50/50 as the support
+## bitmask's Up/Down bit and the inserter's behind/front: all four facings in one
+## assertion, because a harvest block on the wrong side of the machine produces a
+## miner that simply never finds ore, with no error anywhere.
+##
+## The block is the SAME W×H as the footprint, flush, one span along facing —
+## `area.x` sideways, `area.y` vertically, so a 3×2 reaches 3 cells left/right
+## but only 2 up/down.
+func test_the_harvest_block_sits_one_span_along_the_facing() -> void:
+	var area := Vector2i(3, 2)
+	assert_array(Deployable.harvest_cells_at(CELL, area, Vector2i.LEFT)).contains_exactly(
+		Deployable.footprint_at(CELL + Vector2i(-3, 0), area),
+	)
+	assert_array(Deployable.harvest_cells_at(CELL, area, Vector2i.RIGHT)).contains_exactly(
+		Deployable.footprint_at(CELL + Vector2i(3, 0), area),
+	)
+	assert_array(Deployable.harvest_cells_at(CELL, area, Vector2i.UP)).contains_exactly(
+		Deployable.footprint_at(CELL + Vector2i(0, -2), area),
+	)
+	assert_array(Deployable.harvest_cells_at(CELL, area, Vector2i.DOWN)).contains_exactly(
+		Deployable.footprint_at(CELL + Vector2i(0, 2), area),
+	)
+
+
+## Flush, with no gap and no overlap: the block starts exactly where the
+## footprint ends. A span of `size - 1` or `size + 1` both look plausible in a
+## screenshot and both put the miner half on top of the ore it cannot stand on.
+func test_the_harvest_block_never_overlaps_the_footprint() -> void:
+	var area := Vector2i(3, 2)
+	for facing: Vector2i in Deployable.SUPPORT_OFFSETS:
+		var footprint := Deployable.footprint_at(CELL, area)
+		for cell: Vector2i in Deployable.harvest_cells_at(CELL, area, facing):
+			assert_bool(footprint.has(cell)).is_false()
+
+
+func test_has_deposit_in_finds_one_deposit_among_plain_rock() -> void:
+	var cells := Deployable.harvest_cells_at(CELL, Vector2i(3, 2), Vector2i.DOWN)
+	for cell: Vector2i in cells:
+		_terrain.set_tile(cell, "stone")
+	assert_bool(Deployable.has_deposit_in(_terrain, cells)).is_false()
+	_terrain.set_tile(cells[4], "copper_deposit")
+	assert_bool(Deployable.has_deposit_in(_terrain, cells)).is_true()
+
+
+## Plain ore is not a deposit: it has no reserve to extract, so a miner standing
+## against a copper *vein* must read as invalid.
+func test_plain_ore_is_not_a_deposit() -> void:
+	_terrain.set_tile(CELL, "copper")
+	assert_bool(Deployable.is_deposit_at(_terrain, CELL)).is_false()
+	_terrain.set_tile(CELL, "copper_deposit")
+	assert_bool(Deployable.is_deposit_at(_terrain, CELL)).is_true()
+
+
 ## Byte-identical to the 2.7 torch's anchor: the light grid floors a world
 ## position back to a cell, and an origin-anchored source lights the wrong one
 ## at negative coordinates.
@@ -339,6 +395,7 @@ func test_scene_size_matches_a_live_instance() -> void:
 	assert_vector(Deployable.scene_size(TorchScene)).is_equal(live.size)
 	assert_int(Deployable.scene_support_dirs(TorchScene)).is_equal(live.support_dirs)
 	assert_bool(Deployable.scene_directional(TorchScene)).is_equal(live.directional)
+	assert_bool(Deployable.scene_harvests(TorchScene)).is_equal(live.harvests_deposits)
 
 
 ## Facing is runtime state the player stamps on, so the base has to hand out a
@@ -359,6 +416,16 @@ func test_the_base_refuses_every_transfer() -> void:
 	assert_dict(node.extract_item(99)).is_empty()
 	# And it is carrying nothing, so a pop drops only the deployable itself.
 	assert_array(node.take_cargo()).is_empty()
+
+
+## The other two defaults 3.3 adds. `is_idle` false is what lets the HUD counter
+## walk every machine with no type check; `is_powered` true is the 3.4 stub every
+## machine tick already asks.
+func test_the_base_is_never_idle_and_always_powered() -> void:
+	var node: Deployable = auto_free(DeployableScript.new())
+	assert_bool(node.is_idle()).is_false()
+	assert_bool(node.is_powered()).is_true()
+	assert_bool(node.harvests_deposits).is_false()
 
 
 ## Same contract for the item preview: it is read off the scene's own ColorRect,

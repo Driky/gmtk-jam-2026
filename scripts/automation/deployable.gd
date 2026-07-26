@@ -40,6 +40,12 @@ const MAX_DRAIN_STEPS := 4096
 ## inserter do. Authored per scene, and read by the ghost through
 ## `scene_directional` so the arrow appears for exactly the items that use one.
 @export var directional := false
+## Does this take ore out of the ground? Authored alongside `directional`, and
+## read by placement through `scene_harvests` — a true here is what makes the
+## ghost stay red until at least one HARVEST cell is a deposit. Only the Miner
+## sets it, and the player never learns that: it asks the scene, not the class
+## ([automation.md](../../docs/systems/automation.md) §Categories).
+@export var harvests_deposits := false
 
 ## Which way it points. RIGHT by default, so a non-directional deployable still
 ## has a defined facing that nobody reads. Runtime rather than authored: the
@@ -95,6 +101,52 @@ static func footprint_at(origin: Vector2i, area: Vector2i) -> Array[Vector2i]:
 		for dx in area.x:
 			cells.append(origin + Vector2i(dx, dy))
 	return cells
+
+# --- Harvest block (3.3) -----------------------------------------------------
+
+
+## The block of TILES a harvesting deployable reaches into: the SAME W×H as its
+## footprint, flush against it, one full span along `facing`. **The arrow points
+## at the ore.**
+##
+##     facing LEFT             facing DOWN
+##       H H H M M M             M M M
+##       H H H M M M             M M M
+##            ← arrow            H H H
+##                               H H H
+##                                ↓ arrow
+##
+## ❗️It is a separate block rather than the footprint itself because it *has*
+## to be. Every `*_deposit` material is `is_solid` and `Terrain.place_entity`
+## rejects a solid cell — an invariant baked into three places in `terrain.gd`
+## and depended on by name by `Enemy._attackable_entity`. "Placed on the deposit"
+## is delivered by GATING placement on this block instead
+## ([automation.md](../../docs/systems/automation.md) §Categories).
+##
+## Span is `area.x` for a horizontal facing and `area.y` for a vertical one —
+## a 3×2 miner reaches 3 cells sideways but only 2 cells up or down, so the
+## block always lands flush with no gap and no overlap.
+static func harvest_cells_at(origin: Vector2i, area: Vector2i, facing: Vector2i) -> Array[Vector2i]:
+	var span: int = area.x if facing.y == 0 else area.y
+	return footprint_at(origin + facing * span, area)
+
+
+func harvest_cells() -> Array[Vector2i]:
+	return harvest_cells_at(_cell, size, facing)
+
+
+static func is_deposit_at(terrain: Node, cell: Vector2i) -> bool:
+	var mat: Dictionary = Materials.MATERIALS.get(terrain.get_material_id(cell), { })
+	return mat.get("is_deposit", false)
+
+
+## The placement gate and the Miner's idle state are the same question asked of
+## the same cells, so they ask it through one function.
+static func has_deposit_in(terrain: Node, cells: Array[Vector2i]) -> bool:
+	for cell: Vector2i in cells:
+		if is_deposit_at(terrain, cell):
+			return true
+	return false
 
 # --- Registration ------------------------------------------------------------
 
@@ -222,7 +274,7 @@ func on_removed() -> void:
 ## Everything this was HOLDING, handed over so `pop_to_pickup` can drop it beside
 ## the deployable itself. Empty for anything that holds nothing (a torch, a wall,
 ## an inserter — the inserter's transfer is atomic by design, so there is never a
-## stack on the arm). 3.3's furnace returns its input, fuel and output slots here.
+## stack on the arm). A crafting station returns its input and output slots here.
 ##
 ## ❗️Named `take_cargo`, not `cargo`, because it is DESTRUCTIVE: an override hands
 ## the stacks over and is left empty. A pure read would dupe the cargo the moment
@@ -278,6 +330,28 @@ func extract_item(_max_count := 1) -> Dictionary:
 func on_tick(_terrain: Node) -> void:
 	pass
 
+
+## "This machine has nothing left to do and needs the player." False for
+## everything that is not a machine, so the HUD's idle counter can walk the
+## whole registry with no type check
+## ([ui.md](../../docs/systems/ui.md) §HUD). A Miner over exhausted rock is the
+## only thing that says true in 3.3.
+##
+## ❗️Deliberately ONE state for "ran dry" and "never had a deposit": from the
+## player's side both mean the same thing — this machine is producing nothing,
+## come and move it.
+func is_idle() -> bool:
+	return false
+
+
+## The 3.4 seam, stubbed. Every machine's `on_tick` already early-outs on it, so
+## power lands as a real implementation here plus the coverage graph and nothing
+## else changes. ⚠️ Until 3.4 this is always true, which means **nothing in 3.3
+## runs against its real gate** — known and accepted
+## ([automation.md](../../docs/systems/automation.md) §Power).
+func is_powered() -> bool:
+	return true
+
 # --- Internals ---------------------------------------------------------------
 
 
@@ -310,6 +384,7 @@ static var _scene_size_cache := { }
 static var _scene_dirs_cache := { }
 static var _scene_visual_cache := { }
 static var _scene_directional_cache := { }
+static var _scene_harvests_cache := { }
 
 
 ## A scene's authored footprint, for the placement ghost. The ghost redraws
@@ -335,6 +410,15 @@ static func scene_directional(scene: PackedScene) -> bool:
 	return _scene_directional_cache[scene]
 
 
+## Whether placing this scene requires a deposit under its harvest block. Same
+## anti-drift contract as `scene_size`: read off an authored instance, so the
+## ghost's red and the click's refusal are the same answer rather than two
+## copies of it.
+static func scene_harvests(scene: PackedScene) -> bool:
+	_cache_scene(scene)
+	return _scene_harvests_cache[scene]
+
+
 ## The authored look, so the ghost can show WHAT is being placed rather than
 ## only where and how big. `{}` when the scene has no coloured rect to preview.
 ##
@@ -352,6 +436,7 @@ static func _cache_scene(scene: PackedScene) -> void:
 	_scene_size_cache[scene] = probe.size
 	_scene_dirs_cache[scene] = probe.support_dirs
 	_scene_directional_cache[scene] = probe.directional
+	_scene_harvests_cache[scene] = probe.harvests_deposits
 	_scene_visual_cache[scene] = _probe_visual(probe)
 	probe.free()
 

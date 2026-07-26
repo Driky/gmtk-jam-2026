@@ -123,6 +123,52 @@ func test_a_zero_support_deployable_places_in_mid_air() -> void:
 		),
 	).is_true()
 
+# --- The harvest gate (3.3) --------------------------------------------------
+
+## A 3×2 at P, facing RIGHT, so its harvest block is the 3×2 starting at P+(3,0).
+const MINER_SIZE := Vector2i(3, 2)
+
+
+func _harvest_gate(facing: Vector2i) -> bool:
+	return PlayerScript.can_place_at(
+		_terrain,
+		P,
+		NOWHERE,
+		MINER_SIZE,
+		Deployable.SUPPORT_ALL,
+		facing,
+		true,
+	)
+
+
+## ❗️This clause is the ONLY thing standing in for "placed on the deposit" —
+## the footprint cannot overlap the ore, because deposits are solid and
+## `place_entity` rejects solid cells. Bare rock under the harvest block is a red
+## ghost and a refused click.
+func test_a_harvesting_placement_needs_a_deposit_in_its_harvest_block() -> void:
+	for cell: Vector2i in Deployable.harvest_cells_at(P, MINER_SIZE, Vector2i.RIGHT):
+		_terrain.set_tile(cell, "stone")
+	assert_bool(_harvest_gate(Vector2i.RIGHT)).is_false()
+	_terrain.set_tile(P + Vector2i(3, 1), "coal_deposit")
+	assert_bool(_harvest_gate(Vector2i.RIGHT)).is_true()
+
+
+## Rotating away from the ore has to invalidate the placement, or R would be
+## cosmetic and every miner would be placeable anywhere near a deposit.
+func test_the_harvest_gate_follows_the_facing() -> void:
+	_terrain.set_tile(P + Vector2i(3, 1), "coal_deposit")
+	assert_bool(_harvest_gate(Vector2i.RIGHT)).is_true()
+	assert_bool(_harvest_gate(Vector2i.LEFT)).is_false()
+	assert_bool(_harvest_gate(Vector2i.UP)).is_false()
+	assert_bool(_harvest_gate(Vector2i.DOWN)).is_false()
+
+
+## The gate defaults OFF, so every non-harvesting call site — every block, torch,
+## belt and inserter — is untouched by construction rather than by re-testing.
+func test_a_non_harvesting_placement_ignores_the_deposit_rule() -> void:
+	_terrain.set_tile(P + Vector2i.DOWN, "dirt")
+	assert_bool(PlayerScript.can_place_at(_terrain, P, NOWHERE)).is_true()
+
 # --- What the ghost asks (3.1) -----------------------------------------------
 
 

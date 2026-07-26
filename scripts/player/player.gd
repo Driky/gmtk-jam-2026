@@ -509,7 +509,15 @@ func _place_scene(terrain: Node, cell: Vector2i, scene: PackedScene) -> void:
 	# non-directional deployable.
 	node.facing = place_facing
 	node.setup(cell) # Before add_child, per the Core/loot-bag convention.
-	if not can_place_at(terrain, cell, tile_rect(), node.size, node.support_dirs):
+	if not can_place_at(
+			terrain,
+			cell,
+			tile_rect(),
+			node.size,
+			node.support_dirs,
+			node.facing,
+			node.harvests_deposits,
+	):
 		node.free()
 		return
 	if not node.register(terrain):
@@ -586,13 +594,23 @@ func tile_rect() -> Rect2i:
 ##
 ## `size` and `support_dirs` default to a 1×1 that mounts in any direction —
 ## the block rule, unchanged, so every block call site stays a three-argument
-## call and the 2.7 behaviour is preserved by construction.
+## call and the 2.7 behaviour is preserved by construction. `facing`/`harvests`
+## default the same way, so 3.1's five-argument deployable call sites are
+## untouched too.
+##
+## ❗️`harvests` is ONE generic clause, not a `Miner` type check: a deployable
+## that harvests must have at least one deposit in its harvest block, which is
+## how "placed on the deposit" is delivered without ever letting a footprint
+## cell be solid ([automation.md](../../docs/systems/automation.md)). The player
+## still knows nothing about miners — the answer comes off the scene.
 static func can_place_at(
 		terrain: Node,
 		origin: Vector2i,
 		occupied: Rect2i,
 		size := Vector2i.ONE,
 		support_dirs := Deployable.SUPPORT_ALL,
+		facing := Vector2i.RIGHT,
+		harvests := false,
 ) -> bool:
 	for cell: Vector2i in Deployable.footprint_at(origin, size):
 		if not terrain.can_player_edit(cell):
@@ -602,6 +620,10 @@ static func can_place_at(
 		if terrain.get_entity(cell) != null:
 			return false
 		if occupied.has_point(cell):
+			return false
+	if harvests:
+		var harvest := Deployable.harvest_cells_at(origin, size, facing)
+		if not Deployable.has_deposit_in(terrain, harvest):
 			return false
 	return Deployable.is_supported_at(terrain, origin, size, support_dirs)
 
@@ -638,3 +660,13 @@ static func placement_directional(item_id: String) -> bool:
 		return false
 	var scene := Items.stats_for(item_id).place_scene
 	return scene != null and Deployable.scene_directional(scene)
+
+
+## Whether placing this item is gated on a deposit under its harvest block —
+## the ghost's third question after size and facing. Same two branches again: a
+## block never harvests anything.
+static func placement_harvests(item_id: String) -> bool:
+	if item_id == "":
+		return false
+	var scene := Items.stats_for(item_id).place_scene
+	return scene != null and Deployable.scene_harvests(scene)
