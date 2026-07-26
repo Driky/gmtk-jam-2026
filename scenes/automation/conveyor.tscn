@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/automation/conveyor.gd" id="1_conveyor"]
+
+[node name="Conveyor" type="Node2D"]
+script = ExtResource("1_conveyor")
+max_hp = 15.0
+support_dirs = 0
+removal_hits = 1
+item_id = "conveyor_t1"
+directional = true
+ticks_per_move = 1
+
+[node name="Visual" type="ColorRect" parent="."]
+offset_left = -8.0
+offset_top = -3.0
+offset_right = 8.0
+offset_bottom = 3.0
+color = Color(0.45, 0.45, 0.52, 1)

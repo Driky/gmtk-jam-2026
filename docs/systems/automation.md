@@ -59,7 +59,22 @@ One fixed 10 Hz tick in `Automation` advances the whole logistics sim determinis
 
 `Automation.reset_run()` zeroes `tick_count` and the accumulator and **clears all three registries**. ❗️That last part is not redundant with `on_removed()`: deployables are children of `Main` and die with the scene reload without ever being popped, so a surviving array would hold freed references into the next run.
 
-**Conveyors:** stacks are the unit of transport everywhere. Two-phase **mark-then-commit** per tick (correct chain compression, no dupes): a stack advances into the next slot if free; blocked = waits (natural jamming). Rendering: pooled sprite + count label interpolated between slot centers over the tick interval. Throughput levers, all data: (a) tiered conveyors advance every N ticks (per-conveyor cooldown counter); (b) stacking inserters; (c) the Stacker.
+**Conveyors:** stacks are the unit of transport everywhere. One slot per belt, shaped **byte-identically to an `Inventory` slot** (`{}` or `{id, count}`), so a stack moves belt → inserter → chest with no conversion anywhere and `Inventory.STACK_SIZE` is the one cap. `Conveyor.advance_all(terrain, belts)` is **static** — the pass is a property of the group, not of any one belt — and runs three sweeps per tick:
+
+0. **Settle** — tick every cooldown down and reset every `_prev_cell` to the belt's own cell. That reset is what makes the render interpolation self-correcting: the commit overwrites it for movers, so a blocked item's lerp is a no-op and an arriving item's lerp runs for exactly one tick.
+1. **Mark** — walk the row-major list, memoizing "does this belt vacate this tick?". **Chain compression falls out of the recursion**: a full line all marks in one pass, so the whole chain advances in a single tick rather than only its head.
+2. **Commit** — in three separate sweeps: capture every payload, clear every source, *then* write every target. ❗️Not foldable into one. A belt is routinely both a source and a target in the same tick, so writing one move at a time overwrites a stack that has not vacated yet — the dupe-and-loss bug this shape exists to make impossible, invisible until a full line quietly eats an item.
+
+Rules the mark phase settles, all of them worth stating because each has a plausible wrong answer:
+- ❗️**A closed loop of full belts ROTATES.** Re-entering a belt already `RESOLVING` answers **true**, and that optimism is *self-fulfilling*, not a guess: a re-entry can only happen on a genuine cycle (the pass never recurses into an empty belt), the commit is simultaneous, so "the cell will be free" is exactly true. Every frame in the cycle unwinds `true`, giving one move and one claim per member. A naive predicate deadlocks the loop instead. `_evaluate` checks the target's cooldown **before** recursing, so a cooled-down member still blocks the loop properly.
+- ❗️**The destination claim is taken AFTER the recursion returns, and the "already claimed" test is repeated there.** A two-belt swap claims the very cell its feeder was about to; claiming before the recursion lets the feeder and the cycle both write one slot and silently destroys a stack.
+- **Deterministic tie-break:** two belts facing one cell — the row-major-earlier one claims it, the other keeps its stack and retries. Starting the walk at any member of a cycle yields the same move *set* in a different order, and the commit is order-independent, so the memo carries no hidden dependence on where iteration began.
+- **A belt facing nothing (or a machine, wall or inserter) JAMS — it never spills.** Items on a belt never fall on the floor. 3.3 routes a machine input through `accept_item` at that same point.
+- **A full slot never merges an identical stack**, even though `accept_item` does: belt-to-belt movement is whole-slot, and densifying a saturated line is the **Stacker**'s job.
+
+Rendering: see below. Throughput levers, all data: (a) tiered conveyors advance every N ticks (`ticks_per_move`, set on *receipt*, so a saturated line moves in lockstep — tier 2 is a second `.tres`, not a second script); (b) stacking inserters; (c) the Stacker.
+
+❗️**Conveyors and inserters author `support_dirs = 0`** — they opt out of the support rule entirely. Belts spanning a gap and a closed loop whose top row is two cells off the ground are both normal factory shapes; making them pop would be an unbuildable game. The opt-out already exists in the base for exactly this ("a free-floating machine opts out of the rule"), so this is data, not a new rule.
 
 **Tick order (fixed, save/load depends on it):** `machines craft → inserters transfer → conveyors advance` — a crafted item can leave the same tick.
 

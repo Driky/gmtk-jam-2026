@@ -23,11 +23,16 @@ const BOLT_CASTER: ItemStats = preload("res://data/items/bolt_caster.tres")
 ## The first placeable that is a SCENE rather than a tile — light you carry and
 ## mount on a wall ([terrain.md](../docs/systems/terrain.md) §Lighting).
 const TORCH: ItemStats = preload("res://data/items/torch.tres")
+## The first two directional placeables and the first two things that tick
+## ([automation.md](../docs/systems/automation.md) §The 10 Hz tick). Tier 2 is a
+## second .tres with a lower `ticks_per_move`, not a second script.
+const CONVEYOR_T1: ItemStats = preload("res://data/items/conveyor_t1.tres")
 
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
 	"torch": TORCH,
+	"conveyor_t1": CONVEYOR_T1,
 }
 
 

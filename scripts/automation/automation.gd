@@ -150,6 +150,16 @@ func inserters() -> Array[Deployable]:
 	return _inserters
 
 
+## Cheap "is anything on a belt" probe, so the item layer can skip a redraw on an
+## idle factory. Early-outs on the first occupied slot, so the full scan only
+## happens in the case whose answer is "nothing to draw".
+func has_items_in_transit() -> bool:
+	for node: Deployable in _conveyors:
+		if not (node as Conveyor).slot_empty():
+			return true
+	return false
+
+
 ## Enqueue a cell for a support re-check. Idempotent within a drain window.
 func queue_support_check(cell: Vector2i) -> void:
 	if _queued.has(cell):
@@ -226,10 +236,10 @@ func _probe(cell: Vector2i) -> void:
 # --- Tick internals ----------------------------------------------------------
 
 
-## The conveyor phase. Its two-phase mark-then-commit pass belongs to the
-## Conveyor itself (3.2, commit 4) — this is the seam it lands on.
+## The conveyor phase. The two-phase mark-then-commit pass itself belongs to the
+## Conveyor — it is a property of the group, not of the tick driver.
 func _advance_conveyors() -> void:
-	pass
+	Conveyor.advance_all(terrain, _conveyors)
 
 
 func _register(registry: Array[Deployable], node: Deployable) -> void:

@@ -148,6 +148,7 @@ func test_placement_support_dirs_follows_the_item() -> void:
 ## Only a directional scene placeable gets an arrow. A block never points
 ## anywhere, and neither does a torch.
 func test_placement_directional_follows_the_item() -> void:
+	assert_bool(PlayerScript.placement_directional("conveyor_t1")).is_true()
 	assert_bool(PlayerScript.placement_directional("torch")).is_false()
 	assert_bool(PlayerScript.placement_directional("dirt")).is_false()
 	assert_bool(PlayerScript.placement_directional("")).is_false()

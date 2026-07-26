@@ -9,6 +9,7 @@ const AutomationScript := preload("res://scripts/automation/automation.gd")
 const DeployableScript := preload("res://scripts/automation/deployable.gd")
 const GameScript := preload("res://scripts/game/game.gd")
 const TorchScene := preload("res://scenes/torch.tscn")
+const ConveyorScene := preload("res://scenes/automation/conveyor.tscn")
 
 ## Playable (x in [50, 150)) and far from world edges.
 const CELL := Vector2i(100, 100)
@@ -366,6 +367,12 @@ func test_a_cell_queued_before_reset_can_be_queued_again() -> void:
 func test_reset_run_empties_the_registries_and_zeroes_the_tick() -> void:
 	_automation.register_machine(_counter_at(CELL, "m"))
 	_automation.register_inserter(_counter_at(CELL + Vector2i(2, 0), "i"))
+	var belt: Conveyor = auto_free(ConveyorScene.instantiate())
+	belt.automation = _automation
+	belt.setup(CELL + Vector2i(4, 0))
+	add_child(belt)
+	belt.register(_terrain)
+	belt.on_placed()
 	_automation.step_tick()
 	assert_int(_automation.tick_count).is_equal(1)
 
@@ -373,6 +380,7 @@ func test_reset_run_empties_the_registries_and_zeroes_the_tick() -> void:
 
 	assert_int(_automation.tick_count).is_equal(0)
 	assert_array(_automation.inserters()).is_empty()
+	assert_array(_automation.conveyors()).is_empty()
 	_order.clear()
 	_automation.step_tick()
 	assert_array(_order).is_empty()

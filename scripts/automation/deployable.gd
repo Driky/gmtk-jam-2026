@@ -213,7 +213,6 @@ func on_placed() -> void:
 func on_removed() -> void:
 	pass
 
-
 # --- The item-transfer seam --------------------------------------------------
 #
 # The ENTIRE interface between deployables. An inserter, 3.3's miner and furnace,
