@@ -27,12 +27,23 @@ const BANNER_FADE := 0.5
 const TOAST_HOLD := 1.2
 const TOAST_FADE := 0.4
 
+## Cursor inspector: offset from the pointer, and the margin it keeps from the
+## screen edge. Below-right of the cursor, because that is the quadrant the
+## arrow itself does not cover.
+const INSPECT_OFFSET := Vector2(18.0, 14.0)
+const INSPECT_MARGIN := 6.0
+
 ## Set in _ready, cleared in _exit_tree — the ProjectilePool.fire trick, so
 ## call sites need no node path and the fixed autoload map in tech-design.md
 ## stays untouched. Inert with no HUD in the tree, so tests are unaffected.
 static var _instance: Hud = null
 
 static var _icon_cache: Dictionary = { }
+
+## Is the cursor inspector showing? Static and driven through the F3 row, the
+## same shape `DebugMenu.is_open` uses — so the toggle needs no node path and
+## survives the HUD not being in the tree at all.
+static var inspector_enabled := true
 
 ## Injected by tests before add_child; falls back to the live autoload.
 var inventory: Inventory = null
@@ -73,6 +84,8 @@ var _slot_counts: Array[Label] = []
 @onready var _xp_label: Label = %XPLabel
 @onready var _toast: Label = %Toast
 @onready var _idle_alert: Label = %IdleAlert
+@onready var _selected_label: Label = %SelectedLabel
+@onready var _inspect_label: Label = %InspectLabel
 
 
 func _ready() -> void:
@@ -154,11 +167,109 @@ func toast(message: String) -> void:
 func _process(_delta: float) -> void:
 	if _player == null:
 		return
+	_refresh_inspector()
 	var row := floori(_player.global_position.y / TileLayout.TILE_SIZE)
 	if row == _last_row:
 		return
 	_last_row = row
 	_elevation_label.text = elevation_text(_player.global_position.y)
+
+# --- Cursor inspector --------------------------------------------------------
+
+
+## Toggled from the F3 row. Static and inert without a HUD, mirroring
+## `show_toast` — the debug menu owns no path to this node.
+static func set_inspector_enabled(enabled: bool) -> void:
+	inspector_enabled = enabled
+	if _instance != null and not enabled:
+		_instance._inspect_label.visible = false
+
+
+## Name whatever the pointer is over, once per frame. Polled rather than
+## signal-driven because the *cursor* is what changes, and nothing emits when a
+## mouse moves over a tile.
+##
+## Precedence mirrors what a click would actually do, so the label can never
+## name something other than what you are about to act on: a hotbar slot (a UI
+## element, and the only screen-space case) → a mob → a deployable → the tile.
+func _refresh_inspector() -> void:
+	if not inspector_enabled:
+		return
+	var at := get_viewport().get_mouse_position()
+	var text := _inspect_text(at)
+	_inspect_label.visible = text != ""
+	if text == "":
+		return
+	_inspect_label.text = text
+	# Placed after the text is set: the label has to have resized before it can
+	# be kept on screen, or a long name runs off the right edge for one frame.
+	_inspect_label.reset_size()
+	var screen := get_viewport().get_visible_rect().size
+	var box := _inspect_label.size
+	# ❗️Flipped ABOVE the cursor near the bottom edge rather than clamped down
+	# onto it — hovering a hotbar slot is the common case, and a clamped label
+	# lands squarely on the slots either side of the one it is naming.
+	var y := at.y + INSPECT_OFFSET.y
+	if y + box.y > screen.y - INSPECT_MARGIN:
+		y = at.y - box.y - INSPECT_OFFSET.y
+	_inspect_label.position = Vector2(
+		clampf(at.x + INSPECT_OFFSET.x, INSPECT_MARGIN, screen.x - box.x - INSPECT_MARGIN),
+		clampf(y, INSPECT_MARGIN, screen.y - box.y - INSPECT_MARGIN),
+	)
+
+
+func _inspect_text(at: Vector2) -> String:
+	var slot := _hovered_slot(at)
+	if slot >= 0:
+		var stack := inventory.get_slot(slot)
+		return "" if stack.is_empty() else "%s ×%d" % [item_name(stack.id), stack.count]
+	var cell: Vector2i = _player.target_tile()
+	var enemy := _enemy_at(cell)
+	if enemy != null:
+		return "%s — %d/%d HP" % [
+			item_name(enemy.stats.display_name),
+			roundi(enemy.current_hp),
+			roundi(enemy.stats.max_hp),
+		]
+	# `as Deployable`, so the Core stays anonymous exactly as it stays
+	# un-removable — it is deliberately not one of these.
+	var deployable := Terrain.get_entity(cell) as Deployable
+	if deployable != null:
+		return item_name(deployable.item_id)
+	return tile_text(Terrain.get_tile_data(cell))
+
+
+## An empty cell reads as nothing at all rather than "Air": naming the absence
+## of a tile is noise on every second pixel of the screen. A deposit carries its
+## remaining ore, which is the one number that decides where a miner goes.
+static func tile_text(data: Dictionary) -> String:
+	if data.is_empty():
+		return ""
+	var name := item_name(data.material_id)
+	if data.is_deposit:
+		return "%s — %d ore left" % [name, data.reserve]
+	return name
+
+
+## Which hotbar slot the pointer is over, or -1. Hit-tested against the slot
+## backgrounds themselves, so it cannot drift from where they were laid out.
+func _hovered_slot(at: Vector2) -> int:
+	for i in _slot_bgs.size():
+		if _slot_bgs[i].get_global_rect().has_point(at):
+			return i
+	return -1
+
+
+## Mobs are roughly a tile, so "same cell as the hovered tile" is both accurate
+## enough and free — no physics query, no per-frame distance sort.
+func _enemy_at(cell: Vector2i) -> Enemy:
+	for node: Node in get_tree().get_nodes_in_group(&"enemies"):
+		var enemy := node as Enemy
+		if enemy == null:
+			continue
+		if Vector2i((enemy.global_position / TileLayout.TILE_SIZE).floor()) == cell:
+			return enemy
+	return null
 
 
 ## Called by main.gd once the player exists — its _ready (which seeds hp/mana)
@@ -203,6 +314,26 @@ static func icon_for(id: String) -> Texture2D:
 		icon = ImageTexture.create_from_image(image)
 	_icon_cache[id] = icon
 	return icon
+
+
+## THE display name for any item or tile id, and the one place that question is
+## answered — the hotbar readout, the cursor inspector and anything later that
+## needs to say "Copper Deposit" out loud all come here.
+##
+## ❗️It cannot just read `Items.stats_for(id).display_name`: every plain block
+## resolves to the shared `BLOCK_DEFAULT`, whose name is the literal word
+## "Block", so a hundred materials would all introduce themselves identically.
+## Authored items win; everything else is its own id, title-cased — Godot's
+## `capitalize()` already turns `copper_deposit` into `Copper Deposit`, so
+## materials need no second name table to drift from `materials.gd`.
+static func item_name(id: String) -> String:
+	if id == "":
+		return ""
+	if ItemDefs.STATS.has(id):
+		var authored: String = (ItemDefs.STATS[id] as ItemStats).display_name
+		if authored != "":
+			return authored
+	return id.capitalize()
 
 
 static func biome_name(row: int) -> String:
@@ -350,11 +481,25 @@ func _announce(message: String) -> void:
 func _on_slot_changed(index: int) -> void:
 	if index < Inventory.HOTBAR_SIZE:
 		_refresh_slot(index)
+	# Mining the last of a stack changes what is in hand without the selection
+	# moving, so the name has to follow the slot edit as well as the selection.
+	if index == inventory.selected_slot:
+		_refresh_selected_label()
 
 
 func _on_selected_changed(index: int) -> void:
 	for i in Inventory.HOTBAR_SIZE:
 		_slot_bgs[i].color = SELECTED_BG if i == index else NORMAL_BG
+	_refresh_selected_label()
+
+
+## What is actually in your hand, above the hotbar. An empty slot names **bare
+## hands** rather than going blank, because that is what LMB will swing with —
+## the same resolution `Items.selected_stats()` does, said out loud.
+func _refresh_selected_label() -> void:
+	var stack := inventory.selected_item()
+	var id: String = stack.get("id", "")
+	_selected_label.text = ItemDefs.BARE_HAND.display_name if id == "" else item_name(id)
 
 
 func _refresh_slot(index: int) -> void:

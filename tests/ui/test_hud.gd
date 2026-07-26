@@ -367,3 +367,94 @@ func test_the_idle_alert_is_seeded_from_the_current_count() -> void:
 	_hud.automation = automation
 	add_child(_hud)
 	assert_bool(_hud._idle_alert.visible).is_true()
+
+# --- Item naming -------------------------------------------------------------
+
+
+## ❗️The reason this is not `Items.stats_for(id).display_name`: every plain
+## block resolves to the shared BLOCK_DEFAULT, whose name is the literal word
+## "Block", so a hundred materials would all introduce themselves identically.
+func test_item_name_does_not_call_every_block_block() -> void:
+	assert_str(HudScript.item_name("copper")).is_equal("Copper")
+	assert_str(HudScript.item_name("copper_deposit")).is_equal("Copper Deposit")
+	assert_str(HudScript.item_name("ice_stone")).is_equal("Ice Stone")
+
+
+## An authored item wins, so a machine reads as its display name rather than as
+## its id — and the two cannot drift, because there is no second name table.
+func test_item_name_prefers_the_authored_display_name() -> void:
+	assert_str(HudScript.item_name("miner")).is_equal(ItemDefs.MINER.display_name)
+	assert_str(HudScript.item_name("conveyor_t1")).is_equal("Conveyor")
+
+
+func test_item_name_of_nothing_is_nothing() -> void:
+	assert_str(HudScript.item_name("")).is_equal("")
+
+# --- Selected-item label -----------------------------------------------------
+
+
+func test_the_selected_label_names_what_is_in_hand() -> void:
+	_inv.add_item("conveyor_t1", 3)
+	assert_str(_hud._selected_label.text).is_equal("Conveyor")
+
+
+## An empty slot names BARE HANDS rather than going blank — that is genuinely
+## what LMB will swing with, and the same resolution `selected_stats()` does.
+func test_an_empty_slot_names_bare_hands() -> void:
+	assert_str(_hud._selected_label.text).is_equal(ItemDefs.BARE_HAND.display_name)
+
+
+## Mining the last of a stack changes what is in hand without the selection
+## moving, so the label has to follow slot edits too.
+func test_the_selected_label_follows_an_emptied_slot() -> void:
+	_inv.add_item("stone", 1)
+	assert_str(_hud._selected_label.text).is_equal("Stone")
+	_inv.remove_from_slot(0, 1)
+	assert_str(_hud._selected_label.text).is_equal(ItemDefs.BARE_HAND.display_name)
+
+
+func test_the_selected_label_follows_the_selection() -> void:
+	_inv.add_item("torch", 5) # Slot 0.
+	_inv.add_item("miner", 2) # Slot 1 — a different id never merges.
+	assert_str(_hud._selected_label.text).is_equal("Torch")
+	_inv.selected_slot = 1
+	assert_str(_hud._selected_label.text).is_equal(ItemDefs.MINER.display_name)
+
+# --- Cursor inspector --------------------------------------------------------
+
+
+## ❗️Air reads as NOTHING, not as "Air". Naming the absence of a tile would put
+## a label on every second pixel of the screen.
+func test_the_inspector_says_nothing_about_air() -> void:
+	assert_str(HudScript.tile_text({ })).is_equal("")
+
+
+func test_the_inspector_names_a_plain_tile() -> void:
+	assert_str(
+		HudScript.tile_text({ material_id = "stone", is_deposit = false, reserve = 0 }),
+	).is_equal("Stone")
+
+
+## A deposit carries its remaining ore — the one number that decides where a
+## miner is worth putting.
+func test_the_inspector_reports_a_deposits_remaining_ore() -> void:
+	assert_str(
+		HudScript.tile_text({ material_id = "iron_deposit", is_deposit = true, reserve = 43 }),
+	).is_equal("Iron Deposit — 43 ore left")
+
+
+## The toggle has to be inert with no HUD in the tree, like show_toast — it is
+## driven from a debug panel that owns no path to this node.
+func test_the_inspector_toggle_is_inert_without_a_hud() -> void:
+	_hud.free()
+	_hud = null
+	Hud.set_inspector_enabled(false)
+	assert_bool(Hud.inspector_enabled).is_false()
+	Hud.set_inspector_enabled(true)
+
+
+func test_disabling_the_inspector_hides_the_label() -> void:
+	_hud._inspect_label.visible = true
+	Hud.set_inspector_enabled(false)
+	assert_bool(_hud._inspect_label.visible).is_false()
+	Hud.set_inspector_enabled(true)

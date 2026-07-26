@@ -222,6 +222,13 @@ func _toggle_slot_overlay(pressed: bool) -> void:
 		slot_overlay.visible = pressed
 
 
+## Routed through the static seam rather than a node reference: this panel is
+## handed its overlays by main.gd, but the HUD is not one of them and should not
+## become one for a checkbox ([ui.md](../../docs/systems/ui.md)).
+func _toggle_inspector(pressed: bool) -> void:
+	Hud.set_inspector_enabled(pressed)
+
+
 func _toggle_perf_overlay(pressed: bool) -> void:
 	if perf_overlay == null:
 		return
@@ -251,6 +258,10 @@ func _build() -> void:
 	_check("Automation slots", _toggle_slot_overlay)
 	_check("Perf readout", _toggle_perf_overlay)
 	_check("Full bright", _toggle_full_bright)
+	# ❗️The one row that starts ON: the cursor inspector is a player-facing
+	# readout ([ui.md](../../docs/systems/ui.md)), not a debug overlay, and it
+	# only lives here because this panel is where a toggle belongs.
+	_check("Cursor inspector", _toggle_inspector, Hud.inspector_enabled)
 	_button("Skip countdown", func() -> void: game.skip_countdown())
 	_button("Clear wave", func() -> void: waves.debug_clear_wave())
 	_button("Poke nearest mob", func() -> void: waves.debug_poke_nearest())
@@ -294,9 +305,12 @@ func _title(text: String) -> void:
 	_rows.add_child(label)
 
 
-func _check(text: String, on_toggled: Callable) -> void:
+func _check(text: String, on_toggled: Callable, starts_on := false) -> void:
 	var check := CheckButton.new()
 	check.text = text
+	# Set BEFORE connecting, so seeding the box does not fire the handler and
+	# re-assert a state that is already true.
+	check.button_pressed = starts_on
 	check.toggled.connect(on_toggled)
 	_rows.add_child(check)
 

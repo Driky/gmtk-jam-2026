@@ -178,6 +178,33 @@ grow_vertical = 0
 theme_override_constants/separation = 4
 alignment = 1
 
+[node name="SelectedLabel" type="Label" parent="."]
+unique_name_in_owner = true
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -200.0
+offset_top = -104.0
+offset_right = 200.0
+offset_bottom = -82.0
+grow_horizontal = 2
+grow_vertical = 0
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 14
+
+[node name="InspectLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+mouse_filter = 2
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 13
+
 [node name="Toast" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
@@ -187,9 +214,9 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -300.0
-offset_top = -104.0
+offset_top = -152.0
 offset_right = 300.0
-offset_bottom = -60.0
+offset_bottom = -108.0
 grow_horizontal = 2
 grow_vertical = 0
 horizontal_alignment = 1
