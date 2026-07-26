@@ -79,8 +79,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Death/respawn: loot-bag drop (hotbar kept), respawn at Core after timer (beacon override Day 3).
 
 ### 2.6 XP & levels ([progression.md](systems/progression.md))
-- [ ] `Progression.grant_xp` from mining/kills/looting; level curve; level-up stats + upgrade point; XP bar in HUD.
-- [ ] `Progression.get_stat` multiplier lookup (buffs land Day 3; player reads stats through it now).
+- [x] `Progression.grant_xp` from mining/kills/looting; level curve; level-up stats + upgrade point; XP bar in HUD.
+- [x] `Progression.get_stat` multiplier lookup (buffs land Day 3; player reads stats through it now).
+- [x] Anti-farm rule: player-placed blocks pay no XP on either channel, via a `player_placed` tile flag ([terrain.md](systems/terrain.md)) carried into the drop.
+- [x] Mob death drops (`EnemyStats.drop_id/drop_count` → world pickups) — the code seam claimed 2.6 while the checklist didn't; loot *content* is still 4.2.
 
 ### 2.7 Torches & lighting ([terrain.md](systems/terrain.md))
 - [ ] CanvasModulate depth-lerp, player light, torch placeable, occlusion shadows, surface ambient.

@@ -40,11 +40,15 @@ class OverlayDouble:
 		resets += 1
 
 
+const ProgressionScript := preload("res://scripts/progression/progression.gd")
+
+
 func _make_menu() -> DebugMenu:
 	var menu: DebugMenu = auto_free(DebugMenuScript.new())
 	menu.game = auto_free(GameDouble.new())
 	menu.waves = auto_free(WavesDouble.new())
 	menu.items = Items
+	menu.progression = auto_free(ProgressionScript.new())
 	menu.flow_overlay = auto_free(Node2D.new())
 	menu.perf_overlay = auto_free(OverlayDouble.new())
 	add_child(menu)
@@ -141,6 +145,15 @@ func test_toggles_tolerate_missing_overlays() -> void:
 	menu._toggle_flow_overlay(true)
 	menu._toggle_perf_overlay(true)
 	assert_bool(menu.visible).is_false() # Reached here without erroring.
+
+
+## The button exists to reach a level-up without mining hundreds of blocks, so
+## one press has to be worth more than the first level costs.
+func test_grant_xp_levels_in_a_single_press() -> void:
+	var menu := _make_menu()
+	menu.grant_xp()
+	assert_int(menu.progression.level).is_greater(1)
+	assert_int(menu.progression.upgrade_points).is_greater(0)
 
 
 func test_kill_player_without_a_player_is_inert() -> void:

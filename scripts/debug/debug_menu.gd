@@ -28,10 +28,16 @@ const MARGIN := Vector2(12.0, 96.0) ## Clears the HUD bars on the left.
 ## has something to put in a loot bag ([player-combat.md](../../docs/systems/player-combat.md)).
 const LOOT_STACK := 50
 
+## One press of the XP button. Sized past the first level's cost so a single
+## click always visibly does something — levelling is otherwise a long grind
+## to reach by hand ([progression.md](../../docs/systems/progression.md)).
+const XP_GRANT := 100.0
+
 ## Injected by tests; fall back to the autoloads.
 var game: Node = null
 var waves: Node = null
 var items: Node = null
+var progression: Node = null
 ## Set by main.gd before add_child — the overlays this panel drives.
 var flow_overlay: Node2D = null
 var perf_overlay: CanvasLayer = null
@@ -46,6 +52,8 @@ func _ready() -> void:
 		waves = Waves
 	if items == null:
 		items = Items
+	if progression == null:
+		progression = Progression
 	layer = LAYER
 	# Usable while the tree is paused (the game-over screen pauses it).
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -82,6 +90,12 @@ func give_test_loot() -> void:
 		if mat.is_deposit or mat.min_tool_tier >= 99:
 			continue # Deposits aren't items; bedrock never drops.
 		items.player_inventory.add_item(id, LOOT_STACK)
+
+
+## Levelling by hand means mining hundreds of blocks; this is how the level-up
+## path (stat grant, banner, bar rebase) gets exercised on demand.
+func grant_xp() -> void:
+	progression.grant_xp("debug", XP_GRANT)
 
 
 func kill_player() -> void:
@@ -129,6 +143,7 @@ func _build() -> void:
 	_button("Clear wave", func() -> void: waves.debug_clear_wave())
 	_button("Poke nearest mob", func() -> void: waves.debug_poke_nearest())
 	_button("Give test loot", give_test_loot)
+	_button("Grant %d XP" % roundi(XP_GRANT), grant_xp)
 	_button("Kill player", kill_player)
 	_title("F4 — spawn mob at cursor")
 
