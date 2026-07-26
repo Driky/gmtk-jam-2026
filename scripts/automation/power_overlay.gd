@@ -55,8 +55,13 @@ const GRID_COLORS: Array[Color] = [
 const DISC_FILL_ALPHA := 0.08
 const DISC_LINE_ALPHA := 0.55
 const DISC_SEGMENTS := 48
-const LABEL_SIZE := 8
-const LABEL_OFFSET := Vector2(-16.0, -4.0)
+const LABEL_SIZE := 9
+## ❗️Lifted clear of the emitter's own footprint rather than centred on it. A
+## generator is 2×2 (32 px) of solid colour and the readout sat squarely on it,
+## legible in a unit test and a smudge on screen — this is anchored above the
+## top edge, `size.y * 0.5 * TILE` up from the centre plus a line of clearance.
+const LABEL_LIFT := 8.0
+const LABEL_INSET := -24.0
 
 ## Injected by tests; falls back to the autoload.
 var automation: Node = null
@@ -170,9 +175,13 @@ func _draw_coverage(view: Rect2) -> void:
 		var generator := emitters[i] as Generator
 		if generator == null:
 			continue
+		var lift := Vector2(
+			LABEL_INSET,
+			-(float(generator.size.y) * 0.5 * TILE + LABEL_LIFT),
+		)
 		draw_string(
 			font,
-			centre + LABEL_OFFSET,
+			centre + lift,
 			(
 				"%.1f/%.1f  %s"
 				% [
