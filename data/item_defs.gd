@@ -37,6 +37,13 @@ const MINER: ItemStats = preload("res://data/items/miner.tres")
 ## second script.
 const FURNACE: ItemStats = preload("res://data/items/furnace.tres")
 
+## The two emitters (3.4) and the first thing that gives coal a consumer. The
+## relay is the SAME script as the generator's base with no supply and a bigger
+## radius — a `.tscn` and a `.tres`, not a second class
+## ([automation.md](../docs/systems/automation.md) §Power).
+const GENERATOR: ItemStats = preload("res://data/items/generator.tres")
+const RELAY: ItemStats = preload("res://data/items/relay.tres")
+
 ## The first CRAFTED items. Authored as `ItemStats` with an `icon_color` and
 ## nothing else: that alone gets them a HUD icon and a row in the F3 give-item
 ## dropdown for free. No `place_scene`, so they are not placeable, and they are
@@ -53,6 +60,8 @@ const STATS: Dictionary = {
 	"inserter": INSERTER,
 	"miner": MINER,
 	"furnace": FURNACE,
+	"generator": GENERATOR,
+	"relay": RELAY,
 	"copper_bar": COPPER_BAR,
 	"iron_bar": IRON_BAR,
 }

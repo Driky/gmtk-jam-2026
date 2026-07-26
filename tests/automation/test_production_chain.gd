@@ -16,6 +16,7 @@ const MinerScene := preload("res://scenes/automation/miner.tscn")
 const FurnaceScene := preload("res://scenes/automation/furnace.tscn")
 const ConveyorScene := preload("res://scenes/automation/conveyor.tscn")
 const InserterScene := preload("res://scenes/automation/inserter.tscn")
+const GeneratorScene := preload("res://scenes/automation/generator.tscn")
 
 ## Playable (x in [50, 150)) and far from world edges.
 const ORIGIN := Vector2i(80, 100)
@@ -26,9 +27,9 @@ const POWER_CELL := ORIGIN + Vector2i(2, -3)
 ## negative twin is genuinely "out of radius" rather than "just barely".
 const FAR_POWER_CELL := ORIGIN + Vector2i(60, 0)
 const POWER_RADIUS := 12.0 ## Tiles; covers the whole line from POWER_CELL.
-## Comfortably above the chain's demand (one miner + one furnace), so these tests
-## measure the chain and not the brownout arithmetic.
-const POWER_OUTPUT := 10.0
+## More than enough coal for RUN_TICKS, so these tests measure the chain rather
+## than the fuel burn — `test_generator.gd` owns that.
+const FUEL_STACK := 20
 ## Generous: the chain has three cooldowns in series (miner 10, three inserters
 ## at 5) plus a 20-tick smelt, and this asserts arrival, not throughput.
 const RUN_TICKS := 200
@@ -50,23 +51,20 @@ func before_test() -> void:
 	_automation.set_process(false)
 
 
-## Stands in for the generator until it ships: a fuelled emitter with a radius.
-## The chain's own suite has no business modelling a fuel economy — what it needs
-## is "there is power here".
-class Supply:
-	extends PowerEmitter
-
-	func power_supply() -> float:
-		return POWER_OUTPUT
-
-
-func _power_at(cell: Vector2i) -> PowerEmitter:
-	var node: Supply = auto_free(Supply.new())
+## A real generator, hand-fed real coal. ❗️Deliberately not a supply double: the
+## bootstrap this whole tier rests on is "mine coal by hand, feed the generator,
+## the factory runs", and a double would test the chain against a power source
+## the player cannot build.
+func _power_at(cell: Vector2i) -> Generator:
+	var node: Generator = auto_free(GeneratorScene.instantiate())
 	node.automation = _automation
+	# Widened from the authored 8: this fixture is about the chain, not reach.
 	node.power_radius = POWER_RADIUS
 	node.setup(cell)
 	add_child(node)
+	assert_bool(node.register(_terrain)).is_true()
 	node.on_placed()
+	assert_int(node.accept_item("coal", FUEL_STACK)).is_equal(FUEL_STACK)
 	return node
 
 
