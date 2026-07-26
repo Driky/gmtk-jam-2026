@@ -235,3 +235,69 @@ func test_full_bright_tolerates_a_missing_light_map() -> void:
 	menu.light_map = null
 	menu._toggle_full_bright(true)
 	assert_bool(menu.visible).is_false() # Reached here without erroring.
+
+# --- Factory rig (3.3) -------------------------------------------------------
+
+const TerrainScript := preload("res://scripts/terrain/terrain.gd")
+
+
+## The rig is the only practical way into a production chain in an exported
+## build, so what it lays down has to actually be placeable — not merely look
+## right in a screenshot.
+func test_the_factory_rig_carves_a_pocket_with_a_deposit_a_miner_can_face() -> void:
+	var terrain: Node = auto_free(TerrainScript.new())
+	add_child(terrain)
+	var menu := _make_menu()
+	menu.terrain = terrain
+	# Stands in for the player: the rig only reads a global_position.
+	var player: Node2D = auto_free(Node2D.new())
+	player.add_to_group(&"player")
+	player.global_position = Vector2(100, 100) * TileLayout.TILE_SIZE
+	add_child(player)
+
+	var at: Vector2i = menu.build_factory_rig()
+
+	# The pocket is air with a solid floor, so a support_dirs = 15 machine stands.
+	assert_str(terrain.get_material_id(at)).is_equal("")
+	assert_bool(terrain.is_solid(at + Vector2i(0, DebugMenuScript.RIG_HEIGHT))).is_true()
+	# ❗️The payoff: a 3x2 miner placed against the seam, facing RIGHT, is valid.
+	var size := Vector2i(3, 2)
+	var origin := at + Vector2i(
+		DebugMenuScript.RIG_WIDTH - DebugMenuScript.RIG_ORE_WIDTH - size.x,
+		DebugMenuScript.RIG_HEIGHT - 2,
+	)
+	assert_bool(
+		Player.can_place_at(terrain, origin, Rect2i(0, 0, 1, 1), size, 15, Vector2i.RIGHT, true),
+	).is_true()
+	# And facing away from the seam is not — the rig teaches the rule, not a spot.
+	assert_bool(
+		Player.can_place_at(terrain, origin, Rect2i(0, 0, 1, 1), size, 15, Vector2i.LEFT, true),
+	).is_false()
+
+
+func test_the_factory_rig_hands_over_the_whole_chain() -> void:
+	var terrain: Node = auto_free(TerrainScript.new())
+	add_child(terrain)
+	var menu := _make_menu()
+	menu.terrain = terrain
+	var player: Node2D = auto_free(Node2D.new())
+	player.add_to_group(&"player")
+	player.global_position = Vector2(100, 100) * TileLayout.TILE_SIZE
+	add_child(player)
+
+	menu.build_factory_rig()
+
+	for id: String in DebugMenuScript.RIG_KIT:
+		assert_int(Items.player_inventory.count_of(id)).override_failure_message(
+			"The rig handed over no %s" % id,
+		).is_equal(DebugMenuScript.RIG_KIT_COUNT)
+
+
+## No player in the tree (a headless tool, or the beat after a death) must be a
+## no-op rather than a crash on a null global_position.
+func test_the_factory_rig_is_inert_without_a_player() -> void:
+	var terrain: Node = auto_free(TerrainScript.new())
+	add_child(terrain)
+	var menu := _make_menu()
+	menu.terrain = terrain
+	assert_vector(menu.build_factory_rig()).is_equal(Vector2i.ZERO)

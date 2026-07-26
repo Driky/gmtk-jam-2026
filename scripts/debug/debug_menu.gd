@@ -36,11 +36,34 @@ const XP_GRANT := 100.0
 ## Enough of whatever you picked to actually try something with it.
 const GIVE_DEFAULT_COUNT := 20
 
+## The factory test rig (3.3). A production chain needs a deposit, and deposits
+## only generate underground — so checking one by hand means digging twenty rows
+## and hoping. This carves a flat pocket beside the player, lays a short
+## `copper_deposit` seam at one end and stocks the hotbar, which is the whole
+## setup for `miner → inserter → belt → inserter → furnace` in one press.
+##
+## ❗️It exists because the WEB build has no other way in: there is no console in
+## an exported build, so the browser check of the tick — the one place
+## `MAX_CATCH_UP` and the deposit-exhaustion path are real — was otherwise a
+## twenty-minute dig every time ([automation.md](../../docs/systems/automation.md)).
+const RIG_ORE_MATERIAL := "copper_deposit"
+const RIG_ORE_WIDTH := 3
+const RIG_HEIGHT := 4
+const RIG_WIDTH := 22
+## Clear of the player's own body, so the pocket does not carve him out of the
+## floor he is standing on.
+const RIG_OFFSET := Vector2i(3, 1)
+## Everything the chain is built from, at a count that leaves room to make
+## mistakes.
+const RIG_KIT: Array[String] = ["miner", "inserter", "conveyor_t1", "furnace"]
+const RIG_KIT_COUNT := 10
+
 ## Injected by tests; fall back to the autoloads.
 var game: Node = null
 var waves: Node = null
 var items: Node = null
 var progression: Node = null
+var terrain: Node = null
 ## Set by main.gd before add_child — the overlays this panel drives.
 var flow_overlay: Node2D = null
 var slot_overlay: Node2D = null
@@ -62,6 +85,8 @@ func _ready() -> void:
 		items = Items
 	if progression == null:
 		progression = Progression
+	if terrain == null:
+		terrain = Terrain
 	layer = LAYER
 	# Usable while the tree is paused (the game-over screen pauses it).
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -98,6 +123,33 @@ func give_test_loot() -> void:
 		if mat.is_deposit or mat.min_tool_tier >= 99:
 			continue # Deposits aren't items; bedrock never drops.
 		items.player_inventory.add_item(id, LOOT_STACK)
+
+
+## Carve the factory pocket beside the player and hand over the kit. Returns the
+## pocket's top-left cell so a test can assert against it without re-deriving the
+## geometry.
+##
+## The seam sits at the pocket's RIGHT end and is two rows tall, so a miner
+## placed against it faces RIGHT and its harvest block lands on the ore — the
+## placement the ghost is trying to teach. The floor under the pocket is stone,
+## because a `support_dirs = 15` machine standing in a carved hole needs
+## something solid to hold it up.
+func build_factory_rig() -> Vector2i:
+	var player := get_tree().get_first_node_in_group(&"player") as Node2D
+	if player == null:
+		return Vector2i.ZERO
+	var at := Vector2i((player.global_position / TileLayout.TILE_SIZE).floor()) + RIG_OFFSET
+	for dx in RIG_WIDTH:
+		for dy in RIG_HEIGHT:
+			terrain.set_tile(at + Vector2i(dx, dy), "")
+		terrain.set_tile(at + Vector2i(dx, RIG_HEIGHT), "stone")
+	for dx in RIG_ORE_WIDTH:
+		for dy in 2:
+			var ore := at + Vector2i(RIG_WIDTH - 1 - dx, RIG_HEIGHT - 2 + dy)
+			terrain.set_tile(ore, RIG_ORE_MATERIAL)
+	for id: String in RIG_KIT:
+		items.player_inventory.add_item(id, RIG_KIT_COUNT)
+	return at
 
 
 ## Levelling by hand means mining hundreds of blocks; this is how the level-up
@@ -203,6 +255,7 @@ func _build() -> void:
 	_button("Clear wave", func() -> void: waves.debug_clear_wave())
 	_button("Poke nearest mob", func() -> void: waves.debug_poke_nearest())
 	_button("Give test loot", give_test_loot)
+	_button("Build factory rig", build_factory_rig)
 	_give_row()
 	_button("Grant %d XP" % roundi(XP_GRANT), grant_xp)
 	_button("Kill player", kill_player)
