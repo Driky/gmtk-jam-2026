@@ -19,11 +19,29 @@ const Z_INDEX := 100
 ## being a saturated colour.
 const SKY_COLOR := Color(0.95, 0.97, 1.0)
 
+## A whole solve costs ~9 ms, which is over half a frame — so it is spread
+## across frames instead: one phase seeds, four run two sweeps each, one
+## uploads. Six frames ≈ 100 ms, i.e. the light refreshes at ~10 Hz with no
+## single frame paying more than about 2 ms. Terraria updates lighting on a
+## similar cadence; the bilinear upscale and the 16-tile margin between them
+## make the latency invisible.
+const SWEEPS_PER_PHASE := 2
+const SWEEP_PHASES := LightGrid.SWEEPS / SWEEPS_PER_PHASE
+const PHASES := SWEEP_PHASES + 2 # + seed + upload.
+
 var grid := LightGrid.new()
 
 var _image: Image = null
 var _texture: ImageTexture = null
+## Latched at seed time, NOT read live: the grid holds light for the region it
+## was sampled for, so it must be drawn where it was computed. Using the live
+## camera rect instead would slide a stale solve across the world as you walk.
 var _rect := Rect2()
+var _phase := 0
+## The first solve runs whole, in one frame. Amortizing from cold would show
+## ~100 ms of unlit (i.e. fully bright) world at the moment the loading screen
+## hides — the one frame where a 9 ms cost is free and a flash is not.
+var _primed := false
 
 
 func _ready() -> void:
@@ -43,6 +61,31 @@ func _process(_delta: float) -> void:
 	# a half-built world is pure waste and visibly starves the row sweep.
 	if Game.state == Game.State.GENERATING:
 		return
+	if not _primed:
+		_primed = true
+		_seed(camera)
+		Perf.begin(&"light.solve")
+		grid.solve()
+		Perf.end()
+		_publish()
+		return
+	if _phase == 0:
+		_seed(camera)
+	elif _phase <= SWEEP_PHASES:
+		Perf.begin(&"light.solve")
+		var first := (_phase - 1) * SWEEPS_PER_PHASE
+		for i in SWEEPS_PER_PHASE:
+			grid.sweep(first + i)
+		Perf.end()
+	else:
+		_publish()
+	_phase = (_phase + 1) % PHASES
+
+
+## Phase 0: re-aim the region at the camera, read the world, lay down every
+## source. Everything after this is pure arithmetic on the snapshot, which is
+## what makes the remaining phases safe to spread across frames.
+func _seed(camera: Camera2D) -> void:
 	_resize_to(camera)
 	Perf.begin(&"light.sample")
 	grid.sample_terrain(Terrain, Vector2i((_rect.position / TILE).floor()))
@@ -61,8 +104,10 @@ func _process(_delta: float) -> void:
 			Vector2i((source.global_position / TILE).floor()),
 			tint if tint is Color else Color.WHITE,
 		)
-	grid.solve()
 	Perf.end()
+
+
+func _publish() -> void:
 	Perf.begin(&"light.upload")
 	_upload()
 	Perf.end()

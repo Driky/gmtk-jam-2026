@@ -26,6 +26,8 @@ const MARGIN := 16
 ## Sweep sets. One set already bends light around a corner (each sweep reads
 ## the previous one's output); a second cleans up concave pockets.
 const PASSES := 2
+## Total directional sweeps in one solve — what an amortizing caller divides up.
+const SWEEPS := PASSES * 4
 ## Beyond this many tiles of air, surviving daylight is under 1/255 and cannot
 ## change a single output byte — so the residual-sky term stops there.
 const SKY_MAX_GAP := 64
@@ -159,11 +161,24 @@ func _seed(i: int, color: Color, scale: float) -> void:
 ## Four directional sweeps × PASSES. Every channel is updated in one loop body
 ## so the index maths and the attenuation fetch are paid once, not three times.
 func solve() -> void:
-	for _pass in PASSES:
-		_sweep_right()
-		_sweep_left()
-		_sweep_down()
-		_sweep_up()
+	for i in SWEEPS:
+		sweep(i)
+
+
+## One sweep of the set, so the caller can spread a solve over several frames
+## without this class knowing anything about frames. Sweeps are order-dependent
+## but not order-*critical*: each reads the previous one's output, so pausing
+## between them changes nothing except when the result is finished.
+func sweep(index: int) -> void:
+	match index % 4:
+		0:
+			_sweep_right()
+		1:
+			_sweep_left()
+		2:
+			_sweep_down()
+		_:
+			_sweep_up()
 
 
 func _sweep_right() -> void:

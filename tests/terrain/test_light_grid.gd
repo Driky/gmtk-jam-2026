@@ -201,3 +201,30 @@ func test_bytes_are_three_per_tile_and_clamped() -> void:
 	var offset := (1 * 4 + 1) * 3
 	assert_int(bytes[offset]).is_equal(255) # Clamped, not wrapped to 0.
 	assert_int(bytes[offset + 2]).is_equal(0)
+
+
+## The amortization contract: LightMap spreads a solve over several frames by
+## calling sweep() itself, so running the sweeps one at a time must land on the
+## same answer as solve() in one go. If these ever diverge, the light flickers
+## in a way no screenshot would explain.
+func test_stepping_the_sweeps_matches_solving_in_one_go() -> void:
+	_terrain.fill(Rect2i(0, 0, 16, 16))
+	for x in range(2, 12):
+		_terrain.solid.erase(Vector2i(x, 6))
+	for y in range(6, 12):
+		_terrain.solid.erase(Vector2i(11, y))
+
+	var whole := _grid(16, 16, Vector2i(0, 0))
+	whole.add_source(Vector2i(2, 6), TORCH)
+	whole.solve()
+
+	var stepped := _grid(16, 16, Vector2i(0, 0))
+	stepped.add_source(Vector2i(2, 6), TORCH)
+	for i in LightGridScript.SWEEPS:
+		stepped.sweep(i)
+
+	for cell: Vector2i in [Vector2i(6, 6), Vector2i(11, 10), Vector2i(3, 3)]:
+		assert_float(stepped.get_value(cell).v).is_equal_approx(
+			whole.get_value(cell).v,
+			0.0001,
+		)
