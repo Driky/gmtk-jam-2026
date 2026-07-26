@@ -28,6 +28,10 @@ const TORCH: ItemStats = preload("res://data/items/torch.tres")
 ## second .tres with a lower `ticks_per_move`, not a second script.
 const CONVEYOR_T1: ItemStats = preload("res://data/items/conveyor_t1.tres")
 const INSERTER: ItemStats = preload("res://data/items/inserter.tres")
+## The first MULTI-CELL placeable (3×2) and the first machine that produces
+## anything — the thing 3.1's W×H footprint and item-preview ghost existed for
+## ([automation.md](../docs/systems/automation.md) §Categories).
+const MINER: ItemStats = preload("res://data/items/miner.tres")
 
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
@@ -35,6 +39,7 @@ const STATS: Dictionary = {
 	"torch": TORCH,
 	"conveyor_t1": CONVEYOR_T1,
 	"inserter": INSERTER,
+	"miner": MINER,
 }
 
 

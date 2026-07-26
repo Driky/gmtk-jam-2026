@@ -150,6 +150,10 @@ func inserters() -> Array[Deployable]:
 	return _inserters
 
 
+func machines() -> Array[Deployable]:
+	return _machines
+
+
 ## Cheap "is anything on a belt" probe, so the item layer can skip a redraw on an
 ## idle factory. Early-outs on the first occupied slot, so the full scan only
 ## happens in the case whose answer is "nothing to draw".
