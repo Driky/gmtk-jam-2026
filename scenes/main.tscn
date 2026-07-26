@@ -1,13 +1,18 @@
-[gd_scene load_steps=6 format=3 uid="uid://ky78m7otb228"]
+[gd_scene load_steps=7 format=3 uid="uid://ky78m7otb228"]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/items/pickup_spawner.gd" id="2_pickups"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="3_hud"]
 [ext_resource type="PackedScene" path="res://scenes/ui/game_over.tscn" id="4_game_over"]
 [ext_resource type="Script" path="res://scripts/combat/projectile_pool.gd" id="5_projectiles"]
+[ext_resource type="Script" path="res://scripts/terrain/depth_tint.gd" id="6_depth_tint"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
+
+[node name="DepthTint" type="CanvasModulate" parent="."]
+unique_name_in_owner = true
+script = ExtResource("6_depth_tint")
 
 [node name="BufferTintWest" type="ColorRect" parent="."]
 offset_right = 800.0
