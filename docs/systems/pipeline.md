@@ -1,6 +1,11 @@
 # Asset & Audio Pipeline
 
-Owner of: placeholder tileset generation, the TileSet builder, sourced assets, audio.
+Owner of: placeholder tileset generation, the TileSet builder, sourced assets, audio, what ships in the web export.
+
+## What ships in the export (locked)
+`scenes/dev/` holds scenes that exist to *look at something* rather than to run in the game — tileset/autotile previews, one-off visual harnesses. Nothing in the shipped game may reference them. Put dev scenes here rather than leaving them loose in `scenes/`.
+
+**`.gitignore` does not keep anything out of the build.** `export_filter="all_resources"` sweeps every file on disk, tracked or not, so the web preset's `exclude_filter` is the only gate. It carries `addons/godot_ai/**`, `addons/gdUnit4/**`, `tests/**`, `scenes/dev/**`, `reports/**`, `build/**`. The last two were found shipping on 2026-07-26: gdUnit's HTML reports (a fresh `report_NNN/` per test run, so the build grew every time the suite ran) and the previous export packing its own output back into itself. Removing them took the `.pck` from 1.44 MB to 0.55 MB. **Anything a tool writes into the project directory ships until this filter says otherwise** — verify with `grep "Storing File" ` on the export log, not by assuming.
 
 ## Placeholder tilesets — template palette remap
 The 48-frame template sheet (16×16 tiles, green/blue master) is committed at `res://assets/templates/terrain_template_16.png` and is the *shape master* for all terrain tiles. `res://tools/generate_tilesets.gd` (`@tool`, `Image` API, no external deps):
