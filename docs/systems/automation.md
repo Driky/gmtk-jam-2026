@@ -14,6 +14,17 @@ All placeables share a `Deployable` base (`scripts/automation/deployable.gd`): g
 
 The **2.7 torch was a one-cell special case that landed before this base existed** and folded in here at 3.1 — it already registered in the entity dict and was placed/removed through the same player verbs ([terrain.md](terrain.md) §Lighting, [player-combat.md](player-combat.md) §Placement / §Un-deploying). It stays at `scripts/terrain/torch.gd`: this doc owns the *base*, terrain.md owns *that torch as a light source*.
 
+## Support & popping (3.1)
+`Automation` connects **one handler to both `Terrain.tile_changed` and `Terrain.entity_changed`** (the `Waves` listener precedent). Mine the tile a torch is mounted on and the torch drops as a pickup instead of hanging in mid-air.
+
+**Cost: O(1) per changed cell.** A deployable is only affected by a tile it *touches* and is registered per occupied cell, so the handler probes exactly **five cells** (`pos` + 4 cardinal neighbours) with `get_entity` and enqueues the hits. `get_entity_cells()` is never called, and world gen costs **zero** because `set_cell_raw` emits no signal at all.
+
+❗️**The queue is a work queue, not a debounce timer, and it is required even at chain depth 1.** A support check is four `is_solid` calls, not a 57 ms field solve ([enemies.md](enemies.md)) — there is nothing to amortize. What needs taming is **re-entrancy**: `pop_to_pickup` calls `remove_entity` per cell, which emits `entity_changed`, which lands straight back in the same handler. So the handler *only enqueues* (array + dedupe dict) and `_process` drains with `while not _queue.is_empty()`. Pops during the drain append to the array being drained — **that append is the cascade**; recursion would blow the stack on a long chain and is never used. Idempotency comes from `pop_to_pickup`'s own flag, so a machine queued through four of its cells still drops one item.
+
+Termination is provable — every step either does nothing or permanently removes one deployable, and only a removal can enqueue more — and a debug-only `assert(guard < MAX_DRAIN_STEPS)` backstops a future predicate that breaks the argument. Coalescing is the dedupe dict: fifty changes around one torch cost one check.
+
+`Automation.reset_run()` clears the queue and is called from `main.gd`'s restart, per tech-design.md's standing convention. ❗️A cell surviving a restart would re-check something else entirely in the new world.
+
 ## Categories
 - **Miner** — placed on deposit tiles; extracts from `reserve` every N ticks into its output slot. Exhausted deposits become air ([terrain.md](terrain.md)), so a miner whose harvest tiles have all emptied shows an alert state (icon/toast) prompting removal.
   - ❗️**"On deposit tiles" means its HARVEST AREA, not its footprint.** All five `*_deposit` materials are `is_solid`, and `Terrain.place_entity` rejects a solid cell — the "entity cells are air" invariant is baked into three places in `terrain.gd` (the `place_entity` guard plus two asserts) and two consumers depend on it by name (`Enemy._attackable_entity`, [enemies.md](enemies.md) §Locomotion). **Do not relax `place_entity`.** 3.1 records this rather than resolving it; 3.3 gives the Miner a separate `harvest_cells()` alongside its air-cell footprint.

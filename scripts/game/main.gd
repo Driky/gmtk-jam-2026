@@ -109,6 +109,7 @@ func _on_state_changed(state: Game.State) -> void:
 func _restart() -> void:
 	get_tree().paused = false # A reload does NOT unpause — clear it first.
 	Terrain.reset_run()
+	Automation.reset_run()
 	Items.reset_run()
 	Waves.reset_run()
 	Game.reset_run()
