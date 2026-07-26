@@ -432,6 +432,7 @@ func test_level_up_raises_mana_the_same_way() -> void:
 # --- Un-deploying with the use verb (2.7) ------------------------------------
 
 const TorchScene := preload("res://scenes/torch.tscn")
+const ConveyorScene := preload("res://scenes/automation/conveyor.tscn")
 
 
 ## Records what the real spawner would have dropped, without the autoload
@@ -651,6 +652,57 @@ func test_on_placed_runs_after_the_node_is_in_the_tree() -> void:
 	assert_int(placed.placed_calls).is_equal(1)
 	assert_object(placed.parent_at_placed).is_same(player.get_parent())
 	placed.pop_to_pickup()
+	Items.reset_run()
+
+# --- Hand-feeding (3.2) ------------------------------------------------------
+
+
+func _fed_belt() -> Conveyor:
+	var belt: Conveyor = auto_free(ConveyorScene.instantiate())
+	belt.setup(P)
+	add_child(belt)
+	assert_bool(belt.register(_terrain)).is_true()
+	return belt
+
+
+## RMB on an occupied cell deposits into the deployable rather than failing the
+## placement. One item, and one item only, per click.
+func test_a_hand_feed_moves_exactly_one_item_into_the_deployable() -> void:
+	Items.reset_run()
+	Items.player_inventory.add_item("stone", 5)
+	var belt := _fed_belt()
+
+	assert_bool(_swinger_at(P).hand_feed(belt, Items.player_inventory.selected_item())).is_true()
+
+	assert_int(belt.slot().count).is_equal(1)
+	assert_int(Items.player_inventory.count_of("stone")).is_equal(4)
+	Items.reset_run()
+
+
+## ❗️A refusal has to leave the inventory alone: the offer goes out before the
+## item is consumed, so a full belt costs nothing rather than eating the stack.
+func test_a_refused_hand_feed_consumes_nothing() -> void:
+	Items.reset_run()
+	Items.player_inventory.add_item("stone", 5)
+	var belt := _fed_belt()
+	belt.accept_item("dirt", 1) # A mismatched id the belt cannot merge.
+
+	assert_bool(_swinger_at(P).hand_feed(belt, Items.player_inventory.selected_item())).is_false()
+
+	assert_int(Items.player_inventory.count_of("stone")).is_equal(5)
+	Items.reset_run()
+
+
+## The payoff of the refusing default on the base: feeding a torch is a no-op,
+## with no "can this take items" test anywhere in the player.
+func test_a_hand_feed_into_a_torch_consumes_nothing() -> void:
+	Items.reset_run()
+	Items.player_inventory.add_item("stone", 5)
+	var torch := _torch_at(P)
+
+	assert_bool(_swinger_at(P).hand_feed(torch, Items.player_inventory.selected_item())).is_false()
+
+	assert_int(Items.player_inventory.count_of("stone")).is_equal(5)
 	Items.reset_run()
 
 

@@ -43,6 +43,14 @@ Hold-to-mine on the targeted tile (under mouse) within **reach 4.5 tiles** (play
 
 ❗️**Order is the reverse of the block path, and has to be.** `set_tile` cannot fail, so blocks consume the item and then write. `register` *can* fail, so a scene claims its cells first and the item is consumed only once the claim succeeds — a failed claim hands the item back instead of eating it. A claim that succeeds but whose **consume** then fails rolls the whole footprint back through `unregister()`: one leaked cell of a 2×2 is a hole nothing can ever occupy again, and nothing in the game would report it. `on_placed()` fires **after** `add_child`, so 3.4's power hook reads a node that is actually in the world.
 
+## Hand-feeding (locked, 3.2)
+**RMB on a cell that already holds a deployable deposits ONE item from the selected hotbar slot into it**, instead of failing the placement. That is the reason placement does not simply reject an occupied cell, and it is the only way to get anything into the factory before 3.3's miner exists — [automation.md](automation.md) already sanctions hand-feeding ("ammo slot fed by inserter/**hand**"), and 3.3's furnace fuel needs the same verb, so 3.2 pulls it forward rather than inventing it. Whether it fits is the deployable's own answer through `accept_item`, so the same click works on a belt, a furnace and an ammo turret with **no branch in the player** — and a torch simply refuses.
+
+- ❗️**Edge-triggered, and that is not optional.** `place` is polled with `is_action_pressed` every physics frame, so a held RMB would empty a 99-stack into a belt in under two seconds. One click, one item.
+- ❗️**Offer first, consume second.** `accept_item` reports how many it took, so a refused offer leaves the inventory untouched *by construction*; consuming first and refunding on refusal is one full-inventory `add_item` away from eating the item.
+- Checked **before** the buffer-zone rule, so feeding a machine never toasts: a deployable cannot exist in a buffer zone in the first place, and "you can't build here" would be a lie about what the click was trying to do.
+- **The interact-key container panel with drag-and-drop is 3.6**, where [ui.md](ui.md)'s Inventory tab and its container view already live. Building it here would write drag-and-drop twice. This is the whole 3.2 interaction.
+
 ## Un-deploying (locked, 2.7)
 **Deployables are removed with the use verb (LMB), not a separate interact button** — the same swing that mines tiles and hits mobs, so it works with bare hands, a tool, a weapon or a fistful of stone. There is no dedicated removal tool to carry and no extra binding to learn. Point at the deployable, which **highlights** (amber, thicker outline, via `MiningCursor` — it reads differently from a hovered tile because swinging takes it back rather than mining it), and swing.
 

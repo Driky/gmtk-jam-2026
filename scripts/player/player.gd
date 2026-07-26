@@ -422,6 +422,24 @@ func _place() -> void:
 	var item: Dictionary = Items.player_inventory.selected_item()
 	if item.is_empty():
 		return
+	# RMB on a cell that already holds a deployable hands it ONE item instead of
+	# failing the placement — the only way to get anything into the factory before
+	# 3.3's miner exists, and the reason placement does not simply reject an
+	# occupied cell. The interact-key container panel with drag-and-drop is 3.6,
+	# where ui.md's Inventory tab and its container view already live; building it
+	# here would write drag-and-drop twice.
+	#
+	# Checked before the buffer rule so feeding a machine never toasts: a deployable
+	# cannot exist in a buffer zone in the first place, and "you can't build here"
+	# would be a lie about what the click was trying to do.
+	var occupant := Terrain.get_entity(target) as Deployable
+	if occupant != null:
+		# ❗️Edge-triggered, and that is not optional. `place` is polled with
+		# is_action_pressed every physics frame, so a held RMB would empty a 99-stack
+		# into a belt in under two seconds. One click, one item.
+		if Input.is_action_just_pressed("place"):
+			hand_feed(occupant, item)
+		return
 	# The buffer rule is the one rejection worth explaining — every other
 	# invalid cell (floating, occupied, inside you) is legible from the cursor,
 	# but "the world refuses to let you build here" is not (ui.md §Other screens).
@@ -445,6 +463,26 @@ func _place() -> void:
 		# Flagged as hand-placed: re-mining your own wall earns no XP on either
 		# channel (progression.md).
 		Terrain.set_tile(target, id, true)
+
+
+## Deposit one item from the selected slot into a deployable. True when it went
+## in. Whether it fits at all is the deployable's own answer through
+## `accept_item` ([automation.md](../../docs/systems/automation.md) §transfer
+## seam), so this works on a belt, 3.3's furnace and 3.5's ammo turret alike with
+## no branch here — and a torch simply refuses.
+##
+## ❗️Offer first, consume second. `accept_item` reports how many it took, so a
+## refused offer leaves the inventory untouched by construction — where consuming
+## first and refunding on refusal is one full-inventory `add_item` away from
+## eating the item. The consume cannot itself fail: the caller has already
+## established the slot is non-empty.
+##
+## Public so a test can drive it without synthesising a mouse click.
+func hand_feed(occupant: Deployable, item: Dictionary) -> bool:
+	if occupant.accept_item(item.id, 1) <= 0:
+		return false
+	Items.player_inventory.consume_selected(1)
+	return true
 
 
 ## Put a placeable scene down at a cell. Validity is `can_place_at` again — the
