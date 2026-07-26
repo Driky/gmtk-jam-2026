@@ -110,7 +110,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Debug slot overlay as an **F3 row** (top-listed risk in [plan.md](plan.md)). Was written here as a "hotkey"; reconciled — [ui.md](systems/ui.md) locks that debug overlays own no keybindings.
 
 ### 3.3 Production chain
-- [ ] Miner on deposits (extracts `reserve` → output slot) → conveyor t1 → inserter → furnace (recipe craft when inputs present + powered).
+- [x] Miner: 3×2, a harvest block one span along `facing` (the arrow points at the ore), `Terrain.extract_reserve` 1:1 → output slot. Placement is **gated** on a deposit under that block — the footprint can't overlap one, since deposits are solid ([automation.md](systems/automation.md)).
+- [x] `data/recipe_defs.gd` + `CraftingStation` (furnace 2×2): id-routed input, output-only extraction, consume-on-completion. **Power only, no fuel slot** — the doc's contradiction resolved; ⚠️ `is_powered()` stubs true until 3.4.
+- [x] Idle-machine HUD counter, replacing the miner-alert toast [ui.md](systems/ui.md) anticipated — a count survives being looked away from, a toast does not.
+- [x] Slot overlay reads machines too (it was blind to the only things that create items); end-to-end chain test: miner → inserter → belt → inserter → furnace → inserter → belt.
 
 ### 3.4 Power ([automation.md](systems/automation.md))
 - [ ] Generator (fuel burn, radius) + relay (✂️5); grid graph on place/remove; brownout `supply/demand` scaling.
@@ -123,7 +126,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 
 ### 3.6 Character screen ([ui.md](systems/ui.md))
 - [ ] Tabbed window, `I`/`C`/`K` direct shortcuts: inventory + equipment panel (✂️7) + stats readout; crafting tab with category tabs, unlock filtering, greyed-missing-inputs; skill-tree tab node graph.
-- [ ] `Items` autoload: item/recipe DB; `gather_available(player_pos)` crafting-range query used by all cost checks ([progression.md](systems/progression.md)).
+- [ ] Crafting UI over the 3.3 recipe table (`data/recipe_defs.gd`) — the DB itself landed there, as the item half landed at 2.5; `gather_available(player_pos)` crafting-range query used by all cost checks ([progression.md](systems/progression.md)).
 
 ### 3.7 Skill tree system ([progression.md](systems/progression.md))
 - [ ] `SkillNode` Resources (prereqs, costs, recipe unlocks, leveled buffs) + ~10 nodes; buffs live through `get_stat`.

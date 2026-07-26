@@ -53,6 +53,9 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 | Tick iteration row-major by cell (not insertion order); catch-up clamp drops backlog | [systems/automation.md](systems/automation.md) |
 | Directional deployables: authored `directional` + runtime `facing`, rotated with R at placement | [systems/automation.md](systems/automation.md) |
 | Item transfer is two refusing-by-default virtuals (`accept_item`/`extract_item`); RMB hand-feeds one | [systems/automation.md](systems/automation.md) |
+| Miner harvests a separate block beside its footprint (deposits are solid); placement gated on ore there | [systems/automation.md](systems/automation.md) |
+| Machines take ore via `Terrain.extract_reserve` (1:1, no drops, no XP), not `damage_tile` | [systems/terrain.md](systems/terrain.md) |
+| Recipes are one static table (`data/recipe_defs.gd`), map-shaped inputs; stations route by item id | [systems/progression.md](systems/progression.md) |
 | Power = radius coverage grids (generator + relay), brownout `supply/demand` scaling | [systems/automation.md](systems/automation.md) |
 | One mixed skill tree (recipes + leveled buffs) as Resource nodes; crafting range incl. nearby containers | [systems/progression.md](systems/progression.md) |
 | Tabbed character screen (Inventory/Crafting/Tree) with direct hotkeys; power overlay hotkey | [systems/ui.md](systems/ui.md) |

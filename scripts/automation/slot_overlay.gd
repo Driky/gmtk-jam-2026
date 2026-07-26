@@ -1,5 +1,11 @@
 ## Debug view of the automation sim: per conveyor and inserter, the facing arrow,
-## the slot's id and count, and the cooldown counter.
+## the slot's id and count, and the cooldown counter; per machine its slots, its
+## cooldown or craft progress, and — for a miner — the harvest block it is
+## eating.
+##
+## ❗️The machine pass is not optional polish. Until 3.3 this overlay was blind
+## to the only things that CREATE items, so "the belt is empty" and "the miner
+## never started" looked identical.
 ##
 ## Automation tick bugs — ordering, dupes, stack merges — are the top-listed risk
 ## in [plan.md](../../docs/plan.md), and this is the other half of that
@@ -17,6 +23,13 @@ const TILE := TileLayout.TILE_SIZE
 const Z_INDEX := 101
 const BELT_COLOR := Color(0.4, 0.9, 1.0, 0.9)
 const INSERTER_COLOR := Color(1.0, 0.7, 0.3, 0.9)
+const MACHINE_COLOR := Color(0.6, 1.0, 0.55, 0.9)
+## An idle machine is the thing you are looking for when you open this — a miner
+## whose ore ran out reads as a red box, not as a green one with different text.
+const IDLE_COLOR := Color(1.0, 0.4, 0.35, 0.95)
+## Where a miner is reaching. The whole placement rule is "the arrow points at
+## the ore", so a miner that found nothing is only diagnosable next to this.
+const HARVEST_COLOR := Color(0.9, 0.8, 0.4, 0.7)
 ## A belt holding something reads differently from an empty one at a glance,
 ## which is how a jam shows up as a solid block of colour.
 const OCCUPIED_ALPHA := 0.25
@@ -25,6 +38,10 @@ const ARROW_HEAD := 3.0
 const LABEL_SIZE := 7
 const SLOT_OFFSET := Vector2(-7.0, -2.0)
 const COOLDOWN_OFFSET := Vector2(-7.0, 7.0)
+## A machine is 2–3 cells wide, so its readout is anchored to the footprint's
+## top-left corner and stacked downward rather than centred like a belt's.
+const MACHINE_LINE_HEIGHT := 8.0
+const MACHINE_TEXT_INSET := Vector2(2.0, 9.0)
 
 ## Injected by tests; falls back to the autoload.
 var automation: Node = null
@@ -78,6 +95,51 @@ func _draw() -> void:
 		_arrow(centre, arm.facing, INSERTER_COLOR)
 		if arm.cooldown() > 0:
 			_label(font, centre + COOLDOWN_OFFSET, "cd %d" % arm.cooldown(), INSERTER_COLOR)
+	for node: Deployable in automation.machines():
+		# Multi-cell, so the box is the whole footprint rather than one tile, and
+		# the cull tests the origin corner.
+		var origin := Vector2(node.cell()) * TILE
+		if not view.has_point(origin):
+			continue
+		var color := IDLE_COLOR if node.is_idle() else MACHINE_COLOR
+		draw_rect(Rect2(origin, Vector2(node.size) * TILE), color, false, 1.0)
+		# `as` casts rather than a virtual on the base: this is a debug view, it
+		# already casts belts and inserters the same way, and pushing a readout
+		# API onto every Deployable to keep one debug node tidy is the wrong
+		# trade. Anything not matched simply draws its box.
+		var lines: Array[String] = []
+		var miner := node as Miner
+		if miner != null:
+			draw_rect(
+				Rect2(Vector2(miner.harvest_cells()[0]) * TILE, Vector2(node.size) * TILE),
+				HARVEST_COLOR,
+				false,
+				1.0,
+			)
+			lines.append(_stack_text("out", miner.slot()))
+			lines.append("cd %d" % miner.cooldown())
+			if node.is_idle():
+				lines.append("NO ORE")
+		var station := node as CraftingStation
+		if station != null:
+			lines.append(_stack_text("in", station.input_slot()))
+			lines.append(_stack_text("out", station.output_slot()))
+			lines.append("craft %d" % station.progress())
+		for i in lines.size():
+			_label(
+				font,
+				origin + MACHINE_TEXT_INSET + Vector2(0.0, i * MACHINE_LINE_HEIGHT),
+				lines[i],
+				color,
+			)
+
+
+## `label —` for an empty slot rather than an omitted line: a machine holding
+## nothing has to look different from one this overlay failed to read.
+static func _stack_text(label: String, stack: Dictionary) -> String:
+	if stack.is_empty():
+		return "%s —" % label
+	return "%s %s×%d" % [label, stack.id, stack.count]
 
 
 static func _centre(cell: Vector2i) -> Vector2:
