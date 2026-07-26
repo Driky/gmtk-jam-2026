@@ -232,6 +232,7 @@ func _find_spawner() -> Node:
 ## to court that here.
 static var _scene_size_cache := { }
 static var _scene_dirs_cache := { }
+static var _scene_visual_cache := { }
 
 
 ## A scene's authored footprint, for the placement ghost. The ghost redraws
@@ -249,10 +250,45 @@ static func scene_support_dirs(scene: PackedScene) -> int:
 	return _scene_dirs_cache[scene]
 
 
+## The authored look, so the ghost can show WHAT is being placed rather than
+## only where and how big. `{}` when the scene has no coloured rect to preview.
+##
+## `rect` is relative to the node ORIGIN, which `setup()` puts at the footprint
+## centre — a caller drawing in cell space has to offset by `size * 0.5 * TILE`.
+static func scene_visual(scene: PackedScene) -> Dictionary:
+	_cache_scene(scene)
+	return _scene_visual_cache[scene]
+
+
 static func _cache_scene(scene: PackedScene) -> void:
 	if _scene_size_cache.has(scene):
 		return
 	var probe: Deployable = scene.instantiate()
 	_scene_size_cache[scene] = probe.size
 	_scene_dirs_cache[scene] = probe.support_dirs
+	_scene_visual_cache[scene] = _probe_visual(probe)
 	probe.free()
+
+
+## Placeholder art across this repo is one `ColorRect` child (player.tscn,
+## enemy.tscn, pickup.tscn, torch.tscn), so the ghost reuses whatever the scene
+## already draws instead of making every deployable author a second preview
+## sprite that could drift from it.
+##
+## Read from the OFFSETS, not `size`/`position`: a Control that has never been
+## in a tree has not laid itself out, so those are still zero.
+static func _probe_visual(probe: Node) -> Dictionary:
+	for child: Node in probe.get_children():
+		var visual := child as ColorRect
+		if visual == null:
+			continue
+		return {
+			rect = Rect2(
+				visual.offset_left,
+				visual.offset_top,
+				visual.offset_right - visual.offset_left,
+				visual.offset_bottom - visual.offset_top,
+			),
+			color = visual.color,
+		}
+	return { }

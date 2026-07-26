@@ -340,6 +340,30 @@ func test_scene_size_matches_a_live_instance() -> void:
 	assert_int(Deployable.scene_support_dirs(TorchScene)).is_equal(live.support_dirs)
 
 
+## Same contract for the item preview: it is read off the scene's own ColorRect,
+## so the ghost draws the thing that will actually be placed rather than a second
+## copy of its look that could drift.
+func test_scene_visual_matches_the_live_instances_color_rect() -> void:
+	var live: Deployable = auto_free(TorchScene.instantiate())
+	add_child(live) # Only once in the tree does a Control lay its offsets out.
+	var visual: ColorRect = live.get_node("Visual")
+	var cached := Deployable.scene_visual(TorchScene)
+	assert_bool(cached.is_empty()).is_false()
+	assert_object(cached.color).is_equal(visual.color)
+	assert_vector(cached.rect.size).is_equal(visual.size)
+	assert_vector(cached.rect.position).is_equal(visual.position)
+
+
+## A deployable with nothing to draw must degrade to "footprint tint only"
+## rather than crashing the cursor's per-frame draw.
+func test_scene_visual_is_empty_when_there_is_nothing_to_preview() -> void:
+	var template := DeployableScript.new()
+	var scene := PackedScene.new()
+	scene.pack(template)
+	template.free()
+	assert_bool(Deployable.scene_visual(scene).is_empty()).is_true()
+
+
 ## The ghost redraws every frame, so the second call must come off the cache
 ## rather than instantiating again — and must still give the same answer.
 func test_a_second_read_returns_the_same_answer() -> void:

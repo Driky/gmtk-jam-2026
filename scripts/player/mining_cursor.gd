@@ -1,8 +1,16 @@
 ## Hovered-tile feedback plus the placement ghost. Three things it draws, in
 ## precedence order: a hovered deployable in reach (amber, thick — swinging
 ## takes it back rather than mining it) · the W×H ghost of whatever placeable
-## item is selected (green when the placement would be accepted, red when not)
-## · otherwise the plain hovered-tile outline with its damage-ratio fill.
+## item is selected, **with a translucent preview of the item inside it** (green
+## when the placement would be accepted, red when not) · otherwise the plain
+## hovered-tile outline with its damage-ratio fill.
+##
+## ❗️The item preview is not decoration. A footprint box alone is identical to
+## the mining cursor at 1×1 — only the colour differs — so the ghost read as
+## "the cursor turned green" rather than "here is your torch", and the W×H part
+## that justifies the whole feature stays invisible until 3.3 ships a multi-cell
+## machine. The preview reuses the scene's own `ColorRect`, so it cannot drift
+## from what actually gets placed.
 ##
 ## ❗️The ghost is **modeless**: there is no toggle and no binding, it simply
 ## draws whenever the selected hotbar item is placeable. And it lives here
@@ -25,6 +33,9 @@ const DEPLOYABLE_WIDTH := 2.0
 ## the tile you are about to mine".
 const GHOST_COLOR := Color(0.4, 1.0, 0.45)
 const GHOST_FILL_ALPHA := 0.22
+## The item preview inside the ghost. Solid enough to read as the thing you are
+## about to place, translucent enough that it can't be mistaken for a placed one.
+const GHOST_ITEM_ALPHA := 0.55
 const RATIO_FILL_ALPHA := 0.35
 
 var _target := Vector2i(-1, -1)
@@ -34,6 +45,12 @@ var _ratio := 0.0
 ## and this would otherwise run every frame.
 var _ghost_size := Vector2i.ZERO
 var _ghost_dirs := Deployable.SUPPORT_ALL
+## Translucent preview of the item itself, in cell-local space. A zero size means
+## nothing to preview. Without this a 1×1 ghost is indistinguishable from the
+## mining cursor — only the colour differs — so the footprint box alone reads as
+## "the cursor turned green" rather than "here is your torch".
+var _ghost_item := Rect2()
+var _ghost_item_color := Color.WHITE
 
 @onready var _player: Player = get_parent()
 
@@ -83,6 +100,24 @@ func _refresh_placement() -> void:
 	var id: String = item.get("id", "")
 	_ghost_size = Player.placement_size(id)
 	_ghost_dirs = Player.placement_support_dirs(id)
+	_ghost_item = Rect2()
+	if _ghost_size == Vector2i.ZERO:
+		return
+	var scene := Items.stats_for(id).place_scene
+	if scene != null:
+		var visual := Deployable.scene_visual(scene)
+		if not visual.is_empty():
+			# setup() anchors a deployable at its footprint CENTRE, so the
+			# authored rect is relative to that, not to the origin cell.
+			var centre := Vector2(_ghost_size) * 0.5 * TILE
+			_ghost_item = Rect2(centre + visual.rect.position, visual.rect.size)
+			_ghost_item_color = visual.color
+		return
+	# A block has no scene, so it previews as the tile it is about to become —
+	# the same base_color a pickup of it is tinted with.
+	var material: Dictionary = Materials.MATERIALS.get(id, { })
+	_ghost_item = Rect2(Vector2.ZERO, Vector2.ONE * TILE)
+	_ghost_item_color = material.get("base_color", Color.WHITE)
 
 
 func _draw() -> void:
@@ -116,16 +151,25 @@ func _draw_ratio_fill(color: Color, ratio: float) -> void:
 	)
 
 
-## The whole footprint, tinted by whether the placement would actually be
-## accepted — validity is the same `can_place_at` the click runs, with the same
-## reach test, so the ghost can never promise something the click then refuses.
-## Per-cell fills rather than one big rect, so a 2×3 reads as six grid cells.
+## Three layers: the translucent item, then the per-cell validity tint over it
+## (so a 2×3 also reads as six grid cells), then the outline.
+##
+## ❗️Validity is drawn ON TOP of the item, not under it. A block previews as a
+## full cell of its own colour, which buried the green/red underneath it — and
+## "can I put it here" has to survive whatever the item happens to look like.
+##
+## Validity is the same `can_place_at` the click runs, with the same reach test,
+## so the ghost can never promise something the click then refuses. The preview
+## draws whether or not the spot is valid: you should be able to see what you
+## are carrying while you look for somewhere to put it.
 func _draw_ghost() -> void:
 	var valid: bool = (
 		_player.in_reach(_target)
 		and Player.can_place_at(Terrain, _target, _player.tile_rect(), _ghost_size, _ghost_dirs)
 	)
 	var color := GHOST_COLOR if valid else REJECT_COLOR
+	if _ghost_item.size != Vector2.ZERO:
+		draw_rect(_ghost_item, Color(_ghost_item_color, GHOST_ITEM_ALPHA))
 	for cell: Vector2i in Deployable.footprint_at(Vector2i.ZERO, _ghost_size):
 		draw_rect(
 			Rect2(Vector2(cell) * TILE, Vector2.ONE * TILE),
