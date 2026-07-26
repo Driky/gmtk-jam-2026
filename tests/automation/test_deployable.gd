@@ -90,7 +90,6 @@ func test_a_two_by_three_footprint_grows_right_and_down() -> void:
 		],
 	)
 
-
 # --- Harvest block (3.3) -----------------------------------------------------
 
 

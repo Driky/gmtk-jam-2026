@@ -510,13 +510,13 @@ func _place_scene(terrain: Node, cell: Vector2i, scene: PackedScene) -> void:
 	node.facing = place_facing
 	node.setup(cell) # Before add_child, per the Core/loot-bag convention.
 	if not can_place_at(
-			terrain,
-			cell,
-			tile_rect(),
-			node.size,
-			node.support_dirs,
-			node.facing,
-			node.harvests_deposits,
+		terrain,
+		cell,
+		tile_rect(),
+		node.size,
+		node.support_dirs,
+		node.facing,
+		node.harvests_deposits,
 	):
 		node.free()
 		return

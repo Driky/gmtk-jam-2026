@@ -6,7 +6,6 @@
 ## an item with no icon — neither of which raises anything.
 extends GdUnitTestSuite
 
-
 func _ids() -> PackedStringArray:
 	return DebugMenu.giveable_ids()
 
