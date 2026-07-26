@@ -256,6 +256,62 @@ func test_deposit_exhaustion_becomes_air_no_bonus_drop() -> void:
 	assert_array(_broken).contains_exactly([[P, "coal_deposit", TerrainScript.Source.PLAYER]])
 	assert_bool(_terrain._state.is_empty()).is_true()
 
+# --- The machine seam (3.3) --------------------------------------------------
+
+
+## 1:1, against the chip path's 5-reserve-for-1-drop. That contrast is the whole
+## reason a Miner does not route through `damage_tile`.
+func test_extract_reserve_takes_ore_one_for_one() -> void:
+	_terrain.set_tile(P, "coal_deposit") # base_reserve 50
+	var taken: Dictionary = _terrain.extract_reserve(P, 3)
+	assert_str(taken.id).is_equal("coal")
+	assert_int(taken.count).is_equal(3)
+	assert_int(_terrain.get_tile_data(P).reserve).is_equal(47)
+
+
+## ❗️The ore goes into the machine, never onto the floor — and because
+## `_award` only ever grants XP for a PLAYER source, that is also what makes
+## machine-extracted ore worth zero on both channels.
+func test_extract_reserve_spawns_no_drops() -> void:
+	_terrain.set_tile(P, "coal_deposit")
+	_terrain.extract_reserve(P, 5)
+	assert_array(_drops).is_empty()
+
+
+## The exhaustion tail is shared with the chip path, so it must produce the same
+## air cell and the same single `tile_broken` — only the source differs.
+func test_extract_reserve_to_exhaustion_destroys_the_tile() -> void:
+	_terrain.set_tile(P, "coal_deposit")
+	_terrain.set_reserve(P, 4)
+	var taken: Dictionary = _terrain.extract_reserve(P, 10)
+	assert_int(taken.count).is_equal(4) # Never more than is there.
+	assert_str(_terrain.get_material_id(P)).is_equal("")
+	assert_array(_broken).contains_exactly([[P, "coal_deposit", TerrainScript.Source.MACHINE]])
+	assert_array(_drops).is_empty()
+	assert_bool(_terrain._state.is_empty()).is_true()
+
+
+## Resolves the lazy -1 rather than reading it as a count, or the first
+## extraction from an untouched deposit would take nothing forever.
+func test_extract_reserve_resolves_an_untouched_reserve() -> void:
+	_terrain.set_tile(P, "iron_deposit")
+	assert_bool(_terrain._state.has(P)).is_false()
+	assert_int(_terrain.extract_reserve(P, 1).count).is_equal(1)
+	assert_int(_terrain.get_tile_data(P).reserve).is_equal(49)
+
+
+func test_extract_reserve_refuses_anything_that_is_not_a_deposit() -> void:
+	_terrain.set_tile(P, "coal") # Plain ore, not a deposit.
+	assert_dict(_terrain.extract_reserve(P, 1)).is_empty()
+	assert_dict(_terrain.extract_reserve(P + Vector2i(0, 1), 1)).is_empty() # Air.
+	assert_str(_terrain.get_material_id(P)).is_equal("coal")
+
+
+func test_extract_reserve_refuses_a_non_positive_amount() -> void:
+	_terrain.set_tile(P, "coal_deposit")
+	assert_dict(_terrain.extract_reserve(P, 0)).is_empty()
+	assert_int(_terrain.get_tile_data(P).reserve).is_equal(50)
+
 # --- Abandon timeout ---------------------------------------------------------
 
 

@@ -216,11 +216,42 @@ func damage_tile(pos: Vector2i, amount: float, tool_tier: int, source: Source) -
 	else:
 		_award(pos, mat, source, state.player_placed)
 	# Destroyed (normal break, or deposit chipped to exhaustion — no 2nd drop).
-	assert(state.entity == null)
-	_state.erase(pos)
-	set_tile(pos, "")
-	tile_broken.emit(pos, Materials.ORDER[sid], source)
+	_destroy(pos, sid, source)
 	return true
+
+
+## The MACHINE seam onto a deposit, and the one thing that does NOT route
+## through `damage_tile` ([terrain.md](../../docs/systems/terrain.md) §Deposit
+## mining). A Miner cannot take that path: a chip costs 5 reserve for one drop
+## and spawns a pickup on the floor. This takes `min(amount, reserve)` **1:1**
+## and hands it straight back as a detached `{id, count}` — `{}` for a
+## non-deposit, an air/out-of-world cell, or a non-positive amount.
+##
+## ❗️It deliberately does **not** emit `drops_spawned`: the ore goes into the
+## machine, never onto the floor. Together with `_award`'s `Source.PLAYER` gate
+## that means machine-extracted ore pays **zero XP on both channels** — the
+## automation anti-farm rule ([progression.md](../../docs/systems/progression.md)),
+## falling out of existing code rather than needing a rule of its own.
+func extract_reserve(pos: Vector2i, amount: int) -> Dictionary:
+	if amount <= 0 or not WorldConfig.is_in_world(pos):
+		return { }
+	var sid := _layer.get_cell_source_id(pos)
+	if sid == -1:
+		return { }
+	var mat: Dictionary = Materials.MATERIALS[Materials.ORDER[sid]]
+	if not mat.is_deposit:
+		return { }
+	var state := _state_for(pos)
+	# Resolves the lazy -1 through the same rule get_tile_data reads, so world
+	# gen never has to materialize an entry per deposit tile.
+	state.reserve = _resolve_reserve(state, mat)
+	var taken: int = mini(amount, state.reserve)
+	state.reserve -= taken
+	if state.reserve <= 0:
+		_destroy(pos, sid, Source.MACHINE)
+	if taken <= 0:
+		return { }
+	return { id = mat.drop_id, count = taken }
 
 # --- Writes ------------------------------------------------------------------
 
@@ -366,6 +397,19 @@ func _state_for(pos: Vector2i) -> TileState:
 func _prune(pos: Vector2i, state: TileState) -> void:
 	if state.is_default():
 		_state.erase(pos)
+
+
+## The exhaustion tail, shared by the pickaxe chip that empties a deposit and by
+## `extract_reserve`. Factored out rather than written twice: the two are the
+## only paths that turn a live cell into air from below, and a drift between
+## them would leave one of them silently not emitting `tile_broken`.
+func _destroy(pos: Vector2i, sid: int, source: Source) -> void:
+	# Entities live in air cells only, so nothing can be standing on what we are
+	# about to erase.
+	assert(_state[pos].entity == null)
+	_state.erase(pos)
+	set_tile(pos, "")
+	tile_broken.emit(pos, Materials.ORDER[sid], source)
 
 
 func _resolve_reserve(state: TileState, mat: Dictionary) -> int:
