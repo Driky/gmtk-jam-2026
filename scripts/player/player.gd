@@ -82,11 +82,17 @@ var _blink_left := 0.0
 ## > 0 while dead. Doubles as the is_dead() flag so there's one source of truth.
 var _respawn_left := 0.0
 
+## Read by the light grid (terrain.md §Lighting) — cool, against the torch's
+## warm. The player is a source in the group, not a light node: the grid owns
+## every light in the game, so there is no per-light cost to manage here.
+var light_color := Color(0.85, 0.9, 1.0)
+
 @onready var _visual: ColorRect = $Visual
 @onready var _hurtbox: Area2D = $Hurtbox
 
 
 func _ready() -> void:
+	add_to_group(&"light_source")
 	current_hp = Progression.get_stat("max_hp")
 	current_mana = Progression.get_stat("max_mana")
 	_last_max_hp = current_hp

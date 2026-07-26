@@ -98,6 +98,9 @@ func _init(terrain: Node, world_seed: int, overrides: Dictionary = { }) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed
 	_compute_heights()
+	# Straight away, not at completion: lighting reads this every frame and the
+	# amortized fill takes many frames to finish (terrain.md §Lighting).
+	_terrain.set_surface_rows(_heights)
 	_precompute_trees(rng)
 	_precompute_tunnels(rng)
 	_precompute_deposits(rng)

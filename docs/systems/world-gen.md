@@ -14,6 +14,9 @@ Seeded, deterministic per seed (save system depends on this — [save.md](save.m
 ## Pipeline
 Height-noise surface → biome bands by depth → cave carving (2–3 octaves noise threshold + a few random-walk tunnels) → ore scattering per biome (Poisson-ish, per-biome tables) → **deposits**: rare large blobs of deposit tiles with high per-tile `reserve`, intended for machine mining (pickaxe can chip them but yields poorly; a Miner extracts until reserve hits zero) → bedrock border on all edges.
 
+The per-column height map computed here is handed to `Terrain.set_surface_rows` as soon as it exists (before the amortized fill finishes, since lighting reads it every frame). It is what separates open sky from a player-dug shaft — decision and rationale in [terrain.md](terrain.md) §Lighting.
+
+
 ## Buffer zones (locked decision — owned here)
 Beyond the 100-tile playable width, **~50 extra tiles each side** of deliberately boring terrain: flat dirt matching surface height, no caves, no resources. **Player-immutable** (no mining, no building — enforced by `Terrain.damage_tile`'s `source` argument, see [terrain.md](terrain.md)), but **monsters dig freely**: wave mobs spawn in the buffers and stair-dig safe descents through terrain the player cannot booby-trap, wall off, or excavate into a kill-pit. The playable/buffer boundary reads at a glance via a subtle semi-transparent tint overlay on each buffer (ColorRects in the main scene; marker posts remain a fallback if the tint reads poorly).
 

@@ -74,7 +74,6 @@ func _finish_generation() -> void:
 	Game.start_build_phase()
 	_gen = null
 
-
 ## Placeholder starting inventory. Bare hands mine at 2.0 hardness/s, so a run
 ## has to open with a tool or the first minute is a slog; crafting (4.2) is what
 ## eventually replaces this hand-out. Seeded BEFORE the player exists so its

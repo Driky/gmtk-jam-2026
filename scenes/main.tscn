@@ -5,14 +5,14 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="3_hud"]
 [ext_resource type="PackedScene" path="res://scenes/ui/game_over.tscn" id="4_game_over"]
 [ext_resource type="Script" path="res://scripts/combat/projectile_pool.gd" id="5_projectiles"]
-[ext_resource type="Script" path="res://scripts/terrain/depth_tint.gd" id="6_depth_tint"]
+[ext_resource type="Script" path="res://scripts/terrain/light_map.gd" id="6_light_map"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
 
-[node name="DepthTint" type="CanvasModulate" parent="."]
+[node name="LightMap" type="Node2D" parent="."]
 unique_name_in_owner = true
-script = ExtResource("6_depth_tint")
+script = ExtResource("6_light_map")
 
 [node name="Backdrop" type="ColorRect" parent="."]
 z_index = -100

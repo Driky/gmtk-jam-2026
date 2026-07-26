@@ -41,7 +41,7 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 | World 100×~1200 playable + buffer zones, 5 stacked biomes, seeded deterministic gen | [systems/world-gen.md](systems/world-gen.md) |
 | Hybrid terrain: TileMapLayer (type) + sparse dict (dynamic state), single `Terrain` API | [systems/terrain.md](systems/terrain.md) |
 | Terraria self-merge 48-frame autotile, manual autotiling, coordinate-hash variants | [systems/terrain.md](systems/terrain.md) |
-| Lighting: CanvasModulate + PointLight2D + occluders; vicinity light cap with toast | [systems/terrain.md](systems/terrain.md) |
+| Lighting: per-tile propagated light grid, drawn 1 px/tile with LINEAR + MULTIPLY | [systems/terrain.md](systems/terrain.md) |
 | Deposits render as ore autotile + shader FX overlay layer; reserve-based depletion | [systems/terrain.md](systems/terrain.md) |
 | Mined natural blocks placeable back, 1:1 self-drops (processed variants = data later) | [systems/terrain.md](systems/terrain.md) |
 | Melee hitbox + ONE shared projectile system (ranged, spells, turrets); death drops loot bag | [systems/player-combat.md](systems/player-combat.md) |

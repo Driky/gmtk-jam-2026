@@ -70,6 +70,12 @@ class TileState:
 
 
 var _layer: TileMapLayer
+## Topmost terrain row per column, written once by world gen. Lighting reads it
+## to decide which air cells count as open sky: a cell at or above its column's
+## surface is daylight, everything below is propagation's problem. Without it a
+## player-dug shaft would stay at full noon all the way down, because a shaft is
+## air and nothing else distinguishes it from open sky (terrain.md §Lighting).
+var _surface_rows := PackedInt32Array()
 var _state: Dictionary[Vector2i, TileState] = { }
 ## Cells with damage > 0 only — keeps the abandon sweep off the main dict.
 var _damaged: Dictionary[Vector2i, bool] = { }
@@ -93,6 +99,10 @@ var cell_write_peak_usec := 0
 func _ready() -> void:
 	_layer = TileMapLayer.new()
 	_layer.name = "TileMapLayer"
+	# Nothing casts shadows any more — light is propagated per tile, not thrown
+	# from point lights past occluders (terrain.md §Lighting). Leaving this on
+	# would build an occluder instance for every solid cell for nobody to read.
+	_layer.occlusion_enabled = false
 	_layer.tile_set = load(TILESET_PATH)
 	add_child(_layer)
 	for source_id in Materials.ORDER.size():
@@ -151,6 +161,16 @@ func is_solid(pos: Vector2i) -> bool:
 ## zero allocation. -1 = air/out-of-world, else an index into Materials.ORDER.
 func get_cell_source_id(pos: Vector2i) -> int:
 	return _layer.get_cell_source_id(pos)
+
+
+## Row of the topmost generated terrain tile in a column — the boundary between
+## open sky and underground for lighting. -1 when world gen has not run (a bare
+## Terrain in a test), which reads as "no daylight anywhere" rather than
+## "daylight everywhere": dark is the safe wrong answer, a fully lit world is not.
+func surface_row(x: int) -> int:
+	if x < 0 or x >= _surface_rows.size():
+		return -1
+	return _surface_rows[x]
 
 
 ## Buffer-zone rule for player actions (mining ghost tint, place-block checks).
@@ -286,6 +306,12 @@ func set_cell_raw(pos: Vector2i, material_id: String) -> void:
 	_write_cell(pos, sid, TileLayout.LAYOUT[15][TileLayout.variant_hash(pos)])
 
 
+## World gen hands over its per-column height map (world-gen.md owns how those
+## heights are chosen; this is only where they are stored).
+func set_surface_rows(rows: PackedInt32Array) -> void:
+	_surface_rows = rows
+
+
 func set_reserve(pos: Vector2i, amount: int) -> void:
 	_state_for(pos).reserve = amount
 
@@ -304,6 +330,7 @@ func reset_run() -> void:
 	_layer.clear()
 	_state.clear()
 	_damaged.clear()
+	_surface_rows = PackedInt32Array()
 	_sweep_accum = 0.0
 
 # --- Debug -------------------------------------------------------------------

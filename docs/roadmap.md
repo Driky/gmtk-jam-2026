@@ -85,8 +85,10 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Mob death drops (`EnemyStats.drop_id/drop_count` → world pickups) — the code seam claimed 2.6 while the checklist didn't; loot *content* is still 4.2.
 
 ### 2.7 Torches & lighting ([terrain.md](systems/terrain.md))
-- [ ] CanvasModulate depth-lerp, player light, torch placeable, occlusion shadows, surface ambient.
-- [ ] Light cap: off-screen disable + per-vicinity placement cap with toast.
+- [x] **Per-tile propagated light grid** replacing the planned CanvasModulate + PointLight2D + occluders. The cheap model was built, looked at, and cut: it cannot make light seep around a corner or die inside rock, which is the entire reference look ([terrain.md](systems/terrain.md) §Lighting owns the rationale).
+- [x] Daylight as a propagated source off `Terrain.surface_row`, so "deeper is darker" is emergent and a dug shaft fades — no depth ramp anywhere.
+- [ ] Torch placeable + RMB pick-up; buffer-zone rejection toast.
+- [ ] ~~Light cap: off-screen disable + per-vicinity placement cap~~ — **deleted, not deferred.** Both existed only to manage `PointLight2D` limits a grid does not have; a hundred torches cost what one costs.
 
 **Exit criteria:** full loop — dig during countdown, survive a walker wave that stair-digs to the Core, level up, die and recover the loot bag.
 
