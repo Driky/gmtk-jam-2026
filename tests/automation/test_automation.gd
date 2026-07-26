@@ -1,11 +1,13 @@
-## Unit tests for the deployable support re-check (roadmap 3.1). Runs a fresh
-## Automation against a fresh Terrain — never the live autoloads — with
-## _process disabled so the drain happens exactly when a test says so.
+## Unit tests for the deployable support re-check (roadmap 3.1) and the 10 Hz
+## automation tick (3.2). Runs a fresh Automation against a fresh Terrain —
+## never the live autoloads — with _process disabled so the drain and the tick
+## happen exactly when a test says so.
 extends GdUnitTestSuite
 
 const TerrainScript := preload("res://scripts/terrain/terrain.gd")
 const AutomationScript := preload("res://scripts/automation/automation.gd")
 const DeployableScript := preload("res://scripts/automation/deployable.gd")
+const GameScript := preload("res://scripts/game/game.gd")
 const TorchScene := preload("res://scenes/torch.tscn")
 
 ## Playable (x in [50, 150)) and far from world edges.
@@ -15,7 +17,10 @@ const ANCHOR := CELL + Vector2i.DOWN
 
 var _terrain: Node
 var _automation: Node
+var _game: Node
 var _spawner: SpawnerDouble
+## Tick order, appended to by the Counter doubles.
+var _order: Array[String] = []
 
 
 ## Records what the real spawner would have dropped, without the autoload
@@ -45,17 +50,41 @@ class Linked:
 		return t.get_entity(cell() + Vector2i.UP) is Deployable
 
 
+## Counts the ticks it was handed and appends its label to a shared log, so a
+## test can assert the ORDER the registry was walked in. Stands in for 3.3's
+## miner: the machine phase is a real loop over a real registry even though
+## nothing ships a machine yet.
+class Counter:
+	extends Deployable
+
+	## The suite's own array, shared by reference.
+	var log_sink: Array[String] = []
+	var label := ""
+	var ticks := 0
+
+
+	func on_tick(_terrain: Node) -> void:
+		ticks += 1
+		log_sink.append(label)
+
+
 func before_test() -> void:
 	_terrain = auto_free(TerrainScript.new())
 	add_child(_terrain)
 	_spawner = auto_free(SpawnerDouble.new())
 	_spawner.add_to_group(&"pickup_spawner")
 	add_child(_spawner)
+	# Not in the tree: game.gd's _ready reaches for the live Terrain autoload,
+	# and the tick gate only ever reads `state`.
+	_game = auto_free(GameScript.new())
+	_game.state = GameScript.State.BUILD_PHASE
 	_automation = auto_free(AutomationScript.new())
 	_automation.terrain = _terrain
+	_automation.game = _game
 	add_child(_automation) # _ready wires the two Terrain signals.
 	# The drain is a test's own business here; a stray frame must not do it first.
 	_automation.set_process(false)
+	_order = []
 
 
 func _torch_at(cell: Vector2i) -> Torch:
@@ -197,6 +226,117 @@ func test_one_drain_unwinds_a_two_hundred_long_chain() -> void:
 	assert_int(_automation.pending_checks()).is_equal(0)
 	_terrain.debug_validate()
 
+# --- The 10 Hz tick (3.2) ----------------------------------------------------
+
+
+func _counter_at(cell: Vector2i, label: String) -> Counter:
+	var node: Counter = auto_free(Counter.new())
+	node.label = label
+	node.log_sink = _order
+	node.support_dirs = Deployable.SUPPORT_NONE
+	node.setup(cell)
+	add_child(node)
+	node.register(_terrain)
+	return node
+
+
+## TICK_HZ ticks per second of accumulated time, fed one ordinary frame at a
+## time. 101 frames rather than 100: `TICK_INTERVAL` is 0.1, which no binary
+## float represents exactly, so a run of exactly ten intervals sits right on the
+## comparison boundary and the assertion would be testing rounding rather than
+## the accumulator.
+func test_a_second_of_frames_runs_ten_ticks() -> void:
+	for i in 101:
+		_automation.advance(0.01)
+	assert_int(_automation.tick_count).is_equal(AutomationScript.TICK_HZ)
+
+
+## The accumulator subtracts the interval instead of resetting, so the remainder
+## of a long frame carries into the next one. Under a reset this would read 1
+## then 1; the carried 0.05 is exactly what gets dropped.
+func test_a_long_frame_carries_its_remainder() -> void:
+	_automation.advance(0.25) # Two whole intervals plus half of a third.
+	assert_int(_automation.tick_count).is_equal(2)
+	_automation.advance(0.06) # The carried 0.05 completes the third.
+	assert_int(_automation.tick_count).is_equal(3)
+
+
+## ❗️The clamp that keeps a backgrounded browser tab from hanging the page:
+## Chrome hands back one enormous delta, and without this the factory would run
+## hundreds of ticks inside a single frame.
+func test_a_ten_second_frame_runs_only_the_catch_up_limit() -> void:
+	_automation.advance(10.0)
+	assert_int(_automation.tick_count).is_equal(AutomationScript.MAX_CATCH_UP)
+	# And the backlog is dropped rather than paid off over the next frames.
+	_automation.advance(1.0 / 60.0)
+	assert_int(_automation.tick_count).is_equal(AutomationScript.MAX_CATCH_UP)
+
+
+func test_no_tick_outside_the_playable_phases() -> void:
+	_game.state = GameScript.State.GENERATING
+	_automation.advance(1.0)
+	assert_int(_automation.tick_count).is_equal(0)
+
+
+## ❗️The factory keeps running *during* a wave — that is the fantasy (plan.md),
+## and this gate is the one thing that could quietly break it.
+func test_the_tick_runs_during_the_wave_phase() -> void:
+	_game.state = GameScript.State.WAVE_PHASE
+	_automation.advance(1.0)
+	assert_int(_automation.tick_count).is_equal(AutomationScript.MAX_CATCH_UP)
+
+
+## tick_alpha is the renderer's only input: 0 right after a tick, climbing to 1
+## as the next one comes due.
+func test_tick_alpha_tracks_the_interval() -> void:
+	assert_float(_automation.tick_alpha()).is_equal_approx(0.0, 0.001)
+	_automation.advance(AutomationScript.TICK_INTERVAL * 0.5)
+	assert_float(_automation.tick_alpha()).is_equal_approx(0.5, 0.001)
+	_automation.advance(AutomationScript.TICK_INTERVAL * 0.5)
+	assert_int(_automation.tick_count).is_equal(1)
+	assert_float(_automation.tick_alpha()).is_equal_approx(0.0, 0.001)
+
+
+func test_a_registered_machine_is_ticked_once_per_tick() -> void:
+	var machine := _counter_at(CELL, "m")
+	_automation.register_machine(machine)
+	_automation.step_tick()
+	_automation.step_tick()
+	assert_int(machine.ticks).is_equal(2)
+
+
+## ❗️Row-major by cell, NOT insertion order. Registered back-to-front on
+## purpose: insertion order is reproducible within a session but not across
+## 4.3's save/load, which restores entities in file order.
+func test_machines_tick_in_row_major_order_not_insertion_order() -> void:
+	# Registered bottom-right first, so insertion order is the reverse of the
+	# answer this has to produce.
+	_automation.register_machine(_counter_at(CELL + Vector2i(1, 1), "d"))
+	_automation.register_machine(_counter_at(CELL + Vector2i(0, 1), "c"))
+	_automation.register_machine(_counter_at(CELL + Vector2i(1, 0), "b"))
+	_automation.register_machine(_counter_at(CELL, "a"))
+	_automation.step_tick()
+	assert_array(_order).is_equal(["a", "b", "c", "d"])
+
+
+## Placing during a run has to re-sort, or everything placed after the first
+## tick ticks in insertion order forever.
+func test_a_machine_registered_after_the_first_tick_still_sorts_in() -> void:
+	_automation.register_machine(_counter_at(CELL + Vector2i(1, 0), "b"))
+	_automation.step_tick()
+	_order.clear()
+	_automation.register_machine(_counter_at(CELL, "a"))
+	_automation.step_tick()
+	assert_array(_order).is_equal(["a", "b"])
+
+
+func test_unregistering_takes_a_machine_out_of_the_tick() -> void:
+	var machine := _counter_at(CELL, "m")
+	_automation.register_machine(machine)
+	_automation.unregister_machine(machine)
+	_automation.step_tick()
+	assert_int(machine.ticks).is_equal(0)
+
 # --- Run state ---------------------------------------------------------------
 
 
@@ -218,3 +358,21 @@ func test_a_cell_queued_before_reset_can_be_queued_again() -> void:
 	_automation.reset_run()
 	_automation.queue_support_check(CELL)
 	assert_int(_automation.pending_checks()).is_equal(1)
+
+
+## ❗️Deployables are children of Main and die with the scene reload without ever
+## being popped, so a surviving registry would hold freed references and the
+## first tick of the new run would fault on them.
+func test_reset_run_empties_the_registries_and_zeroes_the_tick() -> void:
+	_automation.register_machine(_counter_at(CELL, "m"))
+	_automation.register_inserter(_counter_at(CELL + Vector2i(2, 0), "i"))
+	_automation.step_tick()
+	assert_int(_automation.tick_count).is_equal(1)
+
+	_automation.reset_run()
+
+	assert_int(_automation.tick_count).is_equal(0)
+	assert_array(_automation.inserters()).is_empty()
+	_order.clear()
+	_automation.step_tick()
+	assert_array(_order).is_empty()

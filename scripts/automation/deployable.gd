@@ -202,6 +202,16 @@ func on_placed() -> void:
 func on_removed() -> void:
 	pass
 
+
+## One 10 Hz tick, for whichever registry this joined in `on_placed()`. Terrain
+## is handed in rather than reached for, so the whole sim unit-tests against a
+## fresh world (`Automation.step_tick`).
+##
+## The conveyor phase does NOT come through here: its mark-then-commit pass is
+## global by nature. Machines (3.3's miner and furnace) and inserters do.
+func on_tick(_terrain: Node) -> void:
+	pass
+
 # --- Internals ---------------------------------------------------------------
 
 
