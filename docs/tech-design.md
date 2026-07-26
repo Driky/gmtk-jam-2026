@@ -50,6 +50,9 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 | Climbables biped-only, directional profiles (pole = down-only) | [systems/enemies.md](systems/enemies.md) |
 | One `Deployable` base (W×H, HP, direction-bitmask support, one `pop_to_pickup` drop path) | [systems/automation.md](systems/automation.md) |
 | 10 Hz deterministic tick; 1-slot conveyors carrying stacks; inserters mandatory; tick order fixed | [systems/automation.md](systems/automation.md) |
+| Tick iteration row-major by cell (not insertion order); catch-up clamp drops backlog | [systems/automation.md](systems/automation.md) |
+| Directional deployables: authored `directional` + runtime `facing`, rotated with R at placement | [systems/automation.md](systems/automation.md) |
+| Item transfer is two refusing-by-default virtuals (`accept_item`/`extract_item`); RMB hand-feeds one | [systems/automation.md](systems/automation.md) |
 | Power = radius coverage grids (generator + relay), brownout `supply/demand` scaling | [systems/automation.md](systems/automation.md) |
 | One mixed skill tree (recipes + leveled buffs) as Resource nodes; crafting range incl. nearby containers | [systems/progression.md](systems/progression.md) |
 | Tabbed character screen (Inventory/Crafting/Tree) with direct hotkeys; power overlay hotkey | [systems/ui.md](systems/ui.md) |
