@@ -78,3 +78,26 @@ func test_cooldown_clamps_a_degenerate_multiplier() -> void:
 	var stats: ItemStats = ItemStatsScript.new()
 	stats.use_cooldown = 0.4
 	assert_float(stats.effective_cooldown(progression)).is_less(1000.0)
+
+# --- Placement dispatch (2.7) ------------------------------------------------
+
+
+## The seam Day 3's deployables land on: an item names a scene, and the player
+## places that instead of writing a tile. No branch in the player per item.
+func test_torch_resolves_to_a_place_scene() -> void:
+	var stats := ItemDefs.stats_for("torch")
+	assert_object(stats.place_scene).is_not_null()
+	assert_object(stats).is_same(ItemDefs.TORCH)
+
+
+## A plain block must keep the tile-writing path — a non-null place_scene on
+## BLOCK_DEFAULT would turn every mined block into a scene instance.
+func test_a_plain_block_has_no_place_scene() -> void:
+	assert_object(ItemDefs.stats_for("dirt").place_scene).is_null()
+	assert_object(ItemDefs.BARE_HAND.place_scene).is_null()
+
+
+## The HUD swatch path: "torch" is not a material, so icon_for falls through to
+## the authored icon_color rather than looking for tile art that does not exist.
+func test_torch_is_not_a_material_id() -> void:
+	assert_bool(Materials.MATERIALS.has("torch")).is_false()

@@ -33,6 +33,14 @@ enum UseKind { SWING, PROJECTILE }
 @export var arc_degrees := 90.0 ## Sweep the default arc travels through.
 @export var active_window := 0.15 ## Seconds the hitbox stays enabled.
 
+@export_group("Placement")
+## Non-null makes `place` (RMB) put this SCENE in the target cell instead of
+## writing a tile — the seam Day 3's deployables land on, so a miner or a turret
+## is a .tres row rather than another branch in the player. It wins over the
+## material-id block path, and the scene must expose setup(cell) / register(terrain)
+## / pick_up(terrain) ([player-combat.md](../../docs/systems/player-combat.md) §Placement).
+@export var place_scene: PackedScene = null
+
 @export_group("Ranged")
 ## What a PROJECTILE item fires. Ammo and mana costs are 4.2 — the placeholder
 ## caster is free so the pooled system has a live consumer before 3.5's

@@ -350,7 +350,16 @@ func _place() -> void:
 	if not in_reach(target):
 		return
 	var item: Dictionary = Items.player_inventory.selected_item()
-	if item.is_empty() or not Materials.MATERIALS.has(item.id):
+	if item.is_empty():
+		return
+	# Data-driven dispatch, following the hitbox_scene precedent: an item that
+	# names a scene places that scene, anything else falls through to the block
+	# path. Day 3's miner/conveyor/turret are .tres rows, not branches here.
+	var stats := Items.stats_for(item.id)
+	if stats.place_scene != null:
+		_place_scene(target, stats.place_scene)
+		return
+	if not Materials.MATERIALS.has(item.id):
 		return
 	if not can_place_at(Terrain, target, tile_rect()):
 		return
@@ -359,6 +368,30 @@ func _place() -> void:
 		# Flagged as hand-placed: re-mining your own wall earns no XP on either
 		# channel (progression.md).
 		Terrain.set_tile(target, id, true)
+
+
+## Put a placeable scene in a cell. Validity is `can_place_at` verbatim — its
+## cardinal-adjacency rule is not a compromise borrowed from blocks, it is the
+## right rule: no torches floating in mid-air, mount them on a wall.
+##
+## Order matters and is the reverse of the block path. `set_tile` cannot fail so
+## blocks consume first and write second; `register` CAN fail, so the cell is
+## claimed first and the item is only consumed once it is ours. A failed claim
+## hands the item back instead of eating it.
+func _place_scene(cell: Vector2i, scene: PackedScene) -> void:
+	if not can_place_at(Terrain, cell, tile_rect()):
+		return
+	var node: Node2D = scene.instantiate()
+	node.setup(cell) # Before add_child, per the Core/loot-bag convention.
+	if not node.register(Terrain):
+		node.free()
+		return
+	if not Items.player_inventory.consume_selected(1):
+		Terrain.remove_entity(cell)
+		node.free()
+		return
+	# Parent is Main, like _drop_loot_bag — the same canvas as the tilemap.
+	get_parent().add_child(node)
 
 # --- Equipment ---------------------------------------------------------------
 

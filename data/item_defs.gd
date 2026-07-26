@@ -20,10 +20,14 @@ const PICKAXE_T1: ItemStats = preload("res://data/items/pickaxe_t1.tres")
 ## Placeholder ranged weapon: exists so the pooled projectile system has a live
 ## consumer before 3.5's turrets depend on it. Crafted bows (4.2) replace it.
 const BOLT_CASTER: ItemStats = preload("res://data/items/bolt_caster.tres")
+## The first placeable that is a SCENE rather than a tile — light you carry and
+## mount on a wall ([terrain.md](../docs/systems/terrain.md) §Lighting).
+const TORCH: ItemStats = preload("res://data/items/torch.tres")
 
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
+	"torch": TORCH,
 }
 
 
