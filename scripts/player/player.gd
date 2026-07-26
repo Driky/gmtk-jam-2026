@@ -30,6 +30,9 @@ const MUZZLE_OFFSET_PX := 14.0
 ## so it lands out to 30 px), plus slack. A mob inside this counts as "in the
 ## swing" and shields whatever deployable is behind it — see _hit_deployable.
 const MELEE_PRECEDENCE_PX := 34.0
+## Buffer zones are player-immutable by design (world-gen.md) — the one
+## placement rejection that needs saying out loud.
+const BUFFER_REJECT_TOAST := "You can't build in the buffer zone"
 
 ## Grace window after any hit. Also what stops a mob's swing and its contact
 ## damage double-dipping on the same frame — both route through take_damage,
@@ -395,6 +398,13 @@ func _place() -> void:
 		return
 	var item: Dictionary = Items.player_inventory.selected_item()
 	if item.is_empty():
+		return
+	# The buffer rule is the one rejection worth explaining — every other
+	# invalid cell (floating, occupied, inside you) is legible from the cursor,
+	# but "the world refuses to let you build here" is not (ui.md §Other screens).
+	# Checked before validity so the reason is specific rather than generic.
+	if WorldConfig.is_in_buffer(target):
+		Hud.show_toast(BUFFER_REJECT_TOAST)
 		return
 	# Data-driven dispatch, following the hitbox_scene precedent: an item that
 	# names a scene places that scene, anything else falls through to the block

@@ -1,9 +1,10 @@
 ## HUD: HP/mana/XP bars, hotbar display, elevation readout, phase label
-## (countdown, then "Wave n — X remaining"), Core HP bar. Bars, hotbar, and
+## (countdown, then "Wave n — X remaining"), Core HP bar, rejection toasts. Bars, hotbar, and
 ## phase widgets are purely
 ## signal-driven; only the elevation label polls, and only repaints on row
 ## change. The countdown presentation (big timer, last-10s red pulse, wave
 ## announce) is a never-cut item — docs/plan.md. Owning doc: docs/systems/ui.md
+class_name Hud
 extends CanvasLayer
 
 const _TILESET: TileSet = preload("res://assets/generated/terrain_tileset.tres")
@@ -21,6 +22,16 @@ const PULSE_FADE := 0.5
 const BANNER_HOLD := 1.5
 const BANNER_FADE := 0.5
 
+## Shorter than the banner: a rejected click is a nudge, not an announcement,
+## and it must be gone before you have finished re-aiming.
+const TOAST_HOLD := 1.2
+const TOAST_FADE := 0.4
+
+## Set in _ready, cleared in _exit_tree — the ProjectilePool.fire trick, so
+## call sites need no node path and the fixed autoload map in tech-design.md
+## stays untouched. Inert with no HUD in the tree, so tests are unaffected.
+static var _instance: Hud = null
+
 static var _icon_cache: Dictionary = { }
 
 ## Injected by tests before add_child; falls back to the live autoload.
@@ -37,6 +48,8 @@ var progression: Node = null
 var _player: Player = null
 var _last_row := -(1 << 30)
 var _banner_tween: Tween = null
+var _toast_tween: Tween = null
+var _toast_message := ""
 var _wave_number := 0
 
 var _slot_bgs: Array[ColorRect] = []
@@ -55,9 +68,11 @@ var _slot_counts: Array[Label] = []
 @onready var _pulse_overlay: ColorRect = %PulseOverlay
 @onready var _xp_bar: ProgressBar = %XPBar
 @onready var _xp_label: Label = %XPLabel
+@onready var _toast: Label = %Toast
 
 
 func _ready() -> void:
+	_instance = self
 	if inventory == null:
 		inventory = Items.player_inventory
 	if game == null:
@@ -82,6 +97,48 @@ func _ready() -> void:
 	# Seeded here rather than waiting for the first grant: a run that starts
 	# mid-level (a reload, 4.3) must not show an empty bar until something dies.
 	_on_xp_changed(progression.xp, progression.xp_needed(), progression.level)
+
+
+func _exit_tree() -> void:
+	if _instance == self:
+		_instance = null
+
+
+## The one entry point for rejection feedback. Static because the call sites are
+## many and unrelated (buffer-zone placement today; 3.1 alone adds buffer,
+## validity, power coverage and the exhausted-deposit miner alert), and none of
+## them should own a path to this node. No-ops without a HUD in the tree.
+static func show_toast(message: String) -> void:
+	if _instance != null:
+		_instance.toast(message)
+
+
+## Its own widget and its own tween, NOT a reuse of the wave banner: a rejected
+## click must never blot out a fight.
+##
+## ❗️The repeat guard is not optional. Placement polls input every physics
+## frame, so a held RMB against a buffer fires this 60x/second — without
+## absorbing identical repeats the tween restarts every frame and the toast
+## never fades. It would ship visibly broken.
+func toast(message: String) -> void:
+	if message == _toast_message and _toast_tween != null and _toast_tween.is_valid():
+		return
+	if _toast_tween != null and _toast_tween.is_valid():
+		_toast_tween.kill()
+	_toast_message = message
+	_toast.text = message
+	_toast.visible = true
+	_toast.modulate.a = 1.0
+	_toast_tween = create_tween()
+	_toast_tween.tween_interval(TOAST_HOLD)
+	_toast_tween.tween_property(_toast, "modulate:a", 0.0, TOAST_FADE)
+	_toast_tween.tween_callback(
+		func() -> void:
+			_toast.visible = false
+			# Cleared so the SAME message can toast again later; the guard only
+			# ever absorbs repeats while one is still on screen.
+			_toast_message = "",
+	)
 
 
 func _process(_delta: float) -> void:

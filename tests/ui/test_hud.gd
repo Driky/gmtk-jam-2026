@@ -35,6 +35,12 @@ var _progression: Node
 var _hud: CanvasLayer
 
 
+func after_test() -> void:
+	if _hud != null and is_instance_valid(_hud):
+		_hud.free()
+	_hud = null
+
+
 func before_test() -> void:
 	_inv = Inventory.new()
 	_game = auto_free(GameScript.new())
@@ -42,7 +48,9 @@ func before_test() -> void:
 	# A real Progression, just not the autoload one — the HUD reads its curve
 	# and level, so a stub would only re-implement it.
 	_progression = auto_free(ProgressionScript.new())
-	_hud = auto_free(HudScene.instantiate())
+	# Not auto_free: one test frees the HUD itself to prove the static seam is
+	# inert without one, and auto_free would then double-free it.
+	_hud = HudScene.instantiate()
 	_hud.inventory = _inv
 	_hud.game = _game
 	_hud.waves = _waves
@@ -246,3 +254,52 @@ func test_leveling_rebases_the_bar_and_announces() -> void:
 	assert_float(_hud._xp_bar.max_value).is_equal_approx(ProgressionScript.xp_to_level(2), 0.001)
 	assert_bool(_hud._wave_banner.visible).is_true()
 	assert_str(_hud._wave_banner.text).is_equal("Level 2!")
+
+# --- Rejection toast (2.7) ---------------------------------------------------
+
+
+func test_toast_shows_the_message() -> void:
+	_hud.toast("nope")
+	assert_bool(_hud._toast.visible).is_true()
+	assert_str(_hud._toast.text).is_equal("nope")
+	assert_float(_hud._toast.modulate.a).is_equal(1.0)
+
+
+## ❗️Placement polls input every physics frame, so a held RMB against a buffer
+## fires this 60x/second. Without absorbing identical repeats the tween restarts
+## every frame and the toast never fades — it would ship visibly broken.
+func test_repeated_identical_toasts_do_not_restart_the_fade() -> void:
+	_hud.toast("same")
+	var first: Tween = _hud._toast_tween
+	_hud.toast("same")
+	_hud.toast("same")
+	assert_object(_hud._toast_tween).is_same(first)
+
+
+## A different message must interrupt, or a stale rejection outlives the one
+## that actually matters.
+func test_a_different_message_replaces_the_toast() -> void:
+	_hud.toast("first")
+	var first: Tween = _hud._toast_tween
+	_hud.toast("second")
+	assert_object(_hud._toast_tween).is_not_same(first)
+	assert_str(_hud._toast.text).is_equal("second")
+
+
+## The static seam exists so unrelated call sites need no node path. It has to
+## be inert with no HUD in the tree, or every headless test that touches
+## placement would crash.
+func test_static_show_toast_is_inert_without_a_hud() -> void:
+	_hud.free() # The suite's HUD leaves the tree, clearing the static instance.
+	_hud = null
+	Hud.show_toast("nobody is listening")
+	assert_bool(true).is_true() # Reached here without erroring.
+
+
+## The banner and the toast are separate widgets with separate tweens: a
+## rejected click must never blot out a wave announcement.
+func test_a_toast_does_not_disturb_the_wave_banner() -> void:
+	_game.wave_started.emit(4)
+	_hud.toast("rejected")
+	assert_bool(_hud._wave_banner.visible).is_true()
+	assert_str(_hud._wave_banner.text).is_equal("Wave 4")
