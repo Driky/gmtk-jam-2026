@@ -27,12 +27,14 @@ const TORCH: ItemStats = preload("res://data/items/torch.tres")
 ## ([automation.md](../docs/systems/automation.md) §The 10 Hz tick). Tier 2 is a
 ## second .tres with a lower `ticks_per_move`, not a second script.
 const CONVEYOR_T1: ItemStats = preload("res://data/items/conveyor_t1.tres")
+const INSERTER: ItemStats = preload("res://data/items/inserter.tres")
 
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
 	"torch": TORCH,
 	"conveyor_t1": CONVEYOR_T1,
+	"inserter": INSERTER,
 }
 
 
