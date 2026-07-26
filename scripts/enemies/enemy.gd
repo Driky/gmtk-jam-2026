@@ -297,14 +297,23 @@ func _find_player() -> Node2D:
 	return _player
 
 
-## An adjacent entity that can be hit (the Core today, deployables Day 3):
-## entity cells are air, so blockers registered there take melee hits instead
-## of the chew pipeline.
+## An adjacent entity that can be hit (the Core, deployables): entity cells are
+## air, so blockers registered there take melee hits instead of the chew pipeline.
+##
+## ❗️A **Deployable in the mob's OWN cell is skipped**, and only there. The
+## `pos` probe exists because the Core is 3×2 and a mob can stand inside it
+## that reasoning does not transfer to a 1×1 torch the mob has by definition
+## already walked through. Worse, the early return in `_push_core` skips
+## `_update_stuck`, so a mob parked on a torch starves the watchdog it needs to
+## escape a cycling route. The `pos + dir` probe keeps every deployable —
+## chewing what is in front of you is the intended 3.1 behaviour.
 func _attackable_entity(pos: Vector2i, dir: Vector2i) -> Node:
-	for probe in [pos, pos + dir]:
-		var entity: Node = terrain.get_entity(probe)
-		if entity != null and entity.has_method(&"take_damage"):
-			return entity
+	var here: Node = terrain.get_entity(pos)
+	if here != null and not (here is Deployable) and here.has_method(&"take_damage"):
+		return here
+	var ahead: Node = terrain.get_entity(pos + dir)
+	if ahead != null and ahead.has_method(&"take_damage"):
+		return ahead
 	return null
 
 

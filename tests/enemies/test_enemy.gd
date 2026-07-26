@@ -202,6 +202,58 @@ func test_dead_mobs_are_not_shoved() -> void:
 	enemy.apply_knockback(Vector2.RIGHT, 100.0)
 	assert_float(enemy._knockback_left).is_equal(0.0)
 
+# --- Attackable entities (3.1) -----------------------------------------------
+
+const TerrainScript := preload("res://scripts/terrain/terrain.gd")
+const TorchScene := preload("res://scenes/torch.tscn")
+const CoreScene := preload("res://scenes/core.tscn")
+
+const MOB_CELL := Vector2i(100, 100)
+
+
+func _enemy_with_terrain() -> Enemy:
+	var enemy := _make_enemy()
+	enemy.terrain = auto_free(TerrainScript.new())
+	add_child(enemy.terrain)
+	return enemy
+
+
+func _torch_at(terrain: Node, cell: Vector2i) -> Torch:
+	var torch: Torch = auto_free(TorchScene.instantiate())
+	torch.setup(cell)
+	add_child(torch)
+	torch.register(terrain)
+	return torch
+
+
+## ❗️A torch in the mob's own cell is one it has already walked through. Chewing
+## it would also take the early return in _push_core, which skips _update_stuck
+## and starves the watchdog a mob needs to escape a cycling route.
+func test_a_deployable_in_the_mobs_own_cell_is_not_attacked() -> void:
+	var enemy := _enemy_with_terrain()
+	_torch_at(enemy.terrain, MOB_CELL)
+	assert_object(enemy._attackable_entity(MOB_CELL, Vector2i.RIGHT)).is_null()
+
+
+## Chewing what is in front of you is the intended behaviour — that is what
+## makes a lit tunnel an accidental mob-slowing corridor.
+func test_a_deployable_in_front_of_the_mob_is_attacked() -> void:
+	var enemy := _enemy_with_terrain()
+	var torch := _torch_at(enemy.terrain, MOB_CELL + Vector2i.RIGHT)
+	assert_object(enemy._attackable_entity(MOB_CELL, Vector2i.RIGHT)).is_same(torch)
+
+
+## The Core is 3×2, so a mob can stand INSIDE it — that is why the own-cell
+## probe exists at all, and the skip must not take it with it. It is a plain
+## Node2D, deliberately not a Deployable.
+func test_the_core_in_the_mobs_own_cell_is_still_attacked() -> void:
+	var enemy := _enemy_with_terrain()
+	var core: Node2D = auto_free(CoreScene.instantiate())
+	core.setup(MOB_CELL.x, MOB_CELL.y + 1)
+	add_child(core)
+	assert_bool(core.register_footprint(enemy.terrain)).is_true()
+	assert_object(enemy._attackable_entity(MOB_CELL, Vector2i.RIGHT)).is_same(core)
+
 
 ## Ground lost to a shove must not read as "field guidance is cycling" — the
 ## watchdog would otherwise flip mobs into direct-dig mode every time you hit
