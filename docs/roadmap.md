@@ -87,7 +87,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 ### 2.7 Torches & lighting ([terrain.md](systems/terrain.md))
 - [x] **Per-tile propagated light grid** replacing the planned CanvasModulate + PointLight2D + occluders. The cheap model was built, looked at, and cut: it cannot make light seep around a corner or die inside rock, which is the entire reference look ([terrain.md](systems/terrain.md) §Lighting owns the rationale).
 - [x] Daylight as a propagated source off `Terrain.surface_row`, so "deeper is darker" is emergent and a dug shaft fades — no depth ramp anywhere.
-- [ ] Torch placeable + RMB pick-up; buffer-zone rejection toast.
+- [x] Torch placeable (`ItemStats.place_scene` dispatch) + un-deploy with the use verb; buffer-zone rejection toast; give-item and full-bright debug rows.
 - [ ] ~~Light cap: off-screen disable + per-vicinity placement cap~~ — **deleted, not deferred.** Both existed only to manage `PointLight2D` limits a grid does not have; a hundred torches cost what one costs.
 
 **Exit criteria:** full loop — dig during countdown, survive a walker wave that stair-digs to the Core, level up, die and recover the loot bag.
@@ -99,6 +99,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 ### 3.1 Deployables & placement ([automation.md](systems/automation.md))
 - [ ] `Deployable` base: W×H footprint, HP, faction, `on_placed/on_removed`, entity-dict registration.
 - [ ] Placement mode: grid ghost + validity tint (empty, supported, reach, buffer 🔴), rejection toasts.
+- [ ] Fold the 2.7 torch into the base: HP, faction, W×H footprint, `on_placed`/`on_removed`, ghost + validity tint, and generalize `as Torch` to `as Deployable` in both the un-deploy path and the cursor highlight ([terrain.md](systems/terrain.md) §Lighting placed it as a one-cell special case). Support rules — "unsupported deployables pop into a pickup" — belong here too: mining the tile a torch is mounted on currently leaves it floating, which is cosmetic only.
 
 ### 3.2 Automation tick ([automation.md](systems/automation.md)) 🔴
 - [ ] 10 Hz deterministic tick; fixed order `machines → inserters → conveyors`.

@@ -126,6 +126,7 @@ func _process(delta: float) -> void:
 			_worst_dirty,
 			_worst_clean,
 		)
+		_label.text += "\n" + light_text(light_map)
 		_label.text += "\n" + Perf.format_top(SECTION_ROWS)
 		_label.text += (
 			"\ngodot %.0fs: process %.1f | physics %.1f ms"

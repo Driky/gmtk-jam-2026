@@ -5,6 +5,8 @@ Owner of: the `Deployable` base, placement, all deployable categories, the 10 Hz
 ## Deployable base & placement
 All placeables share a `Deployable` base scene: grid footprint (**arbitrary W×H per type**, defined in its data), HP, faction, `on_placed/on_removed`, registered into `Terrain`'s entity dict per occupied cell. Placement mode: grid-snapped ghost with validity tint (space empty, supported, in reach, not in a buffer zone), plus the power coverage overlay for powered machines.
 
+The **2.7 torch is a one-cell special case that lands before this base exists** and folds in here at 3.1 — it already registers in the entity dict and is placed/removed through the same player verbs ([terrain.md](terrain.md) §Lighting, [player-combat.md](player-combat.md) §Placement / §Un-deploying).
+
 ## Categories
 - **Miner** — placed on deposit tiles; extracts from `reserve` every N ticks into its output slot. Exhausted deposits become air ([terrain.md](terrain.md)), so a miner whose footprint tiles have all emptied shows an alert state (icon/toast) prompting removal.
 - **Conveyor** — non-blocking directional scaffold tube; items levitate through. One slot per tile; slot holds a **stack**. Tiered variants move faster.
