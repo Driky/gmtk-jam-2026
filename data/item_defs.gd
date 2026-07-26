@@ -32,6 +32,18 @@ const INSERTER: ItemStats = preload("res://data/items/inserter.tres")
 ## anything — the thing 3.1's W×H footprint and item-preview ghost existed for
 ## ([automation.md](../docs/systems/automation.md) §Categories).
 const MINER: ItemStats = preload("res://data/items/miner.tres")
+## The first crafting station. `station_id` on the scene picks which rows of
+## `data/recipe_defs.gd` it runs, so 4.2's assembler is a second .tres, not a
+## second script.
+const FURNACE: ItemStats = preload("res://data/items/furnace.tres")
+
+## The first CRAFTED items. Authored as `ItemStats` with an `icon_color` and
+## nothing else: that alone gets them a HUD icon and a row in the F3 give-item
+## dropdown for free. No `place_scene`, so they are not placeable, and they are
+## absent from `Materials.LOOT_XP`, so smelting is deliberately not an XP channel
+## ([progression.md](../docs/systems/progression.md)).
+const COPPER_BAR: ItemStats = preload("res://data/items/copper_bar.tres")
+const IRON_BAR: ItemStats = preload("res://data/items/iron_bar.tres")
 
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
@@ -40,6 +52,9 @@ const STATS: Dictionary = {
 	"conveyor_t1": CONVEYOR_T1,
 	"inserter": INSERTER,
 	"miner": MINER,
+	"furnace": FURNACE,
+	"copper_bar": COPPER_BAR,
+	"iron_bar": IRON_BAR,
 }
 
 

@@ -12,6 +12,8 @@ All sources route through `Progression.grant_xp(source, amount)`. The caller dec
 | Kills | `EnemyStats.xp` |
 | First-time crafts | Reserved (3.6) |
 
+**Automation is worth zero on both channels (3.3).** ❗️Machine-extracted ore pays nothing: `Terrain.extract_reserve` deliberately emits no `drops_spawned` (the ore goes into the machine, never onto the floor), so it misses the looting channel by construction, and the mining channel is already gated on `source == Source.PLAYER`. Both halves are code that existed before the miner did — the anti-farm rule falls out rather than being enforced. Without it a miner is an XP fountain you walk away from, which is the one thing a factory must never be. **Smelting pays nothing either**: bars are absent from `loot_xp`, so a furnace line is not a second channel. First-time crafts (3.6) remain the only crafting XP planned.
+
 **Player-placed blocks are worth zero on both channels** — no mining XP when re-broken, and their drop grants no loot XP. Without it, walling and re-mining the same block is the cheapest XP in the game. Enforced by a `player_placed` flag on the tile ([terrain.md](terrain.md)) carried into the drop. Recovering your own loot bag likewise grants nothing: bags hand items straight to the inventory and never spawn pickups, so they miss the loot channel by construction ([player-combat.md](player-combat.md)).
 
 Curve: `xp_to_level(L) = 50 * L^1.6` (tune — expect it to be too generous first playtest). Level-up grants flat stats (+HP, +mana, +move speed) and **1 upgrade point**; the player's *current* HP/mana rise by the same delta as the maximum, so a level-up is a reward rather than a mid-wave heal button.
@@ -22,7 +24,12 @@ Nodes are `SkillNode` Resource files: `id`, `prerequisites[]`, `point_cost`, opt
 **Tree size is the designated scope lever** — see cut lines in [plan.md](../plan.md).
 
 ## Recipe tiers
-Recipes span tiers across automation / logistics / power / defense / components, unlocked by tree progress. Recipe specifics are decided during implementation as data (Resources), not pre-designed.
+Recipes span tiers across automation / logistics / power / defense / components, unlocked by tree progress. Recipe specifics are decided during implementation as data, not pre-designed.
+
+**The table landed at 3.3 as `data/recipe_defs.gd`** — static and pure, mirroring `data/item_defs.gd` exactly, which is where 2.5 put the *item* half of this DB. Per row: `station` (matched against a `CraftingStation`'s authored `station_id`), `inputs` as `{item_id: count}`, one `output` `{id, count}` stack, and `ticks` at 10 Hz. Two queries: `for_station(station)` (table order, which is also selection order, so "first match wins" is a property of the file rather than of whoever iterates it) and `accepts_input(station, id)` — the id-routing predicate a station's `accept_item` is built on ([automation.md](automation.md) §Categories).
+- ❗️**`inputs` is a map from day one**, even though a one-input-slot furnace can only ever match a single-input row. Widening the *key* of a shipped table later is a rewrite of every consumer; carrying the extra key now costs nothing, and 4.2's assembler needs it.
+- **3.6 is the crafting UI over this table, not a second one.** The roadmap's "item/recipe DB" bullet reconciles down to that UI.
+- Crafted outputs are authored `ItemStats` `.tres` with an `icon_color` and no `place_scene`, so they resolve a HUD icon and a give-item row for free and are not placeable. They are **absent from `LOOT_XP`** — see §XP.
 
 ## Crafting range
 All crafting-cost checks — hand crafting, player-initiated station crafting, and tree `resource_cost` unlocks — draw from player inventory **plus containers within a radius of the player**, via one reused query: `Items.gather_available(player_pos)`.

@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/automation/crafting_station.gd" id="1_station"]
+
+[node name="Furnace" type="Node2D"]
+script = ExtResource("1_station")
+size = Vector2i(2, 2)
+max_hp = 40.0
+support_dirs = 15
+removal_hits = 2
+item_id = "furnace"
+directional = false
+station_id = "furnace"
+
+[node name="Visual" type="ColorRect" parent="."]
+offset_left = -14.0
+offset_top = -14.0
+offset_right = 14.0
+offset_bottom = 14.0
+color = Color(0.62, 0.36, 0.24, 1)
