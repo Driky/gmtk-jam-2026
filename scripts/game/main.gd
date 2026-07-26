@@ -76,14 +76,26 @@ func _finish_generation() -> void:
 	Game.start_build_phase()
 	_gen = null
 
-
 ## Placeholder starting inventory. Bare hands mine at 2.0 hardness/s, so a run
-## has to open with a tool or the first minute is a slog; crafting (4.2) is what
-## eventually replaces this hand-out. Seeded BEFORE the player exists so its
-## _ready equips slot 0 straight away.
+## has to open with a tool or the first minute is a slog; torches because depth
+## is where the good ore is and depth is dark, so a run that opens without light
+## cannot descend at all ([terrain.md](../../docs/systems/terrain.md) §Lighting).
+## Crafting (4.2) is what eventually replaces the hand-out.
+##
+## Data rather than a sequence of calls so a test can assert what a run opens
+## with — this list was silently emptied of its torches once by a stray
+## `git checkout` and nothing caught it but a screenshot.
+const STARTING_KIT: Array[Array] = [
+	["pickaxe_t1", 1],
+	["bolt_caster", 1],
+	["torch", 20],
+]
+
+
+## Seeded BEFORE the player exists so its _ready equips slot 0 straight away.
 func _seed_starting_kit() -> void:
-	Items.player_inventory.add_item("pickaxe_t1", 1)
-	Items.player_inventory.add_item("bolt_caster", 1)
+	for entry: Array in STARTING_KIT:
+		Items.player_inventory.add_item(entry[0], entry[1])
 
 
 func _on_state_changed(state: Game.State) -> void:
