@@ -9,11 +9,16 @@ extends CanvasModulate
 ## WorldGen.SURFACE_MEAN(24) + SURFACE_AMPLITUDE(8) + 2 — the deepest surface
 ## valley is row 32, so every surface column stays at daylight.
 const SURFACE_ROW := 34.0
-## Fully dark by here. 36 rows below the surface ≈ one 720p screen of descent.
-const DARK_ROW := 70.0
-## A DIM floor, not black. Torch supply is finite, and pickups, loot bags and
-## mobs are unlit ColorRects — pure black means losing your own death bag.
-const FLOOR_COLOR := Color(0.07, 0.07, 0.11)
+## Fully dark by here. 18 rows below the bright end — about half a screen of
+## descent, so night falls while the surface is still visible above you. A
+## longer ramp reads as "slightly overcast" for the whole first screen, which
+## is not the Terraria feel: there, you dig down a little and it is DARK.
+const DARK_ROW := 52.0
+## Near-black, with a blue cast rather than a flat grey — the tint multiplies,
+## so brown dirt lands at ~(0.025, 0.016, 0.015). Not literally zero: pickups,
+## loot bags and mobs are unlit ColorRects, and a hard black loses your own
+## death bag entirely. You still find it by walking there with your own light.
+const FLOOR_COLOR := Color(0.045, 0.045, 0.075)
 ## Exponential chase rate. Exists for respawn: row 400 → the Core would
 ## otherwise snap the screen from black to white in a single frame.
 const TINT_LERP_SPEED := 6.0

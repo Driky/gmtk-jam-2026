@@ -14,6 +14,13 @@ script = ExtResource("1_main")
 unique_name_in_owner = true
 script = ExtResource("6_depth_tint")
 
+[node name="Backdrop" type="ColorRect" parent="."]
+z_index = -100
+light_mask = 0
+offset_right = 3200.0
+offset_bottom = 19200.0
+color = Color(0.3, 0.3, 0.3, 1)
+
 [node name="BufferTintWest" type="ColorRect" parent="."]
 offset_right = 800.0
 offset_bottom = 19200.0
