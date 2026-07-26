@@ -62,6 +62,8 @@ func _finish_generation() -> void:
 	var debug_menu: CanvasLayer = DebugMenuScript.new()
 	debug_menu.flow_overlay = flow_overlay
 	debug_menu.perf_overlay = perf_overlay
+	debug_menu.light_map = %LightMap
+	perf_overlay.light_map = %LightMap
 	add_child(debug_menu)
 	_seed_starting_kit()
 	var player: CharacterBody2D = PlayerScene.instantiate()

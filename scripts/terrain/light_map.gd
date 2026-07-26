@@ -61,6 +61,13 @@ func _process(_delta: float) -> void:
 	# a half-built world is pure waste and visibly starves the row sweep.
 	if Game.state == Game.State.GENERATING:
 		return
+	# Hidden means "full bright": with no multiply pass the world renders unlit,
+	# which is exactly the debug view (ui.md). Solving while invisible would
+	# burn ~2 ms a frame to produce a texture nobody samples, and dropping
+	# _primed makes switching back re-solve whole rather than fading in.
+	if not visible:
+		_primed = false
+		return
 	if not _primed:
 		_primed = true
 		_seed(camera)

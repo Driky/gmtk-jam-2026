@@ -25,6 +25,8 @@ const SECTION_ROWS := 3
 var waves: Node = null
 var game: Node = null
 var terrain: Node = null
+## Set by main.gd — the light grid's render pass, for its region readout.
+var light_map: Node2D = null
 
 var _label: Label
 var _window_left := WINDOW
@@ -218,6 +220,26 @@ static func format_stats(
 			worst_dirty,
 			worst_clean,
 		]
+	)
+
+
+## Light grid region + draw calls. The grid costs the same however many torches
+## are lit, so there is no light COUNT worth showing — what moves is the region
+## (which scales with zoom) and the per-phase solve, and the fallback ladder in
+## terrain.md is written in exactly these terms. Draw calls are here because
+## they are the number a rendering regression moves.
+static func light_text(light_map: Node2D) -> String:
+	var draw_calls := int(
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+	)
+	if light_map == null:
+		return "light off | draw calls %d" % draw_calls
+	if not light_map.visible:
+		return "light FULL BRIGHT | draw calls %d" % draw_calls
+	var grid: LightGrid = light_map.grid
+	return (
+		"light %dx%d = %d cells | draw calls %d"
+		% [grid.cols, grid.rows, grid.cols * grid.rows, draw_calls]
 	)
 
 

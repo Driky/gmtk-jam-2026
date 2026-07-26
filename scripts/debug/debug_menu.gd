@@ -33,6 +33,9 @@ const LOOT_STACK := 50
 ## to reach by hand ([progression.md](../../docs/systems/progression.md)).
 const XP_GRANT := 100.0
 
+## Enough of whatever you picked to actually try something with it.
+const GIVE_DEFAULT_COUNT := 20
+
 ## Injected by tests; fall back to the autoloads.
 var game: Node = null
 var waves: Node = null
@@ -41,8 +44,12 @@ var progression: Node = null
 ## Set by main.gd before add_child — the overlays this panel drives.
 var flow_overlay: Node2D = null
 var perf_overlay: CanvasLayer = null
+## The light grid's render pass. Hiding it IS full bright (terrain.md §Lighting).
+var light_map: Node2D = null
 
 var _rows: VBoxContainer = null
+var _give_id: OptionButton = null
+var _give_count: SpinBox = null
 
 
 func _ready() -> void:
@@ -107,6 +114,47 @@ func kill_player() -> void:
 	player.take_damage(INF)
 
 
+## Every item worth handing out by name: authored items first, then ordinary
+## materials. Deposits are terrain features rather than items and bedrock never
+## drops, so neither can end up in the inventory as an unplaceable id — the same
+## rule give_test_loot uses.
+static func giveable_ids() -> PackedStringArray:
+	var ids := PackedStringArray()
+	for id: String in ItemDefs.STATS:
+		ids.append(id)
+	for id: String in Materials.ORDER:
+		var mat: Dictionary = Materials.MATERIALS[id]
+		if mat.is_deposit or mat.min_tool_tier >= 99:
+			continue
+		if not ids.has(id):
+			ids.append(id)
+	return ids
+
+
+## Hand over an arbitrary stack. Kept ALONGSIDE give_test_loot rather than
+## replacing it: that row is a one-click fixture that deliberately overflows the
+## hotbar for the loot-bag flow, and reproducing it through this dropdown is 16
+## interactions. Two rows, two purposes (ui.md).
+func give_item(id: String, count: int) -> void:
+	if id == "" or count <= 0:
+		return
+	items.player_inventory.add_item(id, count)
+
+
+## Answers "is this dark because of the depth, or because my light is broken",
+## and is how the itch screenshots get taken. Tolerates a missing light map so
+## every row stays clickable in a stripped build or a test harness.
+func _toggle_full_bright(pressed: bool) -> void:
+	if light_map != null:
+		light_map.visible = not pressed
+
+
+func _give_pressed() -> void:
+	if _give_id == null or _give_id.selected < 0:
+		return
+	give_item(_give_id.get_item_text(_give_id.selected), int(_give_count.value))
+
+
 func _toggle_flow_overlay(pressed: bool) -> void:
 	if flow_overlay != null:
 		flow_overlay.visible = pressed
@@ -139,13 +187,40 @@ func _build() -> void:
 	_title("Debug — F3")
 	_check("Flow field overlay", _toggle_flow_overlay)
 	_check("Perf readout", _toggle_perf_overlay)
+	_check("Full bright", _toggle_full_bright)
 	_button("Skip countdown", func() -> void: game.skip_countdown())
 	_button("Clear wave", func() -> void: waves.debug_clear_wave())
 	_button("Poke nearest mob", func() -> void: waves.debug_poke_nearest())
 	_button("Give test loot", give_test_loot)
+	_give_row()
 	_button("Grant %d XP" % roundi(XP_GRANT), grant_xp)
 	_button("Kill player", kill_player)
 	_title("F4 — spawn mob at cursor")
+
+
+## Item dropdown + quantity + Give, on one line.
+func _give_row() -> void:
+	var row := HBoxContainer.new()
+	_rows.add_child(row)
+
+	_give_id = OptionButton.new()
+	_give_id.fit_to_longest_item = false
+	_give_id.custom_minimum_size = Vector2(96.0, 0.0)
+	for id in giveable_ids():
+		_give_id.add_item(id)
+	row.add_child(_give_id)
+
+	_give_count = SpinBox.new()
+	_give_count.min_value = 1
+	_give_count.max_value = 999
+	_give_count.value = GIVE_DEFAULT_COUNT
+	_give_count.custom_minimum_size = Vector2(56.0, 0.0)
+	row.add_child(_give_count)
+
+	var button := Button.new()
+	button.text = "Give"
+	button.pressed.connect(_give_pressed)
+	row.add_child(button)
 
 
 func _title(text: String) -> void:

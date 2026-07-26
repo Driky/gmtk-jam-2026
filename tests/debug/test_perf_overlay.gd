@@ -196,3 +196,35 @@ func test_reset_baselines_the_in_call_total_too() -> void:
 	_overlay._process(0.016)
 	assert_int(_overlay._write_usec).is_equal(400)
 	assert_int(_overlay._writes).is_equal(5)
+
+# --- Light readout (2.7) -----------------------------------------------------
+
+
+## Just the surface the readout reads: a Node2D carrying a LightGrid.
+class LightMapDouble:
+	extends Node2D
+
+	var grid := LightGrid.new()
+
+
+## No light COUNT is reported on purpose: the grid costs the same whether one
+## torch is lit or a hundred. What moves is the region, and the fallback ladder
+## in terrain.md is written in those terms.
+func test_light_text_reports_the_grid_region() -> void:
+	var light_map: LightMapDouble = auto_free(LightMapDouble.new())
+	light_map.grid.resize(112, 77)
+	var text := PerfOverlayScript.light_text(light_map)
+	assert_str(text).contains("112x77")
+	assert_str(text).contains("8624 cells")
+
+
+func test_light_text_calls_out_full_bright() -> void:
+	var light_map: LightMapDouble = auto_free(LightMapDouble.new())
+	light_map.visible = false
+	assert_str(PerfOverlayScript.light_text(light_map)).contains("FULL BRIGHT")
+
+
+## The overlay must survive a build with no light map rather than taking the
+## whole readout down with it.
+func test_light_text_tolerates_a_missing_light_map() -> void:
+	assert_str(PerfOverlayScript.light_text(null)).contains("light off")

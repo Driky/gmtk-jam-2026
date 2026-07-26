@@ -160,3 +160,65 @@ func test_kill_player_without_a_player_is_inert() -> void:
 	var menu := _make_menu()
 	menu.kill_player() # No player in this tree.
 	assert_bool(DebugMenu.is_open).is_false()
+
+# --- Give item / full bright (2.7) -------------------------------------------
+
+
+## Authored items and ordinary blocks both have to be reachable — the row exists
+## so any id can be conjured by name, not just the ones with tile art.
+func test_giveable_ids_cover_authored_items_and_materials() -> void:
+	var ids := DebugMenuScript.giveable_ids()
+	assert_bool(ids.has("pickaxe_t1")).is_true()
+	assert_bool(ids.has("torch")).is_true()
+	assert_bool(ids.has("dirt")).is_true()
+
+
+## Same rule as give_test_loot: deposits are terrain features rather than items
+## and bedrock never drops, so neither may reach the inventory.
+func test_giveable_ids_exclude_deposits_and_bedrock() -> void:
+	var ids := DebugMenuScript.giveable_ids()
+	assert_bool(ids.has("coal_deposit")).is_false()
+	assert_bool(ids.has("bedrock")).is_false()
+
+
+func test_giveable_ids_have_no_duplicates() -> void:
+	var ids := DebugMenuScript.giveable_ids()
+	var seen: Dictionary = { }
+	for id in ids:
+		assert_bool(seen.has(id)).is_false()
+		seen[id] = true
+
+
+func test_give_item_adds_the_requested_count() -> void:
+	var menu := _make_menu()
+	menu.give_item("torch", 7)
+	assert_int(Items.player_inventory.count_of("torch")).is_equal(7)
+
+
+## A SpinBox cannot go below 1, but the method is public and 3.1 will call it —
+## a zero or negative count must be a no-op rather than an inventory corruption.
+func test_give_item_ignores_a_non_positive_count() -> void:
+	var menu := _make_menu()
+	menu.give_item("torch", 0)
+	menu.give_item("torch", -5)
+	menu.give_item("", 10)
+	assert_int(Items.player_inventory.count_of("torch")).is_equal(0)
+
+
+## Hiding the light map IS full bright — no multiply pass means an unlit world.
+func test_full_bright_hides_the_light_map() -> void:
+	var menu := _make_menu()
+	var light_map: Node2D = auto_free(Node2D.new())
+	menu.light_map = light_map
+	menu._toggle_full_bright(true)
+	assert_bool(light_map.visible).is_false()
+	menu._toggle_full_bright(false)
+	assert_bool(light_map.visible).is_true()
+
+
+## Every row stays clickable in a stripped build or a test harness.
+func test_full_bright_tolerates_a_missing_light_map() -> void:
+	var menu := _make_menu()
+	menu.light_map = null
+	menu._toggle_full_bright(true)
+	assert_bool(menu.visible).is_false() # Reached here without erroring.
