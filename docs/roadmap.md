@@ -102,10 +102,12 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Fold the 2.7 torch into the base, generalizing `as Torch` to `as Deployable` in the un-deploy path and the cursor highlight ([terrain.md](systems/terrain.md) §Lighting placed it as a one-cell special case). Support rules land here too: mining the tile a torch is mounted on now drops it as a pickup.
 
 ### 3.2 Automation tick ([automation.md](systems/automation.md)) 🔴
-- [ ] 10 Hz deterministic tick; fixed order `machines → inserters → conveyors`.
-- [ ] Conveyors: 1-slot stacks, mark-then-commit advance, pooled sprite + count rendering interpolated between slots — items visibly flowing 🔴.
-- [ ] Inserters: behind→front single-item swing (stacking inserter is data, Day 4, ✂️6).
-- [ ] Debug slot overlay hotkey (top-listed risk in [plan.md](plan.md)).
+- [x] 10 Hz deterministic tick; fixed order `machines → inserters → conveyors`. Row-major-by-cell iteration and a catch-up clamp landed with it, and the transfer seam (`accept_item`/`extract_item`) is the interface 3.3–3.5 consume.
+- [x] Facing: `directional` + runtime `facing`, `rotate_placement` on **R**, ghost arrow — nothing had a direction before this.
+- [x] Conveyors: 1-slot stacks, mark-then-commit advance, **one immediate-mode `_draw` layer** interpolated between slots — items visibly flowing 🔴. (Was "pooled sprite + count"; superseded — a pool has a capacity to get wrong, [automation.md](systems/automation.md).)
+- [x] Inserters: behind→front single-item swing, give-back on refusal (stacking inserter is data, Day 4, ✂️6).
+- [x] RMB hand-feed, one item per click — the only way into the factory before 3.3's miner. The container panel with drag-and-drop stays 3.6.
+- [x] Debug slot overlay as an **F3 row** (top-listed risk in [plan.md](plan.md)). Was written here as a "hotkey"; reconciled — [ui.md](systems/ui.md) locks that debug overlays own no keybindings.
 
 ### 3.3 Production chain
 - [ ] Miner on deposits (extracts `reserve` → output slot) → conveyor t1 → inserter → furnace (recipe craft when inputs present + powered).

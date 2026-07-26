@@ -43,6 +43,7 @@ var items: Node = null
 var progression: Node = null
 ## Set by main.gd before add_child — the overlays this panel drives.
 var flow_overlay: Node2D = null
+var slot_overlay: Node2D = null
 var perf_overlay: CanvasLayer = null
 ## The light grid's render pass. Hiding it IS full bright (terrain.md §Lighting).
 var light_map: Node2D = null
@@ -160,6 +161,15 @@ func _toggle_flow_overlay(pressed: bool) -> void:
 		flow_overlay.visible = pressed
 
 
+## Automation slot occupancy, counts, facings and cooldowns — the visible half of
+## the tick-bug mitigation ([plan.md](../../docs/plan.md) names tick bugs the
+## top-listed risk). A row rather than a hotkey, per this doc's own rule that
+## debug overlays own no keybindings.
+func _toggle_slot_overlay(pressed: bool) -> void:
+	if slot_overlay != null:
+		slot_overlay.visible = pressed
+
+
 func _toggle_perf_overlay(pressed: bool) -> void:
 	if perf_overlay == null:
 		return
@@ -186,6 +196,7 @@ func _build() -> void:
 
 	_title("Debug — F3")
 	_check("Flow field overlay", _toggle_flow_overlay)
+	_check("Automation slots", _toggle_slot_overlay)
 	_check("Perf readout", _toggle_perf_overlay)
 	_check("Full bright", _toggle_full_bright)
 	_button("Skip countdown", func() -> void: game.skip_countdown())

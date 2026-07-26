@@ -50,6 +50,7 @@ func _make_menu() -> DebugMenu:
 	menu.items = Items
 	menu.progression = auto_free(ProgressionScript.new())
 	menu.flow_overlay = auto_free(Node2D.new())
+	menu.slot_overlay = auto_free(Node2D.new())
 	menu.perf_overlay = auto_free(OverlayDouble.new())
 	add_child(menu)
 	return menu
@@ -136,13 +137,25 @@ func test_flow_overlay_toggle_drives_visibility() -> void:
 	assert_bool(menu.flow_overlay.visible).is_false()
 
 
+## The automation slot overlay is a ROW, not a hotkey — debug overlays own no
+## keybindings of their own (ui.md), despite how the 3.2 roadmap line read.
+func test_slot_overlay_toggle_drives_visibility() -> void:
+	var menu := _make_menu()
+	menu._toggle_slot_overlay(true)
+	assert_bool(menu.slot_overlay.visible).is_true()
+	menu._toggle_slot_overlay(false)
+	assert_bool(menu.slot_overlay.visible).is_false()
+
+
 ## Missing overlays (a stripped build, or a test harness) must not crash the
 ## panel — every row stays clickable.
 func test_toggles_tolerate_missing_overlays() -> void:
 	var menu := _make_menu()
 	menu.flow_overlay = null
+	menu.slot_overlay = null
 	menu.perf_overlay = null
 	menu._toggle_flow_overlay(true)
+	menu._toggle_slot_overlay(true)
 	menu._toggle_perf_overlay(true)
 	assert_bool(menu.visible).is_false() # Reached here without erroring.
 

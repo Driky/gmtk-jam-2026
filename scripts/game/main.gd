@@ -7,6 +7,7 @@ const PlayerScene := preload("res://scenes/player.tscn")
 const CoreScene := preload("res://scenes/core.tscn")
 const FlowFieldOverlay := preload("res://scripts/waves/flow_field_overlay.gd")
 const ConveyorItemLayer := preload("res://scripts/automation/conveyor_item_layer.gd")
+const SlotOverlay := preload("res://scripts/automation/slot_overlay.gd")
 const PerfOverlay := preload("res://scripts/debug/perf_overlay.gd")
 const DebugMenuScript := preload("res://scripts/debug/debug_menu.gd")
 ## The Core owns the exact center column (flow-field origin, 2.2); the
@@ -61,10 +62,13 @@ func _finish_generation() -> void:
 	# Debug overlays own no keybindings — the F3 menu drives their visibility.
 	var flow_overlay := FlowFieldOverlay.new()
 	add_child(flow_overlay)
+	var slot_overlay := SlotOverlay.new()
+	add_child(slot_overlay)
 	var perf_overlay := PerfOverlay.new()
 	add_child(perf_overlay)
 	var debug_menu: CanvasLayer = DebugMenuScript.new()
 	debug_menu.flow_overlay = flow_overlay
+	debug_menu.slot_overlay = slot_overlay
 	debug_menu.perf_overlay = perf_overlay
 	debug_menu.light_map = %LightMap
 	perf_overlay.light_map = %LightMap
