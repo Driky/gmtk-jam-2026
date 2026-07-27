@@ -111,3 +111,22 @@ func test_take_range_returns_detached_copies() -> void:
 func test_take_range_clamps_out_of_bounds() -> void:
 	_inv.add_item("dirt", 4)
 	assert_int(_inv.take_range(-10, Inventory.SLOT_COUNT + 10).size()).is_equal(1)
+
+# --- A non-default size (3.5c's chest) ----------------------------------------
+
+
+## ❗️Every loop must walk the INSTANCE's size, not `SLOT_COUNT`. A missed site
+## has no error to show for it: `add_item` would silently write past slot 2 into
+## a resized array, or `take_range` would clamp a 2-slot store to 40 and read
+## out of bounds.
+func test_a_smaller_inventory_fills_spills_and_empties_at_its_own_size() -> void:
+	var small := Inventory.new(2)
+	assert_int(small.slot_count()).is_equal(2)
+
+	assert_int(small.add_item("dirt", Inventory.STACK_SIZE * 2)).is_equal(0)
+	assert_int(small.add_item("stone", 7)).is_equal(7) # No slot 3 to spill into.
+	assert_int(small.count_of("dirt")).is_equal(Inventory.STACK_SIZE * 2)
+
+	var taken := small.take_range(0, small.slot_count())
+	assert_int(taken.size()).is_equal(2)
+	assert_int(small.count_of("dirt")).is_equal(0)
