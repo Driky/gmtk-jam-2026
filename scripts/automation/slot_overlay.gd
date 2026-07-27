@@ -134,6 +134,14 @@ func _draw() -> void:
 			lines.append(_stack_text("in", station.input_slot()))
 			lines.append(_stack_text("out", station.output_slot()))
 			lines.append("craft %d" % station.progress())
+		var turret := node as Turret
+		if turret != null:
+			lines.append(_stack_text("ammo", turret.ammo_slot()))
+			lines.append("cd %d" % turret.cooldown())
+			# "no target" is a distinct state from out of ammo: a turret that is
+			# loaded, powered and silent is either out of range or the query is
+			# broken, and those look identical from outside.
+			lines.append("tgt %s" % ("—" if turret.target() == null else "yes"))
 		for i in lines.size():
 			_label(
 				font,

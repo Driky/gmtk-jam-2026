@@ -140,13 +140,9 @@ func debug_poke_nearest() -> void:
 	var player: Node2D = get_tree().get_first_node_in_group(&"player")
 	if player == null:
 		return
-	var nearest: Node2D = null
-	var best := INF
-	for enemy: Node2D in enemies():
-		var dist := enemy.global_position.distance_to(player.global_position)
-		if dist < best:
-			best = dist
-			nearest = enemy
+	# The turret's selector, unbounded: "nearest mob" is the same question, and a
+	# second copy of it here could drift from the one that actually shoots.
+	var nearest := Turret.pick_target(enemies(), player.global_position, INF)
 	if nearest != null:
 		nearest.take_damage(5.0, player)
 

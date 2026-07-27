@@ -65,6 +65,11 @@ const AMMO_PRESS: ItemStats = preload("res://data/items/ammo_press.tres")
 const COPPER_AMMO: ItemStats = preload("res://data/items/copper_ammo.tres")
 const IRON_AMMO: ItemStats = preload("res://data/items/iron_ammo.tres")
 
+## The first thing the player builds that fights, and the first deployable whose
+## support is NOT all four: a standard turret wants a horizontal base under it
+## ([automation.md](../docs/systems/automation.md) §Deployable base).
+const TURRET: ItemStats = preload("res://data/items/turret.tres")
+
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
@@ -80,6 +85,7 @@ const STATS: Dictionary = {
 	"ammo_press": AMMO_PRESS,
 	"copper_ammo": COPPER_AMMO,
 	"iron_ammo": IRON_AMMO,
+	"turret": TURRET,
 }
 
 
