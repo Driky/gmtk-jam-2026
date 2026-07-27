@@ -91,6 +91,8 @@ func on_tick(_terrain: Node) -> void:
 	var caught := victims(_waves().enemies(), trigger_area())
 	if caught.is_empty():
 		return
+	# freed-safe: `caught` was built and validity-filtered by `victims()` two lines up,
+	# in this same call — it cannot outlive a frame boundary.
 	for victim: Node2D in caught:
 		# Attributed to the trap, so it draws threat and mobs stop to chew it —
 		# the torch precedent, and why a trap has HP worth authoring

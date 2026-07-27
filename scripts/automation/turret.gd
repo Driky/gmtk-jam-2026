@@ -119,8 +119,10 @@ func is_idle() -> bool:
 ## `ThreatTable` is a *mob's* private list of who to attack, not a targetability
 ## score, and a turret has no threat toward a mob it has not shot yet.
 ##
-## Candidates are filtered for validity because a freed mob can linger in the
-## `enemies` group for a frame ([waves.gd] `enemies`).
+## Candidates are filtered for validity because this is a **public static taking
+## an arbitrary array** — `Waves.enemies()` is built fresh and cannot contain a
+## corpse, but a caller passing a *cached* list (the shape of `Waves._alive`) can,
+## and this function has no way to tell the two apart.
 ##
 ## ❗️**The loop variable is UNTYPED, and that is not laziness.** A typed
 ## `for candidate: Node in candidates` fails on the *assignment* — "Trying to

@@ -183,8 +183,14 @@ func test_pick_target_ignores_anything_past_the_range() -> void:
 	assert_object(Turret.pick_target([], Vector2.ZERO, 100.0)).is_null()
 
 
-## ⚠️ A freed mob lingers in the `enemies` group for a frame, so the selector has
-## to filter rather than trusting the list it was handed.
+## ⚠️ The selector must not trust the array it is handed. A fresh group scan can
+## never contain a corpse, but a caller's *cached* list can — and this is a public
+## static that cannot tell which it got.
+##
+## ❗️This test is why `pick_target`'s loop variable is untyped: with
+## `for candidate: Node in candidates` the typed ASSIGNMENT raises before the
+## body's `is_instance_valid` runs, so the guard protects nothing. It shipped that
+## way and this case caught it.
 func test_pick_target_skips_freed_instances() -> void:
 	var doomed := MobDouble.new()
 	doomed.position = Vector2(10.0, 0.0)

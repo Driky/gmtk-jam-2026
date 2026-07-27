@@ -151,11 +151,13 @@ class Walk:
 ##  1. **mark** — walk the list and memoize who may move (`_can_move`).
 ##  2. **commit** — capture, clear, then write, in three separate sweeps.
 static func advance_all(terrain: Node, conveyors: Array[Deployable]) -> void:
+	# freed-safe: `conveyors` is `Automation._conveyors`, pruned eagerly on removal.
 	for node: Deployable in conveyors:
 		var c := node as Conveyor
 		c._cooldown = maxi(c._cooldown - 1, 0)
 		c._prev_cell = c._cell
 	var walk := Walk.new()
+	# freed-safe: same registry, same eager prune.
 	for node: Deployable in conveyors:
 		_can_move(terrain, node as Conveyor, walk)
 	_commit(walk.moves)

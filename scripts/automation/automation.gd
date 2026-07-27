@@ -123,8 +123,14 @@ func step_tick() -> void:
 	tick_count += 1
 	_ensure_order()
 	_refresh_power()
+	# freed-safe: the tick registries are pruned EAGERLY — `pop_to_pickup` calls
+	# `on_removed()` -> `unregister_*` before `queue_free()`, so a corpse never survives
+	# a frame in one. `test_*` asserts it: "Must not touch the freed node".
 	for machine: Deployable in _machines:
 		machine.on_tick(terrain)
+	# freed-safe: the tick registries are pruned EAGERLY — `pop_to_pickup` calls
+	# `on_removed()` -> `unregister_*` before `queue_free()`, so a corpse never survives
+	# a frame in one. `test_*` asserts it: "Must not touch the freed node".
 	for inserter: Deployable in _inserters:
 		inserter.on_tick(terrain)
 	_advance_conveyors()
@@ -215,6 +221,9 @@ func idle_machines() -> int:
 ## idle factory. Early-outs on the first occupied slot, so the full scan only
 ## happens in the case whose answer is "nothing to draw".
 func has_items_in_transit() -> bool:
+	# freed-safe: the tick registries are pruned EAGERLY — `pop_to_pickup` calls
+	# `on_removed()` -> `unregister_*` before `queue_free()`, so a corpse never survives
+	# a frame in one. `test_*` asserts it: "Must not touch the freed node".
 	for node: Deployable in _conveyors:
 		if not (node as Conveyor).slot_empty():
 			return true
@@ -329,6 +338,9 @@ func _refresh_power() -> void:
 		_rebuild_power_grid()
 	# Before supply is read, so a generator running dry stops powering on this
 	# tick rather than one tick late.
+	# freed-safe: the tick registries are pruned EAGERLY — `pop_to_pickup` calls
+	# `on_removed()` -> `unregister_*` before `queue_free()`, so a corpse never survives
+	# a frame in one. `test_*` asserts it: "Must not touch the freed node".
 	for emitter: PowerEmitter in _emitters:
 		emitter.burn_tick()
 	_grid.begin_tick()
@@ -400,9 +412,15 @@ func _grid_of_machine(machine: Deployable) -> int:
 ## times a second.
 func _refresh_idle_count() -> void:
 	var idle := 0
+	# freed-safe: the tick registries are pruned EAGERLY — `pop_to_pickup` calls
+	# `on_removed()` -> `unregister_*` before `queue_free()`, so a corpse never survives
+	# a frame in one. `test_*` asserts it: "Must not touch the freed node".
 	for machine: Deployable in _machines:
 		if machine.is_idle():
 			idle += 1
+	# freed-safe: the tick registries are pruned EAGERLY — `pop_to_pickup` calls
+	# `on_removed()` -> `unregister_*` before `queue_free()`, so a corpse never survives
+	# a frame in one. `test_*` asserts it: "Must not touch the freed node".
 	for emitter: PowerEmitter in _emitters:
 		if emitter.is_idle():
 			idle += 1

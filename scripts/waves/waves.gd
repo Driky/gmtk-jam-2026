@@ -156,8 +156,12 @@ func debug_poke_nearest() -> void:
 ## rather than a census ([tech-design.md](../../docs/tech-design.md) assigns
 ## aggro helpers here).
 ##
-## ⚠️ Freed instances can linger in a group for a frame, so every consumer
-## filters with `is_instance_valid` — see `Turret.pick_target`.
+## ⚠️ This list is safe to iterate typed: Godot drops a node from its groups when
+## it actually deletes it, and a `queue_free()`d node stays valid until then — so
+## a group scan can never hand back a corpse. A **cached** array held across a
+## frame boundary can, which is why `Turret.pick_target` still filters: it is a
+## public static that takes whatever array a caller hands it
+## (`tools/check_freed_safety.sh`).
 func enemies() -> Array[Node]:
 	return get_tree().get_nodes_in_group(&"enemies")
 

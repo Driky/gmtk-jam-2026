@@ -128,8 +128,8 @@ func test_victims_catches_only_what_is_inside_the_area() -> void:
 	assert_object(caught[0]).is_same(inside)
 
 
-## ⚠️ Same freed-instance trap as `Turret.pick_target`: a dead mob lingers in the
-## `enemies` group for a frame.
+## ⚠️ Same freed-instance trap as `Turret.pick_target`, and for the same reason:
+## a public static cannot tell a fresh list from a caller's cached one.
 func test_victims_skips_freed_instances() -> void:
 	var doomed := MobDouble.new()
 	var alive: MobDouble = auto_free(MobDouble.new())
@@ -196,6 +196,7 @@ func test_one_bite_hits_everything_standing_on_it() -> void:
 
 	_automation.step_tick()
 
+	# freed-safe: `mobs` is built by this test and nothing frees a mob in it.
 	for mob: MobDouble in mobs:
 		assert_array(mob.hits).contains_exactly([node.damage])
 
