@@ -188,26 +188,6 @@ func test_the_full_authored_set_totals_sixteen() -> void:
 	_eq.equip(Equipment.Slot.NECKLACE, "copper_amulet")
 	assert_float(_eq.armor_total()).is_equal_approx(16.0, 0.001)
 
-# --- slot_for -----------------------------------------------------------------
-
-
-func test_slot_for_names_the_one_slot_a_piece_belongs_in() -> void:
-	for id: String in AUTHORED:
-		assert_int(_eq.slot_for(id)).is_equal(AUTHORED[id])
-
-
-func test_slot_for_is_minus_one_for_anything_unwearable() -> void:
-	assert_int(_eq.slot_for("")).is_equal(-1)
-	assert_int(_eq.slot_for("dirt")).is_equal(-1)
-	assert_int(_eq.slot_for("miner")).is_equal(-1)
-
-
-## A second ring must not evict the first — the auto-target is the free slot.
-func test_slot_for_a_ring_prefers_the_free_ring_slot() -> void:
-	assert_int(_eq.slot_for("copper_ring")).is_equal(Equipment.Slot.RING_1)
-	_eq.equip(Equipment.Slot.RING_1, "copper_ring")
-	assert_int(_eq.slot_for("copper_ring")).is_equal(Equipment.Slot.RING_2)
-
 # --- Items.reset_run ----------------------------------------------------------
 
 

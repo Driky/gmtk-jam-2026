@@ -295,6 +295,7 @@ func _build_slots() -> void:
 	for slot in equipment.slot_count():
 		var widget := _make_slot(_equipment_grid, slot)
 		widget.tooltip_text = equipment_slot_name(slot)
+		widget.slot_pressed.connect(_on_equipment_slot_pressed)
 		_equipment_slots.append(widget)
 
 	for i in MAX_CONTAINER_SLOTS:
@@ -471,6 +472,47 @@ func _quick_move_from_inventory(index: int) -> void:
 	var moved := count - inventory.add_item_in_range(id, count, from, to)
 	if moved > 0:
 		inventory.remove_from_slot(index, moved)
+
+# --- The equipment panel ------------------------------------------------------
+
+
+func _on_equipment_slot_pressed(slot: int, _button_index: int, shift: bool) -> void:
+	# Neither button does anything different here: an equipment slot holds one
+	# item, so there is no half to split and no single item to place.
+	if shift and _held.is_empty():
+		_unequip_to_inventory(slot)
+		return
+	if _held.is_empty():
+		var worn := equipment.unequip(slot)
+		if worn != "":
+			_set_held({ id = worn, count = 1 })
+		return
+	# ❗️**Refused, and the cursor keeps its stack** — the `accept_item` bargain.
+	# Nothing is consumed on a rejected click, which is what makes dropping a
+	# pickaxe on the helmet slot a no-op rather than a lost pickaxe.
+	if not Equipment.slot_accepts(slot, _held.id):
+		return
+	var displaced := equipment.equip(slot, _held.id)
+	# ❗️Exactly ONE leaves the cursor however big the stack is: five helmets equip
+	# one and hand four back.
+	var left: int = _held.count - 1
+	_set_held({ } if left <= 0 else { id = _held.id, count = left })
+	# The piece that came off goes to the bag rather than onto a cursor that is
+	# already holding something else, with the leftover to the floor — the same
+	# conservation the inventory side keeps.
+	if displaced != "":
+		_drop_to_world(displaced, inventory.add_item(displaced, 1))
+
+
+## ❗️Offer first, consume second again: with no room in the bag the piece stays
+## WORN rather than being taken off and dropped at your feet mid-wave.
+func _unequip_to_inventory(slot: int) -> void:
+	var worn := equipment.get_item(slot)
+	if worn == "":
+		return
+	if inventory.add_item(worn, 1) > 0:
+		return
+	equipment.unequip(slot)
 
 # --- Repaint ------------------------------------------------------------------
 

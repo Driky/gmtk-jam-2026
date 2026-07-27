@@ -529,3 +529,139 @@ func test_the_ghost_flips_above_the_pointer_near_the_bottom_edge() -> void:
 	var height: float = get_viewport().get_visible_rect().size.y
 	_screen._move_ghost(Vector2(300.0, height - 2.0))
 	assert_float(_screen._ghost.position.y).is_less(height - 2.0)
+
+# --- The equipment panel (3.6a) ----------------------------------------------
+
+
+func _gear(slot: int) -> ItemSlot:
+	return _screen._equipment_slots[slot]
+
+
+## Total across the bag, the cursor AND what is worn — the panel is not an exit.
+func _total_with_gear() -> int:
+	var total := _total()
+	for slot in _eq.slot_count():
+		if _eq.get_item(slot) != "":
+			total += 1
+	return total
+
+
+func test_dropping_a_piece_on_its_slot_wears_it() -> void:
+	_inv.put_in_slot(0, { id = "copper_helmet", count = 1 })
+	_click_slot(_bag(0))
+	_click_slot(_gear(Equipment.Slot.HELMET))
+	assert_str(_eq.get_item(Equipment.Slot.HELMET)).is_equal("copper_helmet")
+	assert_bool(_screen.held().is_empty()).is_true()
+	assert_float(_eq.armor_total()).is_equal_approx(3.0, 0.001)
+	assert_int(_total_with_gear()).is_equal(1)
+
+
+## ❗️**Refused, and the cursor keeps its stack** — nothing is consumed on a
+## rejected click. Dropping a pickaxe on the helmet slot must not eat the pickaxe.
+func test_a_wrong_type_drop_is_refused_and_the_cursor_keeps_its_stack() -> void:
+	_inv.put_in_slot(0, { id = "pickaxe_t1", count = 1 })
+	_click_slot(_bag(0))
+	_click_slot(_gear(Equipment.Slot.HELMET))
+	assert_str(_screen.held().id).is_equal("pickaxe_t1")
+	assert_int(_screen.held().count).is_equal(1)
+	assert_str(_eq.get_item(Equipment.Slot.HELMET)).is_equal("")
+
+
+## The right piece in the wrong slot is refused just as firmly.
+func test_boots_are_refused_by_the_helmet_slot() -> void:
+	_inv.put_in_slot(0, { id = "copper_boots", count = 1 })
+	_click_slot(_bag(0))
+	_click_slot(_gear(Equipment.Slot.HELMET))
+	assert_str(_screen.held().id).is_equal("copper_boots")
+	assert_str(_eq.get_item(Equipment.Slot.HELMET)).is_equal("")
+	_click_slot(_gear(Equipment.Slot.FEET))
+	assert_bool(_screen.held().is_empty()).is_true()
+	assert_str(_eq.get_item(Equipment.Slot.FEET)).is_equal("copper_boots")
+
+
+## ❗️Exactly one leaves the cursor however big the stack is.
+func test_a_stack_of_five_helmets_equips_one_and_hands_four_back() -> void:
+	_inv.put_in_slot(0, { id = "copper_helmet", count = 5 })
+	_click_slot(_bag(0))
+	_click_slot(_gear(Equipment.Slot.HELMET))
+	assert_int(_screen.held().count).is_equal(4)
+	assert_str(_eq.get_item(Equipment.Slot.HELMET)).is_equal("copper_helmet")
+	assert_int(_total_with_gear()).is_equal(5)
+
+
+## The displaced piece goes to the bag rather than onto a cursor already holding
+## something — and the total does not move either way.
+func test_the_displaced_piece_goes_back_into_the_bag() -> void:
+	_inv.put_in_slot(0, { id = "copper_helmet", count = 2 })
+	_click_slot(_bag(0))
+	_click_slot(_gear(Equipment.Slot.HELMET)) # Wear one, hold one.
+	_click_slot(_gear(Equipment.Slot.HELMET)) # Wear the other; the first comes off.
+	assert_bool(_screen.held().is_empty()).is_true()
+	assert_str(_eq.get_item(Equipment.Slot.HELMET)).is_equal("copper_helmet")
+	assert_int(_inv.count_of("copper_helmet")).is_equal(1)
+	assert_int(_total_with_gear()).is_equal(2)
+
+
+func test_clicking_a_worn_piece_takes_it_onto_the_cursor() -> void:
+	_eq.equip(Equipment.Slot.CHEST, "copper_chestplate")
+	_click_slot(_gear(Equipment.Slot.CHEST))
+	assert_str(_screen.held().id).is_equal("copper_chestplate")
+	assert_int(_screen.held().count).is_equal(1)
+	assert_str(_eq.get_item(Equipment.Slot.CHEST)).is_equal("")
+	assert_float(_eq.armor_total()).is_equal(0.0)
+
+
+func test_clicking_an_empty_equipment_slot_with_an_empty_cursor_does_nothing() -> void:
+	_click_slot(_gear(Equipment.Slot.BACK))
+	assert_bool(_screen.held().is_empty()).is_true()
+
+
+func test_shift_click_takes_a_worn_piece_straight_to_the_bag() -> void:
+	_eq.equip(Equipment.Slot.FEET, "copper_boots")
+	_click_slot(_gear(Equipment.Slot.FEET), MOUSE_BUTTON_LEFT, true)
+	assert_str(_eq.get_item(Equipment.Slot.FEET)).is_equal("")
+	assert_int(_inv.count_of("copper_boots")).is_equal(1)
+	assert_bool(_screen.held().is_empty()).is_true()
+
+
+## ❗️Offer first, consume second: with no room in the bag the piece stays WORN
+## rather than being taken off and dropped at your feet mid-wave.
+func test_shift_click_with_a_full_bag_leaves_the_piece_worn() -> void:
+	_eq.equip(Equipment.Slot.FEET, "copper_boots")
+	for i in _inv.slot_count():
+		_inv.put_in_slot(i, { id = "stone", count = Inventory.STACK_SIZE })
+	_click_slot(_gear(Equipment.Slot.FEET), MOUSE_BUTTON_LEFT, true)
+	assert_str(_eq.get_item(Equipment.Slot.FEET)).is_equal("copper_boots")
+
+
+## Both ring slots take the same authored id, independently.
+func test_a_ring_goes_in_either_ring_slot() -> void:
+	_inv.put_in_slot(0, { id = "copper_ring", count = 2 })
+	_click_slot(_bag(0))
+	_click_slot(_gear(Equipment.Slot.RING_2))
+	_click_slot(_gear(Equipment.Slot.RING_1))
+	assert_str(_eq.get_item(Equipment.Slot.RING_1)).is_equal("copper_ring")
+	assert_str(_eq.get_item(Equipment.Slot.RING_2)).is_equal("copper_ring")
+	assert_int(_total_with_gear()).is_equal(2)
+
+
+## The panel is not an exit for items either — a randomized sweep across the bag
+## AND the eight equipment slots, asserting only that nothing appears or vanishes.
+func test_a_randomized_sequence_over_both_panels_conserves_the_total() -> void:
+	_inv.add_item("copper_helmet", 3)
+	_inv.add_item("copper_ring", 4)
+	_inv.add_item("copper_boots", 2)
+	_inv.add_item("dirt", 120)
+	var expected := _total_with_gear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 987654321
+	for step in 400:
+		var button: int = MOUSE_BUTTON_RIGHT if rng.randf() < 0.3 else MOUSE_BUTTON_LEFT
+		var shift: bool = rng.randf() < 0.2
+		if rng.randf() < 0.4:
+			_click_slot(_gear(rng.randi_range(0, _eq.slot_count() - 1)), button, shift)
+		else:
+			_click_slot(_bag(rng.randi_range(0, Inventory.SLOT_COUNT - 1)), button, shift)
+		assert_int(_total_with_gear()).override_failure_message(
+			"step %d changed the total" % step,
+		).is_equal(expected)

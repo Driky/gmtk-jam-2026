@@ -109,15 +109,3 @@ static func slot_accepts(slot: int, id: String) -> bool:
 	if wanted == ItemStats.EquipSlot.RING:
 		return slot == Slot.RING_1 or slot == Slot.RING_2
 	return _FITS.get(wanted, -1) == slot
-
-
-## Which slot `id` would go in if dropped on the panel with no slot named — the
-## double-click / shift-click target. `-1` for anything unwearable, and RING
-## resolves to the first FREE ring slot so a second ring does not evict the first.
-func slot_for(id: String) -> int:
-	if id == "":
-		return -1
-	var wanted: int = ItemDefs.stats_for(id).equip_slot
-	if wanted == ItemStats.EquipSlot.RING:
-		return Slot.RING_1 if _worn[Slot.RING_1] == "" else Slot.RING_2
-	return _FITS.get(wanted, -1)
