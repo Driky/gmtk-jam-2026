@@ -13,6 +13,7 @@ const TerrainScript := preload("res://scripts/terrain/terrain.gd")
 const AutomationScript := preload("res://scripts/automation/automation.gd")
 const GameScript := preload("res://scripts/game/game.gd")
 const FurnaceScene := preload("res://scenes/automation/furnace.tscn")
+const AmmoPressScene := preload("res://scenes/automation/ammo_press.tscn")
 
 ## Playable (x in [50, 150)) and far from world edges.
 const ORIGIN := Vector2i(100, 100)
@@ -224,3 +225,72 @@ func test_a_placed_station_joins_the_tick_and_a_popped_one_leaves_it() -> void:
 	assert_int(_automation.machines().size()).is_equal(0)
 	_automation.step_tick() # Must not touch the freed node.
 	assert_int(_automation.tick_count).is_equal(1)
+
+# --- The ammo press (3.5a) ----------------------------------------------------
+#
+# The whole point of the `station_id` bargain: a SECOND machine on this same
+# script, proven by running it through the same fixture. If any of this needed a
+# change in `crafting_station.gd`, the bargain was not real.
+
+
+func _press(cell := ORIGIN) -> CraftingStation:
+	for x in 2:
+		_terrain.set_tile(cell + Vector2i(x, 2), "dirt")
+	var node: CraftingStation = auto_free(AmmoPressScene.instantiate())
+	node.automation = _automation
+	node.setup(cell)
+	add_child(node)
+	assert_bool(node.register(_terrain)).is_true()
+	node.on_placed()
+	return node
+
+
+## Same script, different string — no subclass, no branch.
+func test_the_press_is_the_same_script_with_another_station_id() -> void:
+	var node := _press()
+	assert_str(node.station_id).is_equal("ammo_press")
+	assert_str(node.get_script().resource_path).is_equal(
+		"res://scripts/automation/crafting_station.gd",
+	)
+
+
+## ❗️It eats BARS, not ore: `accepts_input` routes by id off the table alone, so
+## an inserter that mistakes the press for a furnace jams its own belt rather
+## than filling the press with copper it can never smelt.
+func test_the_press_takes_bars_and_refuses_ore() -> void:
+	var node := _press()
+	assert_int(node.accept_item("copper_bar", 1)).is_equal(1)
+	assert_int(node.accept_item("copper", 1)).is_equal(0)
+	assert_int(node.accept_item("dirt", 1)).is_equal(0)
+
+
+func test_the_press_turns_a_bar_into_a_stack_of_ammo() -> void:
+	var node := _press()
+	var recipe: Dictionary = RecipeDefs.for_station("ammo_press")[0]
+	node.accept_item(recipe.inputs.keys()[0], 1)
+
+	for i in recipe.ticks:
+		_automation.step_tick()
+
+	assert_str(node.output_slot().id).is_equal(recipe.output.id)
+	assert_int(node.output_slot().count).is_equal(recipe.output.count)
+	assert_bool(node.input_slot().is_empty()).is_true()
+
+
+## The chain the step exists to make: a furnace and a press on one grid, the
+## bar walking from one to the other by hand (the inserter has its own suite).
+func test_a_furnace_feeds_a_press_without_either_knowing_the_other() -> void:
+	var furnace := _furnace()
+	var press := _press(ORIGIN + Vector2i(6, 0))
+	furnace.accept_item("copper", 1)
+	for i in RecipeDefs.for_station("furnace")[0].ticks:
+		_automation.step_tick()
+
+	var bar := furnace.extract_item(1)
+	assert_str(bar.id).is_equal("copper_bar")
+	assert_int(press.accept_item(bar.id, bar.count)).is_equal(1)
+
+	for i in RecipeDefs.for_station("ammo_press")[0].ticks:
+		_automation.step_tick()
+
+	assert_str(press.output_slot().id).is_equal("copper_ammo")

@@ -52,6 +52,19 @@ const RELAY: ItemStats = preload("res://data/items/relay.tres")
 const COPPER_BAR: ItemStats = preload("res://data/items/copper_bar.tres")
 const IRON_BAR: ItemStats = preload("res://data/items/iron_bar.tres")
 
+## The second crafting station, and proof the `station_id` bargain holds: the
+## press is `crafting_station.gd` with a different string and two rows in
+## `data/recipe_defs.gd`. Pulled forward from 4.2 at 3.5a because a turret needs
+## something to eat ([automation.md](../docs/systems/automation.md) §Categories).
+const AMMO_PRESS: ItemStats = preload("res://data/items/ammo_press.tres")
+
+## Turret ammo. Crafted items like the bars, with one addition: a `projectile`,
+## which is what the TURRET fires — read off the ammo rather than authored on
+## the turret, so an ammo tier is a `.tres` pair and there is no second table.
+## `use_kind` stays SWING: ammo is not a weapon in the player's hand.
+const COPPER_AMMO: ItemStats = preload("res://data/items/copper_ammo.tres")
+const IRON_AMMO: ItemStats = preload("res://data/items/iron_ammo.tres")
+
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
@@ -64,6 +77,9 @@ const STATS: Dictionary = {
 	"relay": RELAY,
 	"copper_bar": COPPER_BAR,
 	"iron_bar": IRON_BAR,
+	"ammo_press": AMMO_PRESS,
+	"copper_ammo": COPPER_AMMO,
+	"iron_ammo": IRON_AMMO,
 }
 
 

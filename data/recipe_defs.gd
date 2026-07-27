@@ -19,9 +19,20 @@ class_name RecipeDefs
 ## costs nothing, and 4.2's assembler and ammo press need it.
 ##
 ## Numbers are Day-3 stubs; the balance pass is Day 4.
+##
+## ❗️The ammo press is the SAME `CraftingStation` script with a different
+## `station_id` — the bargain this table exists to make, and the reason a second
+## machine costs two rows here rather than a second class. It landed at 3.5a
+## rather than 4.2 because a turret needs something to eat.
+##
+## ⚠️ One ammo tier per ORE tier, but only copper and iron ship: they are the two
+## ores with a bar recipe today. `gold` and `magmatite` get theirs when their
+## bars land (4.2) — two more rows in this table, no new shape.
 const RECIPES: Array[Dictionary] = [
 	{ station = "furnace", inputs = { copper = 1 }, output = { id = "copper_bar", count = 1 }, ticks = 20 },
 	{ station = "furnace", inputs = { iron = 1 }, output = { id = "iron_bar", count = 1 }, ticks = 30 },
+	{ station = "ammo_press", inputs = { copper_bar = 1 }, output = { id = "copper_ammo", count = 4 }, ticks = 20 },
+	{ station = "ammo_press", inputs = { iron_bar = 1 }, output = { id = "iron_ammo", count = 4 }, ticks = 30 },
 ]
 
 

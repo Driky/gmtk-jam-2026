@@ -73,3 +73,24 @@ func test_accepts_input_is_true_only_for_a_real_input() -> void:
 	assert_bool(RecipeDefs.accepts_input("furnace", "copper_bar")).is_false()
 	# Nor may a station accept another station's inputs.
 	assert_bool(RecipeDefs.accepts_input("assembler", "copper")).is_false()
+
+
+## ❗️The two stations must not overlap: the press eats what the furnace makes,
+## and neither takes the other's input. Routing is by id alone, so a press that
+## also accepted ore would swallow it forever — `extract_item` never reaches the
+## input slot.
+func test_the_ammo_press_and_the_furnace_do_not_overlap() -> void:
+	assert_bool(RecipeDefs.accepts_input("ammo_press", "copper_bar")).is_true()
+	assert_bool(RecipeDefs.accepts_input("ammo_press", "iron_bar")).is_true()
+	assert_bool(RecipeDefs.accepts_input("ammo_press", "copper")).is_false()
+	assert_bool(RecipeDefs.accepts_input("furnace", "copper_bar")).is_false()
+
+
+## Every ammo tier must resolve a `projectile`, because that — not anything on
+## the turret — is what a turret fires. Ammo whose stats carry none is a turret
+## that eats the stack and shoots nothing, with no error anywhere.
+func test_every_ammo_output_carries_a_projectile() -> void:
+	for recipe: Dictionary in RecipeDefs.for_station("ammo_press"):
+		assert_object(ItemDefs.stats_for(recipe.output.id).projectile).override_failure_message(
+			"Ammo '%s' resolves no ProjectileStats" % recipe.output.id,
+		).is_not_null()

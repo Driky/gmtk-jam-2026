@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ProjectileStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/projectile_stats.gd" id="1_proj"]
+
+[resource]
+script = ExtResource("1_proj")
+display_name = "Iron Bolt"
+speed = 360.0
+damage = 9.0
+knockback = 55.0
+gravity = 0.0
+lifetime = 1.4
+pierce = 0
+radius = 3.0
+color = Color(0.72, 0.76, 0.82, 1)

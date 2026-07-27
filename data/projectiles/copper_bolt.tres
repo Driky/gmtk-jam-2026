@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ProjectileStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/projectile_stats.gd" id="1_proj"]
+
+[resource]
+script = ExtResource("1_proj")
+display_name = "Copper Bolt"
+speed = 300.0
+damage = 5.0
+knockback = 40.0
+gravity = 0.0
+lifetime = 1.2
+pierce = 0
+radius = 3.0
+color = Color(0.85, 0.52, 0.28, 1)
