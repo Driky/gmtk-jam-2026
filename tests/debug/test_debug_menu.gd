@@ -507,6 +507,54 @@ func test_the_defense_row_leaves_every_turret_powered_and_shooting() -> void:
 	).is_greater(0)
 
 
+## ❗️**The exit criterion, and the half the first fixture skipped entirely:** the
+## ammo the turrets fire has to ARRIVE from the press along a belt, not be handed
+## over at build time. The first version hand-loaded them and wired nothing past
+## the press, so `miner → furnace → press → belt → turret` was never demonstrated.
+##
+## Seeded rounds are burnt off first, so what is counted here can only have come
+## down the lane.
+func test_the_ammo_lane_feeds_the_turrets_from_the_press() -> void:
+	var terrain: Node = auto_free(TerrainScript.new())
+	add_child(terrain)
+	var game: Node = auto_free(GameScript.new())
+	game.state = GameScript.State.BUILD_PHASE
+	var automation: Node = auto_free(AutomationScript.new())
+	automation.terrain = terrain
+	automation.game = game
+	add_child(automation)
+	automation.set_process(false)
+
+	var menu := _make_menu()
+	menu.terrain = terrain
+	menu.automation = automation
+	var root: Node2D = auto_free(Node2D.new())
+	add_child(root)
+	menu.spawn_parent = root
+	var player: Node2D = auto_free(Node2D.new())
+	player.add_to_group(&"player")
+	player.global_position = Vector2(100, 100) * TileLayout.TILE_SIZE
+	add_child(player)
+
+	var built: Dictionary = menu.build_defense_chain()
+	# Empty every turret, so anything found later travelled the lane.
+	for turret: Deployable in built.turrets:
+		turret.take_cargo()
+
+	# Miner 10 + smelt 20 + press 20 plus a dozen inserter hops and a long belt.
+	for i in 900:
+		automation.drain_support_queue()
+		automation.step_tick()
+
+	var fed := 0
+	for turret: Deployable in built.turrets:
+		if not (turret as Turret).ammo_slot().is_empty():
+			fed += 1
+	assert_int(fed).override_failure_message(
+		"No ammo reached any turret — the press output is not wired to the line",
+	).is_greater(0)
+
+
 ## No player in the tree (a headless tool, or the beat after a death) must be a
 ## no-op rather than a crash on a null global_position.
 func test_the_factory_rig_is_inert_without_a_player() -> void:

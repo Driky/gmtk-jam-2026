@@ -121,28 +121,52 @@ const CHAIN_TURRETS := 6
 const CHAIN_GENERATORS := 4
 const CHAIN_AMMO := "copper_ammo"
 
-## Its own pocket, taller than the rig's, because this fixture stacks a generator
-## bank ABOVE the chain and both banks need something solid holding them up.
+## Built UPWARD from the ground the player is standing on, never down into a pit.
+##
+## ❗️**A fixture mobs cannot reach measures nothing.** The first version carved
+## downward from the player, so the turret line sat in a hole and the wave walked
+## straight over the roof of it. The walkway row here is the player's own ground
+## level, flattened, so anything pathing along the surface runs into the guns.
 ##
 ## ❗️**Air is not support.** A `Deployable` needs a solid TILE neighbour or the
-## post-place re-check pops it straight back out as a pickup
-## ([automation.md](../../docs/systems/automation.md) §Deployable base). The rig's
-## pocket is four rows of air with stone only on the floor, so a generator bank
-## placed on its upper rows silently dropped on the ground — which is exactly how
-## the first browser run ended up one generator short and browned out at 89%.
-## Every row this fixture builds on is backed by a solid row it lays itself.
+## post-place re-check pops it back out as a pickup
+## ([automation.md](../../docs/systems/automation.md) §Deployable base) — and a
+## deployable never holds up another deployable. Belts and inserters author
+## `support_dirs = 0` and so float freely; turrets, generators and the three
+## machines do not, and every one of them here stands on a solid row this fixture
+## lays itself.
 ##
-##     row 0-1  generator bank (2x2)
-##     row 2    SHELF — stone, holds the bank up
-##     row 3    clear air
-##     row 4-5  chain machines (2 rows tall) and the turret line on row 5
-##     row 6    FLOOR — stone
+## ❗️**The generator bank goes UNDER the assembly, not over it.** Buried, it is
+## protected from a wave that walks the surface, the turret line and the chain are
+## left open to the sky where mobs can actually reach them, and the discs sit ~2.5
+## rows from what they power instead of ~5.5 — which is the difference between
+## comfortable coverage and a fixture one lost generator away from a brownout.
+##
+##     g-3      ammo lane — belts, floating
+##     g-2      inserters over each turret, plus the chain's upper halves
+##     g-1      WALKWAY — turrets and the chain, open to the sky
+##     g        GROUND — stone; the walkway floor AND the chamber roof
+##     g+1,g+2  generator bank (2x2), buried
+##     g+3      chamber floor — stone
 const CHAIN_WIDTH := 34
-const CHAIN_HEIGHT := 6
-const CHAIN_SHELF_ROW := 2
-const CHAIN_GEN_ROW := 0
-const CHAIN_MACHINE_ROW := 4
-const CHAIN_FLOOR_ROW := 5 ## Last air row; the stone floor is CHAIN_HEIGHT.
+const CHAIN_GEN_ROW := 1 ## Rows BELOW ground: the bank's top row.
+const CHAIN_GEN_FLOOR := 3
+const CHAIN_LANE_ROW := 3
+const CHAIN_INSERTER_ROW := 2
+const CHAIN_WALKWAY_ROW := 1
+## Headroom carved above the walkway so nothing is buried and mobs have air.
+const CHAIN_CLEARANCE := 9
+## Turrets start a couple of cells in and sit every other cell, so each has its
+## own footprint, its own inserter overhead and its own pool reservation.
+const CHAIN_TURRET_X0 := 2
+const CHAIN_TURRET_STEP := 2
+## Spacing that keeps every generator's disc overlapping its neighbour (one grid,
+## no split components) while still reaching the miner at the far right.
+const CHAIN_GEN_X0 := 4
+const CHAIN_GEN_STEP := 7
+## A few rounds so the line is firing the moment it is built; the belt is what
+## keeps it firing, which is the half this fixture exists to show.
+const CHAIN_SEED_AMMO := 10
 
 ## Injected by tests; fall back to the autoloads.
 var game: Node = null
@@ -275,61 +299,86 @@ func build_defense_chain() -> Dictionary:
 	var player := get_tree().get_first_node_in_group(&"player") as Node2D
 	if player == null:
 		return { }
-	var at := Vector2i((player.global_position / TileLayout.TILE_SIZE).floor()) + RIG_OFFSET
-	_carve_defense_pocket(at)
+	var base := Vector2i((player.global_position / TileLayout.TILE_SIZE).floor())
+	var at := Vector2i(base.x + RIG_OFFSET.x, _ground_row_at(base))
+	_carve_defense_site(at)
 
-	# Right to left from the seam, the same layout test_production_chain.gd
-	# asserts produces loaded ammo.
-	var floor_row := at + Vector2i(0, CHAIN_FLOOR_ROW)
-	var top := at + Vector2i(0, CHAIN_MACHINE_ROW)
-	var miner_x := CHAIN_WIDTH - RIG_ORE_WIDTH - 3
+	var walkway := at.y - CHAIN_WALKWAY_ROW
+	var upper := at.y - CHAIN_INSERTER_ROW
+	var lane := at.y - CHAIN_LANE_ROW
+	# Right to left from the seam — the layout test_production_chain.gd asserts.
+	var mx := CHAIN_WIDTH - RIG_ORE_WIDTH - 3
 	var chain: Array[Deployable] = []
-	chain.append(_spawn(MINER_SCENE, top + Vector2i(miner_x, 0), Vector2i.RIGHT))
-	chain.append(_spawn(INSERTER_SCENE, floor_row + Vector2i(miner_x - 1, 0), Vector2i.LEFT))
-	chain.append(_spawn(CONVEYOR_SCENE, floor_row + Vector2i(miner_x - 2, 0), Vector2i.LEFT))
-	chain.append(_spawn(INSERTER_SCENE, floor_row + Vector2i(miner_x - 3, 0), Vector2i.LEFT))
-	chain.append(_spawn(FURNACE_SCENE, top + Vector2i(miner_x - 5, 0), Vector2i.LEFT))
-	chain.append(_spawn(INSERTER_SCENE, floor_row + Vector2i(miner_x - 6, 0), Vector2i.LEFT))
-	chain.append(_spawn(CONVEYOR_SCENE, floor_row + Vector2i(miner_x - 7, 0), Vector2i.LEFT))
-	chain.append(_spawn(INSERTER_SCENE, floor_row + Vector2i(miner_x - 8, 0), Vector2i.LEFT))
-	chain.append(_spawn(PRESS_SCENE, top + Vector2i(miner_x - 10, 0), Vector2i.LEFT))
+	chain.append(_spawn(MINER_SCENE, Vector2i(at.x + mx, upper), Vector2i.RIGHT))
+	chain.append(_spawn(INSERTER_SCENE, Vector2i(at.x + mx - 1, walkway), Vector2i.LEFT))
+	chain.append(_spawn(CONVEYOR_SCENE, Vector2i(at.x + mx - 2, walkway), Vector2i.LEFT))
+	chain.append(_spawn(INSERTER_SCENE, Vector2i(at.x + mx - 3, walkway), Vector2i.LEFT))
+	chain.append(_spawn(FURNACE_SCENE, Vector2i(at.x + mx - 5, upper), Vector2i.LEFT))
+	chain.append(_spawn(INSERTER_SCENE, Vector2i(at.x + mx - 6, walkway), Vector2i.LEFT))
+	chain.append(_spawn(CONVEYOR_SCENE, Vector2i(at.x + mx - 7, walkway), Vector2i.LEFT))
+	chain.append(_spawn(INSERTER_SCENE, Vector2i(at.x + mx - 8, walkway), Vector2i.LEFT))
+	chain.append(_spawn(PRESS_SCENE, Vector2i(at.x + mx - 10, upper), Vector2i.LEFT))
 
-	# ❗️Generators are handed their coal directly. The bootstrap (mine coal, feed
-	# the generator) is a thing to play, not a thing to re-prove on every perf run,
-	# and a rig that needs feeding mid-measurement measures the feeding.
+	# ❗️**The ammo lane — the half the first fixture was missing entirely.** The
+	# press output is pulled out, lifted one row and run LEFT above the turret
+	# line, and an inserter over each turret drops it in. Without this the turrets
+	# were hand-loaded and the chain proved nothing past the press.
+	var lift_x := at.x + mx - 12
+	chain.append(_spawn(INSERTER_SCENE, Vector2i(at.x + mx - 11, upper), Vector2i.LEFT))
+	chain.append(_spawn(CONVEYOR_SCENE, Vector2i(lift_x, upper), Vector2i.UP))
+	for x in range(at.x + CHAIN_TURRET_X0, lift_x + 1):
+		chain.append(_spawn(CONVEYOR_SCENE, Vector2i(x, lane), Vector2i.LEFT))
+
 	var gens: Array[Deployable] = []
 	for i in CHAIN_GENERATORS:
-		var gen := _spawn(GENERATOR_SCENE, at + Vector2i(3 + i * 6, CHAIN_GEN_ROW))
+		var gx := at.x + CHAIN_GEN_X0 + i * CHAIN_GEN_STEP
+		var gen := _spawn(GENERATOR_SCENE, Vector2i(gx, at.y + CHAIN_GEN_ROW))
 		if gen != null:
+			# ❗️Handed its coal outright. The bootstrap is a thing to play, not a
+			# thing to re-prove on every perf run.
 			gen.accept_item(RIG_FUEL, Inventory.STACK_SIZE)
 			gens.append(gen)
 
-	# The turret line along the pocket's open left end, one clear cell apart so
-	# each has its own footprint and its own pool reservation.
 	var turrets: Array[Deployable] = []
 	for i in CHAIN_TURRETS:
-		var turret := _spawn(TURRET_SCENE, floor_row + Vector2i(1 + i * 2, 0))
-		if turret != null:
-			turret.accept_item(CHAIN_AMMO, Inventory.STACK_SIZE)
-			turrets.append(turret)
+		var tx := at.x + CHAIN_TURRET_X0 + i * CHAIN_TURRET_STEP
+		var turret := _spawn(TURRET_SCENE, Vector2i(tx, walkway))
+		if turret == null:
+			continue
+		turret.accept_item(CHAIN_AMMO, CHAIN_SEED_AMMO)
+		turrets.append(turret)
+		# Facing DOWN: sources the lane above, targets the turret below.
+		chain.append(_spawn(INSERTER_SCENE, Vector2i(tx, upper), Vector2i.DOWN))
 
-	return { pocket = at, chain = chain, generators = gens, turrets = turrets }
+	return { site = at, chain = chain, generators = gens, turrets = turrets }
 
 
-## Hollow out the pocket and lay the two solid rows everything stands on. The
-## shelf and the floor are the whole point: without them the bank above simply
-## falls out of the world on the next support re-check.
-func _carve_defense_pocket(at: Vector2i) -> void:
+## First solid row at or below the player, so the fixture is built on the ground
+## the player is actually standing on rather than at a fixed depth.
+func _ground_row_at(base: Vector2i) -> int:
+	for dy in CHAIN_CLEARANCE:
+		if terrain.is_solid(Vector2i(base.x, base.y + dy)):
+			return base.y + dy
+	return base.y + 2
+
+
+## Flatten a walkway, clear the sky above it, and hollow a buried chamber under it
+## for the generator bank. The solid rows are the whole point — see the constants.
+func _carve_defense_site(at: Vector2i) -> void:
 	for dx in CHAIN_WIDTH:
-		for dy in CHAIN_HEIGHT:
-			terrain.set_tile(at + Vector2i(dx, dy), "")
-		terrain.set_tile(at + Vector2i(dx, CHAIN_SHELF_ROW), "stone")
-		terrain.set_tile(at + Vector2i(dx, CHAIN_HEIGHT), "stone")
-	# The seam the miner eats, at the right end, spanning the machine rows.
+		var x := at.x + dx
+		# The walkway floor, which doubles as the chamber's roof.
+		terrain.set_tile(Vector2i(x, at.y), "stone")
+		for dy in range(1, CHAIN_CLEARANCE):
+			terrain.set_tile(Vector2i(x, at.y - dy), "")
+		for dy in range(CHAIN_GEN_ROW, CHAIN_GEN_FLOOR):
+			terrain.set_tile(Vector2i(x, at.y + dy), "")
+		terrain.set_tile(Vector2i(x, at.y + CHAIN_GEN_FLOOR), "stone")
+	# The seam the miner eats, at the right end, spanning its harvest rows.
 	for dx in RIG_ORE_WIDTH:
 		for dy in 2:
 			terrain.set_tile(
-				at + Vector2i(CHAIN_WIDTH - 1 - dx, CHAIN_MACHINE_ROW + dy),
+				Vector2i(at.x + CHAIN_WIDTH - 1 - dx, at.y - CHAIN_INSERTER_ROW + dy),
 				RIG_ORE_MATERIAL,
 			)
 
