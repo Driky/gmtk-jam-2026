@@ -1171,3 +1171,50 @@ func test_climbing_out_of_the_top_drops_the_latch_and_zeroes_velocity() -> void:
 	)
 	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
 	assert_float(player.velocity.y).is_equal(0.0)
+
+# --- Jumping off a ladder (3.5b follow-up) -----------------------------------
+
+
+## ❗️Dropping the latch is not enough on its own: `_try_climb` engages on a HELD
+## key, so the frame after the jump re-latches on the `W` you never let go of and
+## overwrites the jump at CLIMB_SPEED — you never leave the ladder.
+func test_a_buffered_jump_locks_out_the_key_that_was_already_held() -> void:
+	var player := _climber_at(P)
+	Input.action_press(&"move_up")
+	# ❗️A frame has to pass first, or `is_action_just_pressed` is still true for
+	# this very press — which is exactly the one that must NOT count as fresh.
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	player._try_climb(_terrain, CLIMB_STEP)
+	player._jump_buffer = Player.JUMP_BUFFER
+	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+	assert_bool(player._climb_locked).is_true()
+	# The next frame, still holding `W`: the jump survives.
+	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+	assert_bool(player._climbing).is_false()
+	Input.action_release(&"move_up")
+
+
+## And a fresh press is the only thing that clears it — so you re-grab mid-fall
+## by letting go and pressing again, which is the whole of "the lock has no other
+## clear condition".
+func test_a_fresh_press_clears_the_lock_and_re_grabs_mid_fall() -> void:
+	var player := _climber_at(P)
+	player._climb_locked = true
+	player.velocity.y = 200.0
+	_while_holding(
+		&"move_up",
+		func() -> void:
+			assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true()
+			assert_bool(player._climb_locked).is_false()
+			assert_float(player.velocity.y).is_equal_approx(-Player.CLIMB_SPEED, 0.001),
+	)
+
+
+## ⚠️ The lock does NOT suppress the ladder-top floor. Standing on a column's top
+## rung and pressing jump is an ordinary platform jump that lands you back on it,
+## which is what "reads as ground" means; going down is `S`.
+func test_the_jump_lock_does_not_suppress_the_ladder_top_floor() -> void:
+	var player := _stander_on(P)
+	player._climb_locked = true
+	assert_bool(player._stand_on_climbable(_terrain, CLIMB_STEP)).is_true()

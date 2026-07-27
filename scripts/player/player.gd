@@ -95,6 +95,12 @@ var _jump_buffer := 0.0
 ## or take a hit. Without the latch, walking past a ladder on flat ground — or
 ## brushing one mid-jump — would stick you to it.
 var _climbing := false
+## Jumped off a ladder and may not re-grab it yet. ❗️EDGE-TRIGGERED, and it has
+## no other clear condition on purpose: `_try_climb` engages on a HELD key, so
+## without this the frame after a jump re-latches on the `W` you never let go of
+## and overwrites the jump at CLIMB_SPEED — you never leave. A key held from
+## before the jump has to be released and pressed again.
+var _climb_locked := false
 ## Seconds until the active item may be used again — one clock for swings and
 ## shots alike, because ItemStats.use_cooldown is one knob.
 var _use_left := 0.0
@@ -231,6 +237,7 @@ func _die() -> void:
 	# Dropped with the velocity: respawning inside a ladder cell must not resume a
 	# climb nobody asked for.
 	_climbing = false
+	_climb_locked = false
 	_drop_loot_bag()
 	# Also puts the Light child out — a corpse must not keep glowing. That's why
 	# there is no light code here; don't "fix" it by reaching into the node.
@@ -501,6 +508,14 @@ func _try_climb(terrain: Node, delta: float) -> bool:
 		_climbing = false
 		return false
 	var axis := Input.get_axis("move_up", "move_down")
+	# ❗️A jump has to complete. Only a FRESH press re-grabs, so the key that was
+	# already down when you jumped cannot re-latch and cancel it.
+	if _climb_locked:
+		if not (
+			Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("move_down")
+		):
+			return false
+		_climb_locked = false
 	if not _climbing:
 		if is_zero_approx(axis):
 			return false
@@ -524,6 +539,10 @@ func _try_climb(terrain: Node, delta: float) -> bool:
 	_coyote = COYOTE_TIME
 	if _jump_buffer > 0.0:
 		_climbing = false
+		# ⚠️ Does NOT suppress `_stand_on_climbable`: jumping while standing on a
+		# column's top rung is an ordinary platform jump that lands you back on it,
+		# which is what "reads as ground" means. Going down is `S`.
+		_climb_locked = true
 		return false
 	velocity.y = axis * CLIMB_SPEED
 	return true
