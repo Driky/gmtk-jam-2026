@@ -70,18 +70,25 @@ const RIG_OFFSET := Vector2i(3, 1)
 ## all, and 3.6's crafting does not exist yet — so an exported build had no way
 ## to make a single bar ([automation.md](../../docs/systems/automation.md) §Power).
 ##
-## ❗️**The ammo press and the turret joined at 3.5a** for the same reason: they
-## are the two new links in the chain this rig exists to demonstrate, and an
-## exported build has no other way to reach them ([ui.md](../../docs/systems/ui.md)).
-## The spike trap needs nothing here — its `ItemDefs.STATS` row puts it in the
-## give-item dropdown for free.
+## ❗️**Bounded by the HOTBAR, not by the inventory.** 3.5a briefly added
+## `ammo_press` and `turret` here, which pushed the kit past
+## `Inventory.HOTBAR_SIZE` — the last two stacks (relay and the coal below) landed
+## in slots 11-12, which have no UI until 3.6. The generator could not be
+## fuelled, so the rig handed over a chain that could never run: exactly the
+## failure 3.4 added the generator here to prevent. Caught only in a browser.
+##
+## Both went back out when "Build defense chain" landed — that row assembles a
+## turret line directly, so this one is once again only "hand me the parts to
+## place by hand". Either item is still reachable through the give-item dropdown,
+## which is already how the spike trap is reached.
+##
+## ⚠️ `test_debug_menu.gd` asserts the whole kit fits the hotbar. Adding a row
+## here without removing one fails that test.
 const RIG_KIT: Array[String] = [
 	"miner",
 	"inserter",
 	"conveyor_t1",
 	"furnace",
-	"ammo_press",
-	"turret",
 	"generator",
 	"relay",
 ]
@@ -93,6 +100,25 @@ const RIG_KIT_COUNT := 10
 ## fuel somewhere else.
 const RIG_FUEL := "coal"
 const RIG_FUEL_COUNT := 50
+
+# --- The assembled defense chain (3.5a browser load test) ---------------------
+
+const MINER_SCENE := preload("res://scenes/automation/miner.tscn")
+const INSERTER_SCENE := preload("res://scenes/automation/inserter.tscn")
+const CONVEYOR_SCENE := preload("res://scenes/automation/conveyor.tscn")
+const FURNACE_SCENE := preload("res://scenes/automation/furnace.tscn")
+const PRESS_SCENE := preload("res://scenes/automation/ammo_press.tscn")
+const TURRET_SCENE := preload("res://scenes/automation/turret.tscn")
+const GENERATOR_SCENE := preload("res://scenes/automation/generator.tscn")
+
+## The figure the 3.5a browser check calls for: enough turrets that the OLD fixed
+## 32-slot pool would have been saturated and started stealing shots in flight.
+const CHAIN_TURRETS := 6
+## One generator runs ~2 machines at full rate, and the chain plus six turrets
+## draws well past that. Spread along the pocket so their radii overlap into one
+## grid — a brownout here would be measuring the wrong thing.
+const CHAIN_GENERATORS := 3
+const CHAIN_AMMO := "copper_ammo"
 
 ## Injected by tests; fall back to the autoloads.
 var game: Node = null
@@ -106,6 +132,9 @@ var slot_overlay: Node2D = null
 var perf_overlay: CanvasLayer = null
 ## The light grid's render pass. Hiding it IS full bright (terrain.md §Lighting).
 var light_map: Node2D = null
+## Where `build_defense_chain` parents what it builds. Injected by tests, which
+## have no `current_scene` — the same seam `Waves.spawn_parent` is.
+var spawn_parent: Node = null
 
 var _rows: VBoxContainer = null
 var _give_id: OptionButton = null
@@ -190,6 +219,83 @@ func build_factory_rig() -> Vector2i:
 		items.player_inventory.add_item(id, RIG_KIT_COUNT)
 	items.player_inventory.add_item(RIG_FUEL, RIG_FUEL_COUNT)
 	return at
+
+
+## The whole `miner → belt → furnace → belt → ammo press → belt → turret` chain,
+## ASSEMBLED, plus a line of fuelled turrets — the browser load test in one press.
+##
+## ❗️**Why this exists beside `build_factory_rig`.** That row hands over parts so
+## the placement path can be exercised by hand. This one skips placement on
+## purpose: what only a browser can tell us is how the 10 Hz tick and the
+## projectile pool behave under concurrent load
+## ([automation.md](../../docs/systems/automation.md) §The 10 Hz tick), and
+## building a four-machine chain plus six turrets by hand is ~40 precise clicks
+## that land somewhere slightly different every run. A measurement you cannot
+## reproduce is not a measurement. Placement, support, mining and the transfer
+## seam are already covered headless and in the editor.
+##
+## ❗️Everything is built in the REAL placement order — instantiate → inject →
+## `facing` → `setup` → `add_child` → `register` → `on_placed()` — so this is a
+## world assembled the way the player would assemble it, not a special case the
+## tick might treat differently. Layout is lifted from
+## `tests/automation/test_production_chain.gd`, which asserts this exact geometry
+## produces loaded ammo; duplicating it into a second shape would let the two
+## drift.
+##
+## Returns the pocket's top-left cell, and the turrets, so a test can assert
+## against them without re-deriving the geometry.
+func build_defense_chain() -> Dictionary:
+	var at := build_factory_rig()
+	if at == Vector2i.ZERO:
+		return { }
+	var row := at + Vector2i(0, RIG_HEIGHT - 1) # The pocket's floor row.
+	# Right to left from the seam, mirroring the test's layout.
+	var miner_x := RIG_WIDTH - RIG_ORE_WIDTH - 3
+	var chain: Array[Deployable] = []
+	chain.append(_spawn(MINER_SCENE, row + Vector2i(miner_x, -1), Vector2i.RIGHT))
+	chain.append(_spawn(INSERTER_SCENE, row + Vector2i(miner_x - 1, 0), Vector2i.LEFT))
+	chain.append(_spawn(CONVEYOR_SCENE, row + Vector2i(miner_x - 2, 0), Vector2i.LEFT))
+	chain.append(_spawn(INSERTER_SCENE, row + Vector2i(miner_x - 3, 0), Vector2i.LEFT))
+	chain.append(_spawn(FURNACE_SCENE, row + Vector2i(miner_x - 5, -1), Vector2i.LEFT))
+	chain.append(_spawn(INSERTER_SCENE, row + Vector2i(miner_x - 6, 0), Vector2i.LEFT))
+	chain.append(_spawn(CONVEYOR_SCENE, row + Vector2i(miner_x - 7, 0), Vector2i.LEFT))
+	chain.append(_spawn(INSERTER_SCENE, row + Vector2i(miner_x - 8, 0), Vector2i.LEFT))
+	chain.append(_spawn(PRESS_SCENE, row + Vector2i(miner_x - 10, -1), Vector2i.LEFT))
+
+	# ❗️Generators are handed their coal directly. The bootstrap (mine coal, feed
+	# the generator) is a thing to play, not a thing to re-prove on every perf run,
+	# and a rig that needs feeding mid-measurement measures the feeding.
+	var gens: Array[Deployable] = []
+	for i in CHAIN_GENERATORS:
+		var gen := _spawn(GENERATOR_SCENE, row + Vector2i(2 + i * 5, -3))
+		gen.accept_item(RIG_FUEL, Inventory.STACK_SIZE)
+		gens.append(gen)
+
+	# The turret line, along the pocket's open left end — spread one clear cell
+	# apart so each has its own footprint and its own reservation.
+	var turrets: Array[Deployable] = []
+	for i in CHAIN_TURRETS:
+		var turret := _spawn(TURRET_SCENE, row + Vector2i(1 + i * 2, 0))
+		turret.accept_item(CHAIN_AMMO, Inventory.STACK_SIZE)
+		turrets.append(turret)
+
+	return { pocket = at, chain = chain, generators = gens, turrets = turrets }
+
+
+## One deployable, built exactly the way `Player._place_scene` builds one. Returns
+## it un-registered rather than crashing if the cells are taken, so a rig dropped
+## on top of an old one degrades instead of dying mid-build.
+func _spawn(scene: PackedScene, cell: Vector2i, facing := Vector2i.RIGHT) -> Deployable:
+	var node: Deployable = scene.instantiate()
+	node.facing = facing
+	node.setup(cell)
+	var parent: Node = spawn_parent if spawn_parent != null else get_tree().current_scene
+	parent.add_child(node)
+	if not node.register(terrain):
+		node.queue_free()
+		return null
+	node.on_placed()
+	return node
 
 
 ## Levelling by hand means mining hundreds of blocks; this is how the level-up
@@ -307,6 +413,7 @@ func _build() -> void:
 	_button("Poke nearest mob", func() -> void: waves.debug_poke_nearest())
 	_button("Give test loot", give_test_loot)
 	_button("Build factory rig", build_factory_rig)
+	_button("Build defense chain", func() -> void: build_defense_chain())
 	_give_row()
 	_button("Grant %d XP" % roundi(XP_GRANT), grant_xp)
 	_button("Kill player", kill_player)

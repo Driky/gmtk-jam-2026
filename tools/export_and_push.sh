@@ -5,7 +5,7 @@ set -euo pipefail
 
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
 BUTLER="${BUTLER:-$HOME/workspace/tools/butler-darwin-arm64/butler}"
-ITCH_TARGET="driky/countdown:html5"
+ITCH_TARGET="driky/jailos:html5"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build/web"
 
@@ -20,4 +20,4 @@ if [[ "${1:-}" == "--no-push" ]]; then
 fi
 
 "$BUTLER" push "$BUILD_DIR" "$ITCH_TARGET" --userversion "$(date +%Y-%m-%d-%H%M)"
-echo "Pushed to https://driky.itch.io/countdown"
+echo "Pushed to https://driky.itch.io/jailos"

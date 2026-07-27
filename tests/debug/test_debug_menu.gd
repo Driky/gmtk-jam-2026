@@ -305,7 +305,43 @@ func test_the_factory_rig_hands_over_the_whole_chain() -> void:
 	).is_equal(DebugMenuScript.RIG_FUEL_COUNT)
 
 
-## ❗️**The pocket has to actually FIT the chain it hands out**, and "22 was
+## ❗️**The kit has to fit the HOTBAR, not merely the inventory** — and that
+## distinction is the whole bug. 3.5a added `ammo_press` and `turret` to the kit,
+## pushing it to 12 stacks against a 10-slot hotbar; the last two (relay and the
+## coal) landed in inventory slots 11-12, which have no UI until 3.6. The
+## generator could not be fuelled, so the rig handed over a chain that could
+## never run — the exact failure 3.4 added the generator to prevent.
+##
+## ⚠️ `count_of()` counts all 40 slots, so the assertion above sailed straight
+## past it. Only a browser run caught it. This is the version that would not have.
+func test_every_rig_item_lands_within_reach_of_a_hotbar_key() -> void:
+	var terrain: Node = auto_free(TerrainScript.new())
+	add_child(terrain)
+	var menu := _make_menu()
+	menu.terrain = terrain
+	var player: Node2D = auto_free(Node2D.new())
+	player.add_to_group(&"player")
+	player.global_position = Vector2(100, 100) * TileLayout.TILE_SIZE
+	add_child(player)
+
+	menu.build_factory_rig()
+
+	var wanted := PackedStringArray(DebugMenuScript.RIG_KIT)
+	wanted.append(DebugMenuScript.RIG_FUEL)
+	var reachable := PackedStringArray()
+	for i in Inventory.HOTBAR_SIZE:
+		var slot: Dictionary = Items.player_inventory.get_slot(i)
+		if not slot.is_empty():
+			reachable.append(slot.id)
+	for id: String in wanted:
+		assert_bool(reachable.has(id)).override_failure_message(
+			"'%s' is past hotbar slot %d — unselectable in an exported build, so the "
+			% [id, Inventory.HOTBAR_SIZE]
+			+ "rig hands over a chain that can never run",
+		).is_true()
+
+
+## ❗️**The pocket has to actually FIT the chain built into it**, and "22 was
 ## already tight" is exactly the kind of thing that goes stale the next time a
 ## machine joins the kit. Measured off the AUTHORED footprints rather than
 ## restated as a number, so widening a machine fails here instead of in a browser.
@@ -313,7 +349,7 @@ func test_the_factory_rig_hands_over_the_whole_chain() -> void:
 ## Right to left from the seam, along the pocket's bottom row:
 ##   turret · ins · belt · ins · press · ins · belt · ins · furnace · ins · belt ·
 ##   ins · miner · ore
-func test_the_pocket_is_wide_enough_for_the_chain_the_kit_builds() -> void:
+func test_the_pocket_is_wide_enough_for_the_chain_the_defense_row_builds() -> void:
 	var machines := {
 		"miner": MinerScene,
 		"furnace": FurnaceScene,
@@ -332,12 +368,18 @@ func test_the_pocket_is_wide_enough_for_the_chain_the_kit_builds() -> void:
 	).is_greater_equal(needed)
 
 
-## The two links 3.5a added. Named explicitly rather than left to the loop above,
-## because the loop only proves the kit is self-consistent — not that the chain
-## reaches all the way to something that shoots.
-func test_the_kit_reaches_the_end_of_the_chain() -> void:
-	assert_bool(DebugMenuScript.RIG_KIT.has("ammo_press")).is_true()
-	assert_bool(DebugMenuScript.RIG_KIT.has("turret")).is_true()
+## ❗️The kit deliberately STOPS before the defense tail. `ammo_press` and
+## `turret` were briefly here and overflowed the hotbar (see above); the
+## assembled-chain row covers them now, and both stay reachable through the
+## give-item dropdown. Asserting their absence keeps the fix from being quietly
+## undone by someone re-adding a row that "obviously belongs".
+func test_the_kit_stops_before_the_defense_tail() -> void:
+	assert_bool(DebugMenuScript.RIG_KIT.has("ammo_press")).is_false()
+	assert_bool(DebugMenuScript.RIG_KIT.has("turret")).is_false()
+	# But the chain still has to be reachable SOMEHOW in an exported build.
+	var ids := DebugMenuScript.giveable_ids()
+	assert_bool(ids.has("ammo_press")).is_true()
+	assert_bool(ids.has("turret")).is_true()
 
 
 ## The trap needs no rig row: an `ItemDefs.STATS` entry earns it a give-item row
@@ -348,6 +390,49 @@ func test_every_defense_deployable_is_reachable_in_an_exported_build() -> void:
 		assert_bool(ids.has(id)).override_failure_message(
 			"'%s' cannot be obtained in an exported build" % id,
 		).is_true()
+
+
+## ❗️The assembled-chain row is a MEASUREMENT fixture, so what matters is that
+## everything it builds is live and fed: a turret that lands unregistered or
+## unloaded would silently make the browser perf run measure nothing.
+##
+## Uses the real autoloads' Automation registry via `on_placed()`, exactly as a
+## player placement would.
+func test_the_defense_row_builds_a_live_fed_turret_line() -> void:
+	var terrain: Node = auto_free(TerrainScript.new())
+	add_child(terrain)
+	var menu := _make_menu()
+	menu.terrain = terrain
+	var root: Node2D = auto_free(Node2D.new())
+	add_child(root)
+	menu.spawn_parent = root
+	var player: Node2D = auto_free(Node2D.new())
+	player.add_to_group(&"player")
+	player.global_position = Vector2(100, 100) * TileLayout.TILE_SIZE
+	add_child(player)
+
+	var built: Dictionary = menu.build_defense_chain()
+
+	assert_int(built.turrets.size()).is_equal(DebugMenuScript.CHAIN_TURRETS)
+	assert_int(built.generators.size()).is_equal(DebugMenuScript.CHAIN_GENERATORS)
+	for node: Deployable in built.chain:
+		assert_object(node).override_failure_message(
+			"A chain machine failed to register — its cells were already taken",
+		).is_not_null()
+	for turret: Deployable in built.turrets:
+		assert_object(turret).is_not_null()
+		# Loaded, or the perf run measures six turrets doing nothing.
+		assert_bool((turret as Turret).is_idle()).override_failure_message(
+			"A turret was built empty, so it would never fire during the measurement",
+		).is_false()
+	for gen: Deployable in built.generators:
+		# Fuelled, or the whole line browns out and the figure is meaningless.
+		assert_bool((gen as Generator).is_idle()).is_false()
+
+	# Every turret reserved its own pool slots — the thing the browser run exists
+	# to stress. Six turrets must push capacity well past the old fixed 32.
+	for node: Node in built.turrets:
+		assert_int((node as Turret).reserve_shots()).is_greater(0)
 
 
 ## No player in the tree (a headless tool, or the beat after a death) must be a
