@@ -1218,3 +1218,92 @@ func test_the_jump_lock_does_not_suppress_the_ladder_top_floor() -> void:
 	var player := _stander_on(P)
 	player._climb_locked = true
 	assert_bool(player._stand_on_climbable(_terrain, CLIMB_STEP)).is_true()
+
+# --- Armor mitigation (3.6a) -------------------------------------------------
+#
+# A pure static, so every case below runs with no world, no equipment model and
+# no autoload — which is the reason the arithmetic was pulled out of
+# `take_damage` in the first place.
+
+
+## Bare: armor changes nothing, so 2.5's numbers are preserved by construction.
+func test_no_armor_leaves_damage_untouched() -> void:
+	assert_float(PlayerScript.mitigate(8.0, 0.0)).is_equal_approx(8.0, 0.0001)
+	assert_float(PlayerScript.mitigate(0.0, 0.0)).is_equal_approx(0.0, 0.0001)
+
+
+## ⚠️ **Non-increasing, not strictly decreasing.** Once the floor binds, more armor
+## buys nothing at all — a test asserting strict monotonicity would be asserting a
+## curve with no floor, which is the design this one is not.
+func test_mitigation_is_non_increasing_in_armor() -> void:
+	var previous := PlayerScript.mitigate(8.0, 0.0)
+	for armor in range(1, 400):
+		var current := PlayerScript.mitigate(8.0, float(armor))
+		assert_float(current).override_failure_message(
+			"armor %d let MORE damage through than %d" % [armor, armor - 1],
+		).is_less_equal(previous)
+		previous = current
+
+
+## Strictly decreasing while there is still room above the floor — the half point
+## is inside that range, so this is the half of the curve that has to move.
+func test_mitigation_strictly_decreases_below_the_floor() -> void:
+	var previous := PlayerScript.mitigate(8.0, 0.0)
+	for armor in range(1, 48):
+		var current := PlayerScript.mitigate(8.0, float(armor))
+		if current <= 8.0 * PlayerScript.MIN_DAMAGE_FRACTION:
+			break
+		assert_float(current).is_less(previous)
+		previous = current
+
+
+## The named knob, said out loud: at ARMOR_HALF_POINT a hit lands at half.
+func test_the_half_point_halves_the_hit() -> void:
+	assert_float(
+		PlayerScript.mitigate(8.0, PlayerScript.ARMOR_HALF_POINT),
+	).is_equal_approx(4.0, 0.0001)
+
+
+func test_mitigation_never_exceeds_the_incoming_damage() -> void:
+	for armor in range(0, 200):
+		assert_float(PlayerScript.mitigate(8.0, float(armor))).is_less_equal(8.0)
+
+
+## The floor, and why it is a fraction: absurd armor still lets 20% through.
+func test_mitigation_never_falls_below_the_floor_fraction() -> void:
+	var floor_value: float = 8.0 * PlayerScript.MIN_DAMAGE_FRACTION
+	for armor in [0.0, 12.0, 100.0, 10000.0, 1e30]:
+		assert_float(PlayerScript.mitigate(8.0, armor)).is_greater_equal(floor_value)
+	assert_float(PlayerScript.mitigate(8.0, 1e30)).is_equal_approx(floor_value, 0.0001)
+
+
+## ❗️`debug_menu.gd`'s kill row clears the grace window and passes `INF`. A
+## multiplicative floor keeps `INF * 0.20 == INF`; a flat subtraction with a
+## constant minimum would have made the row silently stop killing.
+func test_infinite_damage_stays_lethal_at_any_armor() -> void:
+	assert_float(PlayerScript.mitigate(INF, 0.0)).is_equal(INF)
+	assert_float(PlayerScript.mitigate(INF, 16.0)).is_equal(INF)
+	assert_float(PlayerScript.mitigate(INF, 1e30)).is_equal(INF)
+
+
+## ⚠️ A negative armor total cannot happen through the model, but the curve must
+## not amplify a hit if one ever did.
+func test_negative_armor_does_not_amplify_a_hit() -> void:
+	assert_float(PlayerScript.mitigate(8.0, -50.0)).is_equal_approx(8.0, 0.0001)
+
+
+## The one number that decides whether combat still exists when you are geared: a
+## walker's 8 through the full authored set (16 armor) still hurts.
+func test_a_walkers_hit_still_lands_through_the_full_authored_set() -> void:
+	var equipment := Equipment.new()
+	equipment.equip(Equipment.Slot.HELMET, "copper_helmet")
+	equipment.equip(Equipment.Slot.CHEST, "copper_chestplate")
+	equipment.equip(Equipment.Slot.LEGS, "copper_greaves")
+	equipment.equip(Equipment.Slot.FEET, "copper_boots")
+	equipment.equip(Equipment.Slot.BACK, "copper_cloak")
+	equipment.equip(Equipment.Slot.RING_1, "copper_ring")
+	equipment.equip(Equipment.Slot.RING_2, "copper_ring")
+	equipment.equip(Equipment.Slot.NECKLACE, "copper_amulet")
+	var taken := PlayerScript.mitigate(8.0, equipment.armor_total())
+	assert_float(taken).is_greater(0.0)
+	assert_float(taken).is_less(8.0)

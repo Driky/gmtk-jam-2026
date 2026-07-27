@@ -44,6 +44,13 @@ const MELEE_PRECEDENCE_PX := 34.0
 ## placement rejection that needs saying out loud.
 const BUFFER_REJECT_TOAST := "You can't build in the buffer zone"
 
+## Armor at which a hit lands at exactly half strength, and the hardest a hit can
+## ever be softened. Both are `# Tuning: 4.6` knobs — the shape is locked
+## ([player-combat.md](../../docs/systems/player-combat.md) §Taking damage), the
+## numbers are a first pass to be adjusted once the game is feature complete.
+const ARMOR_HALF_POINT := 12.0 # Tuning: 4.6
+const MIN_DAMAGE_FRACTION := 0.20 # Tuning: 4.6
+
 ## Grace window after any hit. Also what stops a mob's swing and its contact
 ## damage double-dipping on the same frame — both route through take_damage,
 ## so one gate covers both.
@@ -175,11 +182,30 @@ func _step(delta: float) -> void:
 func take_damage(amount: float, _attacker: Node2D = null) -> void:
 	if _invuln_left > 0.0 or is_dead():
 		return
-	current_hp -= amount
+	current_hp -= mitigate(amount, Items.equipment.armor_total())
 	_invuln_left = INVULN_TIME
 	_blink_left = 0.0
 	if current_hp <= 0.0:
 		_die()
+
+
+## What `amount` actually costs you at `armor` points of worn equipment
+## ([player-combat.md](../../docs/systems/player-combat.md) §Taking damage owns
+## the rule). A **pure static**, the `can_place_at` / `Turret.pick_target`
+## precedent: this is the part that can be wrong in a way a screenshot hides, so
+## it unit-tests with no world at all.
+##
+## `kept = HALF / (HALF + armor)` — a diminishing percentage, so armor never stops
+## reaching but never zeroes a hit either. At 12 armor a hit lands at half.
+##
+## ❗️**The floor is a FRACTION OF THE INCOMING DAMAGE, not a constant.** Flat
+## subtraction clamped to a minimum of 1.0 turns every mob in the game into a
+## permanent 1-damage nuisance the moment you are geared, and — the immediate
+## breakage — the F3 kill row clears `_invuln_left` and passes `INF`, which only
+## stays lethal because `INF * 0.20` is still `INF`.
+static func mitigate(amount: float, armor: float) -> float:
+	var kept := ARMOR_HALF_POINT / (ARMOR_HALF_POINT + maxf(armor, 0.0))
+	return amount * maxf(kept, MIN_DAMAGE_FRACTION)
 
 
 func is_dead() -> bool:
