@@ -34,6 +34,10 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 - **Fortification score** — spawn-cell path cost vs. baseline; skews waves toward crawlers/flyers.
 - **Climbable** — ladder/rope/pole deployable with directional climb profile; biped-only for mobs.
 
+## Post-jam intent (NOT locked, not scheduled)
+Recorded so a future step argues from it rather than re-deriving it. No shipping code obeys any of it, so none of it appears in the log below.
+- Item authoring: a datatable GUI as an editor main-screen tab, over a single text DB — [authoring-tools.md](authoring-tools.md).
+
 ## Decision Log
 | Decision (one line) | Owner |
 |---|---|
