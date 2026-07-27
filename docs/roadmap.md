@@ -72,7 +72,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Fixed unlock-by-wave composition for now (adaptive skew is Day 4, ✂️9 fallback anyway).
 
 ### 2.5 Combat ([player-combat.md](systems/player-combat.md))
-- [x] **LMB = use the active hotbar item**; every combat/mining number is an `ItemStats` Resource, resolved authored > block default > bare hand. Lands the item half of 3.6's DB early — **3.6's "item/recipe DB" bullet is now recipes only**.
+- [x] **LMB = use the active hotbar item**; every combat/mining number is an `ItemStats` Resource, resolved authored > block default > bare hand. Lands the item half of 3.6's DB early — **that "item/recipe DB" bullet is now recipes only, and is 3.6b**.
 - [x] Melee: `Area2D` hitbox arc, damage + knockback; instanced on equip, enabled on swing.
 - [x] Shared projectile system: pooled scene + `ProjectileStats` — built so turrets (Day 3) and spells (Day 4, ✂️4) reuse it verbatim. ⚠️ Pool size must scale with spawner count before 3.5 — **done at 3.5a**.
 - [x] Mobs damage the player: attack of opportunity + contact damage, 0.6 s grace window with a blink ([enemies.md](systems/enemies.md) owns the mob-side rule).
@@ -106,7 +106,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Facing: `directional` + runtime `facing`, `rotate_placement` on **R**, ghost arrow — nothing had a direction before this.
 - [x] Conveyors: 1-slot stacks, mark-then-commit advance, **one immediate-mode `_draw` layer** interpolated between slots — items visibly flowing 🔴. (Was "pooled sprite + count"; superseded — a pool has a capacity to get wrong, [automation.md](systems/automation.md).)
 - [x] Inserters: behind→front single-item swing, give-back on refusal (stacking inserter is data, Day 4, ✂️6).
-- [x] RMB hand-feed, one item per click — the only way into the factory before 3.3's miner. The container panel with drag-and-drop stays 3.6.
+- [x] RMB hand-feed, one item per click — the only way into the factory before 3.3's miner. The container panel stays 3.6a.
 - [x] Debug slot overlay as an **F3 row** (top-listed risk in [plan.md](plan.md)). Was written here as a "hotkey"; reconciled — [ui.md](systems/ui.md) locks that debug overlays own no keybindings.
 
 ### 3.3 Production chain
@@ -121,7 +121,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] The F3 factory rig hands a generator, a relay and a stack of coal — it had to: with the gate live, the old kit built a chain that could never run, and an exported build has no other way in.
 
 ### 3.5 Defense — split into 3.5a / 3.5b / 3.5c
-Six new deployables, a shared-pool refactor, a widened support predicate, a new player movement mode and changes to the flow field: too big for one pass. Each sub-step below has a **self-contained step doc** under [steps/](steps/) carrying the file-by-file work, the traps found while researching it, and its own verification — enough that each can be picked up cold. Suggested order **3.5a → 3.5c → 3.5b**: 3.5c is smallest and unblocks 3.6's container view, and 3.5b is last because it is the only one touching a predicate four systems read *plus* the flow field *plus* mob locomotion.
+Six new deployables, a shared-pool refactor, a widened support predicate, a new player movement mode and changes to the flow field: too big for one pass. Each sub-step below has a **self-contained step doc** under [steps/](steps/) carrying the file-by-file work, the traps found while researching it, and its own verification — enough that each can be picked up cold. Suggested order **3.5a → 3.5c → 3.5b**: 3.5c is smallest and unblocks 3.6a's container view, and 3.5b is last because it is the only one touching a predicate four systems read *plus* the flow field *plus* mob locomotion.
 
 #### 3.5a Turrets & traps ([steps/3.5a-turrets-and-traps.md](steps/3.5a-turrets-and-traps.md))
 - [x] 🔴 **Projectile pool must scale with spawner count before turrets ship** — the 2.5 pool is a fixed 32 and steals in-flight shots once exceeded ([player-combat.md](systems/player-combat.md)). Each spawner reserves its worst case on place; grow-never-shrink. Landed with a per-shot `damage_scale`, the seam a `turret_damage` buff needs.
@@ -134,18 +134,29 @@ Six new deployables, a shared-pool refactor, a widened support predicate, a new 
 - ✂️8 not fired: it reads "ladder only", so rope/pole and the *directional* profiles stay 4.1.
 
 #### 3.5c Chest & respawn beacon ([steps/3.5c-chest-and-beacon.md](steps/3.5c-chest-and-beacon.md))
-- [x] Chest — the first N-slot container; reuses `Inventory` via one defaulted `slot_count`, so 3.6's container view binds the signals the hotbar already uses. The panel itself stays 3.6 ([player-combat.md](systems/player-combat.md) §Hand-feeding). ⚠️ Its contents are invisible to the F3 slot overlay, which walks the tick registries a chest deliberately does not join — accepted, see [automation.md](systems/automation.md) §Categories → Utility.
+- [x] Chest — the first N-slot container; reuses `Inventory` via one defaulted `slot_count`, so 3.6a's container view binds the signals the hotbar already uses. The panel itself stays 3.6a ([player-combat.md](systems/player-combat.md) §Hand-feeding). ⚠️ Its contents are invisible to the F3 slot overlay, which walks the tick registries a chest deliberately does not join — accepted, see [automation.md](systems/automation.md) §Categories → Utility.
 - [x] Respawn beacon overriding the Core as the respawn anchor, resolved **nearest to the death position** ([player-combat.md](systems/player-combat.md) §Death & respawn). ⚠️ One decision moved against the step doc as written: `support_dirs = 4` (Down), not `15` — the respawn formula assumes ground under the anchor cell, so a ceiling-mounted beacon would drop you into rock. `respawned` also grew an `at_beacon` payload, because the HUD banner named the Core unconditionally and would now be lying ([ui.md](systems/ui.md)).
 
 #### Standing item — GYM scenes for scenario testing ([ui.md](systems/ui.md))
 - [ ] Debug row + dropdown loading a pre-made scenario `.tscn` from a gym folder. **This is how scenarios are tested from now on**; debug affordances themselves keep growing as normal. Raised at 3.5a, when every bug in the procedural `build_defense_chain` fixture turned out to be a geometry bug invisible until the game ran. Not scheduled — do it when a second scenario is needed.
 
-### 3.6 Character screen ([ui.md](systems/ui.md))
-- [ ] Tabbed window, `I`/`C`/`K` direct shortcuts: inventory + equipment panel (✂️7) + stats readout; crafting tab with category tabs, unlock filtering, greyed-missing-inputs; skill-tree tab node graph.
-- [ ] Crafting UI over the 3.3 recipe table (`data/recipe_defs.gd`) — the DB itself landed there, as the item half landed at 2.5; `gather_available(player_pos)` crafting-range query used by all cost checks ([progression.md](systems/progression.md)).
+### 3.6 Character screen — split into 3.6a / 3.6b ([ui.md](systems/ui.md))
+A tabbed window, a 40-slot grid with a new interaction model, an equipment panel with a new player stat behind it, a crafting UI over a table that today holds **no player-craftable rows**, a new input action — and a node graph over a `SkillNode` Resource **3.7 has not written yet**. Too big for one pass, and its last item was asking 3.6 to render a data model that does not exist. Each sub-step below has a **self-contained step doc** under [steps/](steps/) carrying the file-by-file work, the traps found while researching it, and its own verification — enough that each can be picked up cold. Order is **3.6a → 3.6b**, and that is not a preference: 3.6b's crafting tab is a tab *inside* 3.6a's window and consumes its slot widget and its held-stack model. **The skill-tree tab moves to 3.7**, where its data lives.
+
+#### 3.6a Character window & inventory tab ([steps/3.6a-window-and-inventory.md](steps/3.6a-window-and-inventory.md))
+- [ ] Tabbed window on layer 5 with `I`/`C`/`K` direct shortcuts, and the shared open-screen predicate that blocks gameplay actions *and* movement without pausing ([ui.md](systems/ui.md) §Pause) — the factory has to keep ticking through a wave.
+- [ ] The 40-slot grid. ❗️**Slots 10–39 are unreachable today**: `hud.gd`'s `_on_slot_changed` early-returns above `HOTBAR_SIZE`, so everything a loot bag hands back past slot 9 goes into a void the player cannot see. Held stack on the cursor + shift-click quick-move ([ui.md](systems/ui.md) §Character screen).
+- [ ] Equipment panel — 5 armor + 3 accessory slots, no tool/weapon slot ([ui.md](systems/ui.md)) — and the armor damage-reduction stat behind it ([player-combat.md](systems/player-combat.md) §Taking damage). ✂️7 not fired; its wording is rewritten in [plan.md](plan.md).
+- [ ] Container view on a new `interact` key ([ui.md](systems/ui.md) §Bindings), binding the `Chest.storage()` seam 3.5c left with no reader. Player stats readout.
+
+#### 3.6b Crafting tab ([steps/3.6b-crafting-tab.md](steps/3.6b-crafting-tab.md))
+- [ ] `station = "hand"` recipe rows for the deployables ([progression.md](systems/progression.md) §Recipe tiers). ❗️**This is the step that stops the F3 give-item dropdown being the only way to obtain a machine** — `STARTING_KIT` is a pickaxe and torches, and an exported build has no console ([ui.md](systems/ui.md) §Build factory rig).
+- [ ] Crafting UI over the 3.3 recipe table (`data/recipe_defs.gd`) — the DB itself landed there, as the item half landed at 2.5; `gather_available(player_pos)` plus its two-phase `consume_available` counterpart, used by all cost checks ([progression.md](systems/progression.md) §Crafting range).
+- [ ] ~~First-time-craft XP~~ — **cut, not deferred** ([progression.md](systems/progression.md) §XP): it needs a `crafted_ids` set plus a `reset_run` line and is worth nothing until there is a reason to craft twice.
 
 ### 3.7 Skill tree system ([progression.md](systems/progression.md))
 - [ ] `SkillNode` Resources (prereqs, costs, recipe unlocks, leveled buffs) + ~10 nodes; buffs live through `get_stat`.
+- [ ] The tree tab — a **third tab in 3.6a's existing window**, not a screen of its own, and the step that fills in the `unlocked_by` column 3.6b ships empty on every recipe row.
 
 **Exit criteria:** miner → conveyor → inserter → furnace running *during* a wave while a turret fires; power overlay readable; a skill point spent unlocks a recipe.
 
