@@ -243,6 +243,9 @@ const MinerScene := preload("res://scenes/automation/miner.tscn")
 const FurnaceScene := preload("res://scenes/automation/furnace.tscn")
 const AmmoPressScene := preload("res://scenes/automation/ammo_press.tscn")
 const TurretScene := preload("res://scenes/automation/turret.tscn")
+const AutomationScript := preload("res://scripts/automation/automation.gd")
+const GameScript := preload("res://scripts/game/game.gd")
+const PoolScript := preload("res://scripts/combat/projectile_pool.gd")
 
 
 ## The rig is the only practical way into a production chain in an exported
@@ -433,6 +436,58 @@ func test_the_defense_row_builds_a_live_fed_turret_line() -> void:
 	# to stress. Six turrets must push capacity well past the old fixed 32.
 	for node: Node in built.turrets:
 		assert_int((node as Turret).reserve_shots()).is_greater(0)
+
+
+## ❗️**The invariant the fixture exists for, and the one a browser run cannot
+## assert for itself: every turret must end up POWERED and FIRING.** The first
+## in-browser attempt built six turrets showing red bolts — supply 4.0 against
+## demand 5.0, with a generator missing — so the "load test" was measuring an
+## idle scene. A fixture that quietly builds nothing is worse than no fixture.
+func test_the_defense_row_leaves_every_turret_powered_and_shooting() -> void:
+	var terrain: Node = auto_free(TerrainScript.new())
+	add_child(terrain)
+	var game: Node = auto_free(GameScript.new())
+	game.state = GameScript.State.BUILD_PHASE
+	var automation: Node = auto_free(AutomationScript.new())
+	automation.terrain = terrain
+	automation.game = game
+	add_child(automation)
+	automation.set_process(false)
+	var pool: ProjectilePool = auto_free(PoolScript.new())
+	add_child(pool)
+
+	var menu := _make_menu()
+	menu.terrain = terrain
+	menu.automation = automation
+	var root: Node2D = auto_free(Node2D.new())
+	add_child(root)
+	menu.spawn_parent = root
+	var player: Node2D = auto_free(Node2D.new())
+	player.add_to_group(&"player")
+	player.global_position = Vector2(100, 100) * TileLayout.TILE_SIZE
+	add_child(player)
+
+	var built: Dictionary = menu.build_defense_chain()
+	automation.step_tick() # Lights the generators and solves the grid.
+
+	for turret: Deployable in built.turrets:
+		assert_bool(turret.is_powered()).override_failure_message(
+			"A turret landed outside every grid — the perf run would measure an idle scene",
+		).is_true()
+		assert_float(turret.power_ratio()).override_failure_message(
+			"A turret is browned out, so the turret line fires at the wrong rate",
+		).is_equal(1.0)
+
+	# ...and they actually shoot. A mob in front of the line, one tick, six bolts.
+	var mob: Node2D = auto_free(Node2D.new())
+	mob.position = (built.turrets[0] as Node2D).global_position
+	mob.add_to_group(&"enemies")
+	add_child(mob)
+	automation.step_tick()
+
+	assert_int(pool.active_count()).override_failure_message(
+		"The turret line fired nothing at a mob standing on top of it",
+	).is_greater(0)
 
 
 ## No player in the tree (a headless tool, or the beat after a death) must be a

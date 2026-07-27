@@ -135,6 +135,9 @@ var light_map: Node2D = null
 ## Where `build_defense_chain` parents what it builds. Injected by tests, which
 ## have no `current_scene` — the same seam `Waves.spawn_parent` is.
 var spawn_parent: Node = null
+## Which tick registry the built chain joins. Injected by tests so the fixture is
+## assertable against their own Automation rather than the live autoload.
+var automation: Node = null
 
 var _rows: VBoxContainer = null
 var _give_id: OptionButton = null
@@ -287,6 +290,9 @@ func build_defense_chain() -> Dictionary:
 ## on top of an old one degrades instead of dying mid-build.
 func _spawn(scene: PackedScene, cell: Vector2i, facing := Vector2i.RIGHT) -> Deployable:
 	var node: Deployable = scene.instantiate()
+	# Before on_placed, which is what reads it to pick a registry.
+	if &"automation" in node:
+		node.automation = automation if automation != null else Automation
 	node.facing = facing
 	node.setup(cell)
 	var parent: Node = spawn_parent if spawn_parent != null else get_tree().current_scene
