@@ -451,6 +451,14 @@ func _on_target_hit(body: Node2D) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("interact"):
+		# ⚠️ Gated, matching `mine`/`place` rather than `rotate_placement` and the
+		# hotbar keys next door — a third behaviour at one call site would be the
+		# thing nobody can remember. It also means E never toggles the panel shut:
+		# Esc and `I` close it.
+		if not UiState.blocks_gameplay_actions():
+			interact(Terrain, target_tile())
+		return
 	if event.is_action_pressed("rotate_placement"):
 		rotate_placement()
 		return
@@ -458,6 +466,32 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("hotbar_%d" % (i + 1)):
 			Items.player_inventory.selected_slot = i
 			return
+
+
+## `E`: open the panel of whatever container is under the cursor and in reach.
+## True when one was found. The only verb that is neither use nor place, and it
+## exists because LMB already means *un-deploy* on a deployable
+## ([ui.md](../../docs/systems/ui.md) §Bindings).
+##
+## ❗️**Duck-typed on `has_method(&"storage")`, not `as Chest`** — the same argument
+## `_hit_deployable` makes for `as Deployable` over a group check: 4.x's next
+## container needs no edit here, and this script learns nothing about chests.
+##
+## The handler lives on the player because the player already owns `target_tile()`,
+## `in_reach()` and the `get_entity` idiom; the screen owns no cursor→cell
+## conversion and should not learn one. It reaches the screen through a static, so
+## there is no node path here either — and it is a no-op with no screen in the tree.
+##
+## Terrain and the cell are both parameters for the same reason `_hit_deployable`
+## takes them: this unit-tests on a fresh instance without a mouse.
+func interact(terrain: Node, cell: Vector2i) -> bool:
+	if not in_reach(cell):
+		return false
+	var entity: Node = terrain.get_entity(cell)
+	if entity == null or not entity.has_method(&"storage"):
+		return false
+	CharacterScreen.open_container(entity)
+	return true
 
 
 ## Advance the pending placement facing one step round the cycle. Public so a
@@ -662,9 +696,9 @@ func _place() -> void:
 	# RMB on a cell that already holds a deployable hands it ONE item instead of
 	# failing the placement — the only way to get anything into the factory before
 	# 3.3's miner exists, and the reason placement does not simply reject an
-	# occupied cell. The interact-key container panel with drag-and-drop is 3.6,
-	# where ui.md's Inventory tab and its container view already live; building it
-	# here would write drag-and-drop twice.
+	# occupied cell. ✅ The container panel landed at 3.6a on `E`, and this stayed:
+	# one click into a belt is faster than opening a screen, and it works on the
+	# machines that are not containers at all.
 	#
 	# Checked before the buffer rule so feeding a machine never toasts: a deployable
 	# cannot exist in a buffer zone in the first place, and "you can't build here"

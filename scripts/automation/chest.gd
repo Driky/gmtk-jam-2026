@@ -14,11 +14,11 @@
 ## `Automation` to call every 100 ms. Registering it anyway — for the F3 slot
 ## overlay, say — would put a node that does nothing in the tick loop.
 ##
-## No container UI here either, on purpose: the interact-key panel with
-## drag-and-drop is 3.6 and there is no `interact` action yet
-## ([player-combat.md](../../docs/systems/player-combat.md) §Hand-feeding). Until
-## then a chest is still fully usable — inserters both ways, RMB hand-feeds one
-## item per click, and swinging it down pops every stack.
+## ✅ **The container UI landed at 3.6a**: `E` over a chest in reach opens the
+## character screen's container panel against the `storage()` seam below. The one
+## thing that added here is `on_removed` — everything else stays true, and a chest
+## is still fully usable without the panel (inserters both ways, RMB hand-feeds one
+## item per click, and swinging it down pops every stack).
 ##
 ## Owning doc: docs/systems/automation.md
 class_name Chest
@@ -31,14 +31,43 @@ const CHEST_SLOTS := 20
 var _storage := Inventory.new(CHEST_SLOTS)
 
 
-## ❗️The 3.6 seam, and the reason this step ships before the character screen:
-## the container view and `Items.gather_available(player_pos)` bind
-## `slot_changed` on this exactly as the HUD hotbar binds the player's.
+## ❗️The 3.6 seam, and the reason this step shipped before the character screen:
+## the container view binds `slot_changed` on this exactly as the HUD hotbar binds
+## the player's, and 3.6b's `Items.gather_available(player_pos)` will read it too.
 ##
 ## Handed out live rather than copied — a snapshot could not emit, and a UI that
 ## has to poll a chest is a UI that shows stale counts while an inserter fills it.
+##
+## ⚠️ It is also what `Player.interact` duck-types on: **having this method is what
+## makes something a container**, so 4.x's next one needs no edit anywhere else.
 func storage() -> Inventory:
 	return _storage
+
+
+## ❗️Close the panel before this chest stops being a chest.
+##
+## `pop_to_pickup`'s order is: free the cells → **`on_removed()`** → `take_cargo()`
+## → `queue_free()`. That puts this hook before the chest empties and before it is
+## freed, so the panel closes while everything is still valid and a stack held on
+## the cursor goes back to the PLAYER's inventory rather than into a dying
+## container. `deployable.gd` needs no change for it.
+##
+## ❗️**Reached by GROUP, and naming `CharacterScreen` here is not an option.** It
+## closes a real dependency cycle, through a RESOURCE rather than through code:
+##
+##     chest.gd → CharacterScreen → ItemSlot → Hud → ItemDefs
+##              → chest.tres (`place_scene`) → chest.tscn → chest.gd
+##
+## Godot cannot resolve `ItemDefs.STATS` inside it, so the HUD fails to compile and
+## takes the give-item row and every slot icon down with it. Every deployable that
+## an `ItemDefs` row can place is inside that loop, which is why none of them
+## reference the UI by class name. The group is the same escape `pickup_spawner`
+## and `respawn_beacon` already use, and it dies with the scene for free.
+##
+## No-op with no screen in the tree, so headless tests are unaffected.
+func on_removed() -> void:
+	for screen in get_tree().get_nodes_in_group(&"character_screen"):
+		screen.hide_container(self)
 
 
 ## Takes what fits and reports it. A partial accept is legal by the seam's

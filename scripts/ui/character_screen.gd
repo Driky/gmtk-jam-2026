@@ -78,6 +78,16 @@ var _held: Dictionary = { }
 ## that needs pointer lock on web — so this is offset from the pointer instead.
 var _ghost: ItemSlot = null
 
+## The container whose panel is open, or null.
+##
+## ⚠️ **Deliberately untyped, and never annotated on the way out of a loop or used
+## as a `Dictionary` key.** Both are `tools/check_freed_safety.sh` failures: a type
+## annotation is executable code that dereferences the value before any
+## `is_instance_valid` guard on the next line can run, and this reference can
+## outlive the chest by exactly one `queue_free()`. Every read goes through
+## `_container_storage()`, which checks validity first.
+var _container: Node = null
+
 var _inventory_slots: Array[ItemSlot] = []
 var _equipment_slots: Array[ItemSlot] = []
 var _container_slots: Array[ItemSlot] = []
@@ -101,6 +111,7 @@ var _tab_buttons: Array[Button] = []
 
 func _ready() -> void:
 	_instance = self
+	add_to_group(GROUP)
 	if inventory == null:
 		inventory = Items.player_inventory
 	if equipment == null:
@@ -197,7 +208,126 @@ func close() -> void:
 	if not is_open:
 		return
 	_return_held()
+	hide_container()
 	_set_open(false)
+
+# --- The container panel ------------------------------------------------------
+#
+# Reached through statics for the same reason `Hud.show_toast` is: the call sites
+# (the player's `interact`, and a chest being swung down) own no path to this node,
+# and both must be **inert with no screen in the tree** so headless tests are
+# unaffected.
+
+## The group a container reaches this screen through when it cannot name the class.
+##
+## ❗️`Chest.on_removed()` is exactly that case: `chest.gd → CharacterScreen →
+## ItemSlot → Hud → ItemDefs → chest.tres → chest.tscn → chest.gd` is a real cycle
+## — closed through a `place_scene` RESOURCE rather than through code — and Godot
+## cannot resolve `ItemDefs.STATS` inside it. Every deployable an `ItemDefs` row can
+## place is in that loop. The two statics below stay for callers outside it, like
+## the player's `interact`.
+const GROUP := &"character_screen"
+
+
+## Open `node`'s panel alongside the window. Duck-typed all the way down: nothing
+## here names `Chest`.
+static func open_container(node: Node) -> void:
+	if _instance != null:
+		_instance.show_container(node)
+
+
+## ❗️Reached from `Chest.on_removed()` (through `GROUP`, see above), which
+## `pop_to_pickup` runs **before** the chest empties and **before** it is freed — so
+## the panel closes while everything is still valid and a stack held on the cursor
+## goes back to the PLAYER's inventory rather than into a dying container.
+static func close_container(node: Node) -> void:
+	if _instance != null:
+		_instance.hide_container(node)
+
+
+func show_container(node: Node) -> void:
+	if node == null or not node.has_method(&"storage") or not can_open():
+		return
+	if not _is_current_container(node):
+		_unbind_container()
+	_container = node
+	var storage: Inventory = node.storage()
+	# ⚠️ **A named method, never a lambda.** A fresh `Callable` per open is
+	# undetectable as a duplicate connection, so opening the same chest twice would
+	# repaint every slot twice, forever.
+	if not storage.slot_changed.is_connected(_on_container_slot_changed):
+		storage.slot_changed.connect(_on_container_slot_changed)
+	_container_title.text = container_title(node)
+	_refresh_container()
+	_container_panel.visible = true
+	open(Tab.INVENTORY)
+
+
+## `node` null closes whatever is open; a specific `node` closes only its own
+## panel, so a chest destroyed across the map cannot shut the one you are using.
+func hide_container(node: Node = null) -> void:
+	if _container == null:
+		return
+	if node != null and is_instance_valid(_container) and not _is_current_container(node):
+		return
+	_return_held()
+	_unbind_container()
+	_container_panel.visible = false
+
+
+## Names the container without knowing what it is: `item_id` is a `Deployable`
+## property, so anything that has one introduces itself by its own display name.
+static func container_title(node: Node) -> String:
+	if node != null and &"item_id" in node:
+		var named := Hud.item_name(node.item_id)
+		if named != "":
+			return named
+	return "Container"
+
+
+## Compared by instance id rather than by `==`, so a freed container is never
+## dereferenced by the comparison itself.
+func _is_current_container(node: Node) -> bool:
+	if _container == null or not is_instance_valid(_container) or node == null:
+		return false
+	return _container.get_instance_id() == node.get_instance_id()
+
+
+func _unbind_container() -> void:
+	if _container != null and is_instance_valid(_container):
+		var storage: Inventory = _container.storage()
+		if storage.slot_changed.is_connected(_on_container_slot_changed):
+			storage.slot_changed.disconnect(_on_container_slot_changed)
+	_container = null
+	for widget in _container_slots:
+		widget.set_stack({ })
+		widget.visible = false
+
+
+## ⚠️ Every read of the container goes through here. `is_instance_valid` first,
+## because the reference outlives the chest by one `queue_free()`.
+func _container_storage() -> Inventory:
+	if _container == null or not is_instance_valid(_container):
+		return null
+	return _container.storage()
+
+
+## Shows `mini(slot_count, MAX_CONTAINER_SLOTS)` of the widgets built in `_ready`.
+## ⚠️ The cap is a number here, not a reference to `Chest.CHEST_SLOTS`: this panel
+## must not learn what kind of container it is drawing.
+func _refresh_container() -> void:
+	var storage := _container_storage()
+	var shown := 0 if storage == null else mini(storage.slot_count(), MAX_CONTAINER_SLOTS)
+	for i in _container_slots.size():
+		_container_slots[i].visible = i < shown
+		_container_slots[i].set_stack({ } if i >= shown else storage.get_slot(i))
+
+
+func _on_container_slot_changed(index: int) -> void:
+	var storage := _container_storage()
+	if storage == null or index >= _container_slots.size():
+		return
+	_container_slots[index].set_stack(storage.get_slot(index))
 
 
 ## No player yet means world generation is still running, and `GAME_OVER` means a
@@ -299,7 +429,9 @@ func _build_slots() -> void:
 		_equipment_slots.append(widget)
 
 	for i in MAX_CONTAINER_SLOTS:
-		_container_slots.append(_make_slot(_container_grid, i))
+		var widget := _make_slot(_container_grid, i)
+		widget.slot_pressed.connect(_on_container_slot_pressed)
+		_container_slots.append(widget)
 
 
 func _make_slot(parent: Node, index: int, key_label := "") -> ItemSlot:
@@ -454,24 +586,56 @@ func _place_one(inv: Inventory, index: int) -> void:
 	_set_held({ } if left <= 0 else { id = _held.id, count = left })
 
 
-## Quick-move out of the player's own inventory: hotbar ⇄ the rest of the bag.
+## Quick-move out of the player's own inventory. With a container open that is the
+## container — the fast path, and what you actually use against a chest. Otherwise
+## it is hotbar ⇄ the rest of the bag.
 ##
 ## ❗️**Offer first, consume second** — `Player.hand_feed`'s argument: the other
 ## order is one full destination away from eating the item.
 ##
-## ⚠️ The destination range never contains `index`, which is what stops the stack
-## merging back into the slot it just left and then being removed from it.
+## ⚠️ The destination never contains `index`, which is what stops the stack merging
+## back into the slot it just left and then being removed from it.
 func _quick_move_from_inventory(index: int) -> void:
 	var stack := inventory.get_slot(index)
 	if stack.is_empty():
 		return
 	var id: String = stack.id
 	var count: int = stack.count
+	var storage := _container_storage()
+	if storage != null:
+		_take_after_offering(inventory, index, count - storage.add_item(id, count))
+		return
 	var from := Inventory.HOTBAR_SIZE if index < Inventory.HOTBAR_SIZE else 0
 	var to := inventory.slot_count() if index < Inventory.HOTBAR_SIZE else Inventory.HOTBAR_SIZE
-	var moved := count - inventory.add_item_in_range(id, count, from, to)
+	_take_after_offering(inventory, index, count - inventory.add_item_in_range(id, count, from, to))
+
+
+## The other direction: a container stack straight into the player's bag.
+func _quick_move_to_inventory(storage: Inventory, index: int) -> void:
+	var stack := storage.get_slot(index)
+	if stack.is_empty():
+		return
+	_take_after_offering(storage, index, stack.count - inventory.add_item(stack.id, stack.count))
+
+
+## Consume exactly what the destination reported taking, and nothing when it took
+## nothing — the second half of "offer first, consume second".
+func _take_after_offering(source: Inventory, index: int, moved: int) -> void:
 	if moved > 0:
-		inventory.remove_from_slot(index, moved)
+		source.remove_from_slot(index, moved)
+
+
+func _on_container_slot_pressed(index: int, button_index: int, shift: bool) -> void:
+	var storage := _container_storage()
+	if storage == null or index >= storage.slot_count():
+		return
+	if shift and _held.is_empty():
+		_quick_move_to_inventory(storage, index)
+		return
+	if button_index == MOUSE_BUTTON_RIGHT:
+		_right_click(storage, index)
+		return
+	_left_click(storage, index)
 
 # --- The equipment panel ------------------------------------------------------
 

@@ -9,6 +9,9 @@ const GameScript := preload("res://scripts/game/game.gd")
 const ProgressionScript := preload("res://scripts/progression/progression.gd")
 const PlayerScene := preload("res://scenes/player.tscn")
 const PickupSpawnerScript := preload("res://scripts/items/pickup_spawner.gd")
+const TerrainScript := preload("res://scripts/terrain/terrain.gd")
+const ChestScene := preload("res://scenes/automation/chest.tscn")
+const TorchScene := preload("res://scenes/torch.tscn")
 
 var _inv: Inventory
 var _eq: Equipment
@@ -16,9 +19,12 @@ var _game: Node
 var _progression: Node
 var _screen: CanvasLayer
 var _player: Player
+## Built on demand by `_chest()` — only the container cases need a world.
+var _screen_terrain: Node
 
 
 func before_test() -> void:
+	_screen_terrain = null
 	_inv = Inventory.new()
 	_eq = Equipment.new()
 	_game = auto_free(GameScript.new())
@@ -665,3 +671,207 @@ func test_a_randomized_sequence_over_both_panels_conserves_the_total() -> void:
 		assert_int(_total_with_gear()).override_failure_message(
 			"step %d changed the total" % step,
 		).is_equal(expected)
+
+# --- The container panel (3.6a) ----------------------------------------------
+
+
+## A registered chest on a floor tile, in a Terrain of this suite's own.
+func _chest(cell := Vector2i(100, 100)) -> Chest:
+	if _screen_terrain == null:
+		_screen_terrain = auto_free(TerrainScript.new())
+		add_child(_screen_terrain)
+	_screen_terrain.set_tile(cell + Vector2i.DOWN, "dirt")
+	var node: Chest = auto_free(ChestScene.instantiate())
+	node.setup(cell)
+	add_child(node)
+	assert_bool(node.register(_screen_terrain)).is_true()
+	node.on_placed()
+	return node
+
+
+func _box(index: int) -> ItemSlot:
+	return _screen._container_slots[index]
+
+
+func test_opening_a_container_shows_its_panel_on_the_inventory_tab() -> void:
+	var chest := _chest()
+	chest.accept_item("copper", 12)
+	CharacterScreen.open_container(chest)
+	assert_bool(CharacterScreen.is_open).is_true()
+	assert_int(_screen.current_tab()).is_equal(ScreenScript.Tab.INVENTORY)
+	assert_bool(_screen._container_panel.visible).is_true()
+	assert_str(_box(0).count_text()).is_equal("12")
+	assert_str(_screen._container_title.text).is_equal(Hud.item_name("chest"))
+
+
+## Shows only as many widgets as the container has slots, capped at the 20 built in
+## `_ready`. ⚠️ The cap is a number, not a reference to `Chest.CHEST_SLOTS`.
+func test_the_panel_shows_one_widget_per_container_slot() -> void:
+	var chest := _chest()
+	CharacterScreen.open_container(chest)
+	var expected := mini(chest.storage().slot_count(), ScreenScript.MAX_CONTAINER_SLOTS)
+	var shown := 0
+	for widget in _screen._container_slots:
+		if widget.visible:
+			shown += 1
+	assert_int(shown).is_equal(expected)
+
+
+## ⚠️ **A named method, not a lambda.** A fresh `Callable` per open is undetectable
+## as a duplicate, so opening the same chest twice would repaint every slot twice,
+## forever.
+func test_opening_the_same_container_twice_binds_slot_changed_once() -> void:
+	var chest := _chest()
+	CharacterScreen.open_container(chest)
+	CharacterScreen.open_container(chest)
+	CharacterScreen.open_container(chest)
+	assert_int(chest.storage().slot_changed.get_connections().size()).is_equal(1)
+
+
+## And closing disconnects, so a chest left alone stops repainting a panel that is
+## no longer showing it.
+func test_closing_the_panel_disconnects_the_container() -> void:
+	var chest := _chest()
+	CharacterScreen.open_container(chest)
+	_screen.close()
+	assert_int(chest.storage().slot_changed.get_connections().size()).is_equal(0)
+	assert_bool(_screen._container_panel.visible).is_false()
+
+
+func test_a_chest_filled_by_an_inserter_repaints_live() -> void:
+	var chest := _chest()
+	CharacterScreen.open_container(chest)
+	chest.accept_item("iron", 4)
+	assert_str(_box(0).count_text()).is_equal("4")
+
+
+## The two directions of the thing you actually open a chest for.
+func test_shift_click_moves_a_stack_into_the_container_and_back() -> void:
+	var chest := _chest()
+	CharacterScreen.open_container(chest)
+	_inv.put_in_slot(27, { id = "copper", count = 30 })
+	_click_slot(_bag(27), MOUSE_BUTTON_LEFT, true)
+	assert_bool(_inv.get_slot(27).is_empty()).is_true()
+	assert_int(chest.storage().count_of("copper")).is_equal(30)
+
+	_click_slot(_box(0), MOUSE_BUTTON_LEFT, true)
+	assert_int(chest.storage().count_of("copper")).is_equal(0)
+	assert_int(_inv.count_of("copper")).is_equal(30)
+
+
+## ❗️Offer first, consume second across the boundary too: a full chest must leave
+## the player's stack untouched.
+func test_shift_click_into_a_full_container_leaves_the_stack_alone() -> void:
+	var chest := _chest()
+	var storage := chest.storage()
+	for i in storage.slot_count():
+		storage.put_in_slot(i, { id = "stone", count = Inventory.STACK_SIZE })
+	CharacterScreen.open_container(chest)
+	_inv.put_in_slot(0, { id = "copper", count = 5 })
+	_click_slot(_bag(0), MOUSE_BUTTON_LEFT, true)
+	assert_int(_inv.get_slot(0).count).is_equal(5)
+
+
+## With a container open, shift-click goes to the container rather than hotbar⇄bag.
+func test_a_container_takes_precedence_over_the_hotbar_swap() -> void:
+	var chest := _chest()
+	CharacterScreen.open_container(chest)
+	_inv.put_in_slot(0, { id = "copper", count = 5 })
+	_click_slot(_bag(0), MOUSE_BUTTON_LEFT, true)
+	assert_int(chest.storage().count_of("copper")).is_equal(5)
+	assert_int(_inv.count_of("copper")).is_equal(0)
+
+
+func test_clicks_move_stacks_between_the_bag_and_the_container() -> void:
+	var chest := _chest()
+	chest.accept_item("coal", 9)
+	CharacterScreen.open_container(chest)
+	_click_slot(_box(0))
+	assert_int(_screen.held().count).is_equal(9)
+	_click_slot(_bag(5))
+	assert_int(_inv.get_slot(5).count).is_equal(9)
+	assert_int(chest.storage().count_of("coal")).is_equal(0)
+
+
+## ❗️**The container destroyed while its panel is open.** `pop_to_pickup`'s order
+## puts `on_removed()` before `take_cargo()` and before `queue_free()`, so the panel
+## closes while everything is still valid and the cursor stack lands in the
+## PLAYER's inventory rather than in a dying chest.
+func test_popping_the_open_chest_closes_the_panel_and_saves_the_held_stack() -> void:
+	var spawner: Node2D = auto_free(PickupSpawnerScript.new())
+	add_child(spawner)
+	var chest := _chest()
+	chest.accept_item("magmatite", 40)
+	CharacterScreen.open_container(chest)
+	_click_slot(_box(0)) # 40 magmatite on the cursor.
+	assert_int(_screen.held().count).is_equal(40)
+
+	chest.pop_to_pickup()
+	assert_bool(_screen._container_panel.visible).is_false()
+	assert_bool(_screen.held().is_empty()).is_true()
+	assert_int(_inv.count_of("magmatite")).is_equal(40)
+	assert_object(_screen._container).is_null()
+
+
+## A chest destroyed across the map must not shut the panel you are using.
+func test_another_container_being_removed_leaves_this_panel_open() -> void:
+	var mine := _chest(Vector2i(100, 100))
+	var theirs := _chest(Vector2i(110, 100))
+	CharacterScreen.open_container(mine)
+	theirs.pop_to_pickup()
+	assert_bool(_screen._container_panel.visible).is_true()
+	assert_object(_screen._container).is_same(mine)
+
+
+## Both statics are inert with no screen in the tree, like `Hud.show_toast` — every
+## headless test that pops a chest would crash otherwise.
+func test_the_container_statics_are_inert_without_a_screen() -> void:
+	var chest := _chest()
+	_screen.free()
+	_screen = null
+	CharacterScreen.open_container(chest)
+	CharacterScreen.close_container(chest)
+	assert_bool(CharacterScreen.is_open).is_false()
+
+# --- Player.interact (3.6a) ---------------------------------------------------
+
+
+## ❗️Duck-typed on `has_method(&"storage")`, not `as Chest`, so 4.x's next
+## container needs no edit in the player.
+func test_interact_opens_the_container_under_the_cursor() -> void:
+	var chest := _chest()
+	_player.global_position = (Vector2(100, 100) + Vector2(0.5, 0.5)) * TileLayout.TILE_SIZE
+	assert_bool(_player.interact(_screen_terrain, Vector2i(100, 100))).is_true()
+	assert_bool(CharacterScreen.is_open).is_true()
+	assert_object(_screen._container).is_same(chest)
+
+
+func test_interact_on_an_empty_cell_finds_nothing() -> void:
+	_chest() # A Terrain exists, but not at this cell.
+	_player.global_position = (Vector2(100, 100) + Vector2(0.5, 0.5)) * TileLayout.TILE_SIZE
+	assert_bool(_player.interact(_screen_terrain, Vector2i(101, 100))).is_false()
+	assert_bool(CharacterScreen.is_open).is_false()
+
+
+## A deployable that is not a container has no `storage()`, so it is not one.
+func test_interact_on_a_non_container_deployable_finds_nothing() -> void:
+	if _screen_terrain == null:
+		_screen_terrain = auto_free(TerrainScript.new())
+		add_child(_screen_terrain)
+	var cell := Vector2i(100, 100)
+	_screen_terrain.set_tile(cell + Vector2i.DOWN, "dirt")
+	var torch: Deployable = auto_free(TorchScene.instantiate())
+	torch.setup(cell)
+	add_child(torch)
+	assert_bool(torch.register(_screen_terrain)).is_true()
+	_player.global_position = (Vector2(cell) + Vector2(0.5, 0.5)) * TileLayout.TILE_SIZE
+	assert_bool(_player.interact(_screen_terrain, cell)).is_false()
+	assert_bool(CharacterScreen.is_open).is_false()
+
+
+## Out of reach is out of reach, the same rule mining and placement use.
+func test_interact_refuses_a_chest_out_of_reach() -> void:
+	_chest(Vector2i(100, 100))
+	_player.global_position = Vector2(0.0, 0.0)
+	assert_bool(_player.interact(_screen_terrain, Vector2i(100, 100))).is_false()
+	assert_bool(CharacterScreen.is_open).is_false()
