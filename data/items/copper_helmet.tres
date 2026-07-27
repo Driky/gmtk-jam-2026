@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_stats.gd" id="1_stats"]
+
+[resource]
+script = ExtResource("1_stats")
+display_name = "Copper Helmet"
+icon_color = Color(0.88, 0.58, 0.32, 1)
+use_kind = 0
+use_cooldown = 0.35
+mining_power = 1.0
+tool_tier = 1
+melee_damage = 1.0
+knockback = 30.0
+equip_slot = 1
+armor = 3.0

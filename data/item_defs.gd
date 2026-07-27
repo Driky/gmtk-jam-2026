@@ -91,6 +91,29 @@ const BEACON: ItemStats = preload("res://data/items/beacon.tres")
 ## `is_climbable` export, not a second script.
 const LADDER: ItemStats = preload("res://data/items/ladder.tres")
 
+## The first WEARABLE items (3.6a): one authored piece per equipment slot, so
+## every `Equipment.slot_accepts` branch has live data behind it rather than a
+## synthetic `ItemStats` built inside a test. Seven rather than eight because
+## `RING` is one authored value that fits both ring slots
+## ([ui.md](../docs/systems/ui.md) §Character screen).
+##
+## Authored like the bars — `icon_color`, modest melee/mining, no `place_scene` —
+## plus an `equip_slot` and an `armor` value. ⚠️ The seven rows sum to 15 but a
+## fully-equipped player carries **16**, because `copper_ring` fills both ring
+## slots; 16 is the figure the mitigation curve is read against
+## ([player-combat.md](../docs/systems/player-combat.md) §Taking damage).
+##
+## ⚠️ Deliberately absent from `Materials.LOOT_XP`, like the bars and the ammo:
+## crafted and equipment items are not an XP channel
+## ([progression.md](../docs/systems/progression.md) §XP).
+const COPPER_HELMET: ItemStats = preload("res://data/items/copper_helmet.tres")
+const COPPER_CHESTPLATE: ItemStats = preload("res://data/items/copper_chestplate.tres")
+const COPPER_GREAVES: ItemStats = preload("res://data/items/copper_greaves.tres")
+const COPPER_BOOTS: ItemStats = preload("res://data/items/copper_boots.tres")
+const COPPER_CLOAK: ItemStats = preload("res://data/items/copper_cloak.tres")
+const COPPER_RING: ItemStats = preload("res://data/items/copper_ring.tres")
+const COPPER_AMULET: ItemStats = preload("res://data/items/copper_amulet.tres")
+
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
@@ -111,6 +134,14 @@ const STATS: Dictionary = {
 	"chest": CHEST,
 	"beacon": BEACON,
 	"ladder": LADDER,
+	# Each earns an F3 give-item row for free — `giveable_ids` iterates this table.
+	"copper_helmet": COPPER_HELMET,
+	"copper_chestplate": COPPER_CHESTPLATE,
+	"copper_greaves": COPPER_GREAVES,
+	"copper_boots": COPPER_BOOTS,
+	"copper_cloak": COPPER_CLOAK,
+	"copper_ring": COPPER_RING,
+	"copper_amulet": COPPER_AMULET,
 }
 
 

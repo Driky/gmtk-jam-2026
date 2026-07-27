@@ -12,6 +12,20 @@ extends Resource
 ## branch anywhere in the player.
 enum UseKind { SWING, PROJECTILE }
 
+## Which equipment slot an item is worn in, `NONE` for everything that is not
+## wearable ([ui.md](../../docs/systems/ui.md) §Character screen).
+##
+## ❗️**A SEPARATE enum from `Equipment.Slot`, and `RING` is ONE value here.** The
+## panel has two ring slots; `Equipment.slot_accepts` answers true for both, so an
+## item never learns there are two and a second ring is never a second `.tres`.
+##
+## ❗️**This is why the field lives on `ItemStats` at all.** `ItemDefs.stats_for`
+## never returns null and both its fallbacks default to `NONE`, so every existing
+## authored item and every `Materials.ORDER` id is non-equippable with zero data
+## migration — and a `.tres` authored with a stray slot is caught by a test rather
+## than by wearing a conveyor.
+enum EquipSlot { NONE, HELMET, CHEST, LEGS, FEET, BACK, RING, NECKLACE }
+
 @export var display_name := ""
 ## Hotbar swatch until real art lands (4.2). Blocks draw their tile instead —
 ## only authored items reach this ([ui.md](../../docs/systems/ui.md) icon rules).
@@ -41,6 +55,13 @@ enum UseKind { SWING, PROJECTILE }
 ## ([automation.md](../../docs/systems/automation.md)) — the player reads its
 ## `size` and `support_dirs` to validate the placement before claiming a cell.
 @export var place_scene: PackedScene = null
+
+@export_group("Equipment")
+@export var equip_slot := EquipSlot.NONE
+## Damage reduction fed to `Player.mitigate` through `Equipment.armor_total()`
+## ([player-combat.md](../../docs/systems/player-combat.md) §Taking damage). Flat
+## points, not a fraction — the curve is the player's.
+@export var armor := 0.0
 
 @export_group("Ranged")
 ## What a PROJECTILE item fires. Ammo and mana costs are 4.2 — the placeholder
