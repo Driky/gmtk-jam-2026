@@ -406,8 +406,11 @@ func _on_player_died(respawn_seconds: float) -> void:
 	_announce("You died — respawning in %ds" % roundi(respawn_seconds))
 
 
-func _on_player_respawned() -> void:
-	_announce("Respawned at the Core")
+## Names where you actually woke up. The player hands over the FACT and the HUD
+## picks the words — a beacon (3.5c) can be halfway across the map, so a fixed
+## "at the Core" would be the banner lying about the one thing it reports.
+func _on_player_respawned(at_beacon: bool) -> void:
+	_announce("Respawned at a beacon" if at_beacon else "Respawned at the Core")
 
 
 ## A PERSISTENT count, not a toast. A miner runs its deposit dry while you are

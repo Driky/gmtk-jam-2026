@@ -6,6 +6,7 @@ extends GdUnitTestSuite
 const TerrainScript := preload("res://scripts/terrain/terrain.gd")
 const PlayerScript := preload("res://scripts/player/player.gd")
 const PlayerScene := preload("res://scenes/player.tscn")
+const BeaconScene := preload("res://scenes/automation/respawn_beacon.tscn")
 
 ## Playable, far from edges; NOWHERE is a rect that overlaps nothing relevant.
 const P := Vector2i(100, 100)
@@ -455,7 +456,7 @@ func test_respawn_restores_full_hp_and_grants_grace() -> void:
 	# Array, not an int: GDScript lambdas capture value types by COPY, so a
 	# `count += 1` inside one increments a copy and the assert reads 0 forever.
 	var respawns: Array[bool] = []
-	player.respawned.connect(func() -> void: respawns.append(true))
+	player.respawned.connect(func(at_beacon: bool) -> void: respawns.append(at_beacon))
 	player.take_damage(9999.0)
 	player._tick_respawn(Player.RESPAWN_TIME + 0.01)
 	assert_bool(player.is_dead()).is_false()
@@ -464,6 +465,146 @@ func test_respawn_restores_full_hp_and_grants_grace() -> void:
 	assert_bool(player.is_invulnerable()).is_true()
 	assert_int(respawns.size()).is_equal(1)
 	assert_bool(player.visible).is_true()
+
+# --- The respawn anchor (3.5c) ------------------------------------------------
+#
+# Net-new coverage: nothing before 3.5c put anything in the `core` group or
+# asserted a respawn POSITION, so `_tick_respawn`'s move was dead under test.
+
+
+## The Core, duck-typed. `core.gd` has no `class_name` and the anchor contract is
+## exactly one method, which is why the beacon answers `base_cell()` too rather
+## than adding a second shape for `_tick_respawn` to branch on.
+class CoreDouble:
+	extends Node2D
+
+	var anchor := Vector2i.ZERO
+
+
+	func base_cell() -> Vector2i:
+		return anchor
+
+
+func _core_at(cell: Vector2i) -> CoreDouble:
+	var node: CoreDouble = auto_free(CoreDouble.new())
+	node.anchor = cell
+	node.add_to_group(&"core")
+	add_child(node)
+	return node
+
+
+## No terrain and no registration: the anchor query is a GROUP query over world
+## positions, so joining the tree is the whole of what a beacon has to do.
+func _beacon_at(cell: Vector2i) -> RespawnBeacon:
+	var node: RespawnBeacon = auto_free(BeaconScene.instantiate())
+	node.setup(cell)
+	add_child(node)
+	return node
+
+
+## Feet on top of the anchor cell, clear of the surface tile — the 2.5 formula,
+## now shared by both anchors.
+func _feet_on(cell: Vector2i) -> Vector2:
+	return (Vector2(cell) + Vector2(0.5, 0.0)) * Player.TILE - Vector2(0.0, 12.0)
+
+
+func _die_at(player: Player, world_pos: Vector2) -> void:
+	# Respawning grants grace, so a second death in the same test has to get past
+	# it — the same clearing `test_a_dead_player_takes_no_further_damage` does.
+	player._invuln_left = 0.0
+	player.global_position = world_pos
+	player.take_damage(9999.0)
+	player._tick_respawn(Player.RESPAWN_TIME + 0.01)
+
+
+## Unchanged from 2.5: no beacon, no choice.
+func test_with_no_beacon_you_respawn_at_the_core() -> void:
+	_core_at(Vector2i(20, 60))
+	var player := _hurtable_player()
+
+	_die_at(player, Vector2(9000.0, 9000.0))
+
+	assert_vector(player.global_position).is_equal(_feet_on(Vector2i(20, 60)))
+
+
+## ❗️**Nearest to WHERE YOU FELL**, not most-recently-placed: build beacons across
+## the map and you come back at the one you died closest to. Both beacons are
+## further from the Core than from each other, so a Core-first implementation and
+## a first-in-group implementation both fail this.
+func test_you_respawn_at_the_beacon_nearest_to_where_you_died() -> void:
+	_core_at(Vector2i(20, 60))
+	var far := Vector2i(60, 100)
+	var near := Vector2i(140, 100)
+	_beacon_at(far)
+	_beacon_at(near)
+	var player := _hurtable_player()
+
+	_die_at(player, Vector2(near) * Player.TILE + Vector2(0.0, 30.0))
+
+	assert_vector(player.global_position).is_equal(_feet_on(near))
+
+
+## ❗️The read has to happen BEFORE the move. Measuring from the post-respawn
+## position would make every death after the first one sticky at whatever beacon
+## you last used, no matter where you actually fell.
+func test_the_distance_is_measured_from_the_corpse_not_from_the_last_respawn() -> void:
+	_core_at(Vector2i(20, 60))
+	var first := Vector2i(60, 100)
+	var second := Vector2i(140, 100)
+	_beacon_at(first)
+	_beacon_at(second)
+	var player := _hurtable_player()
+
+	_die_at(player, Vector2(first) * Player.TILE)
+	assert_vector(player.global_position).is_equal(_feet_on(first))
+
+	_die_at(player, Vector2(second) * Player.TILE)
+	assert_vector(player.global_position).is_equal(_feet_on(second))
+
+
+## Removing your last beacon must fall back rather than strand you: the group is
+## what makes that automatic, and `pick_target`'s validity filter is what covers
+## the frame between `queue_free` and the actual delete.
+func test_removing_the_last_beacon_falls_back_to_the_core() -> void:
+	_core_at(Vector2i(20, 60))
+	var beacon := _beacon_at(Vector2i(140, 100))
+	var player := _hurtable_player()
+
+	_die_at(player, Vector2(140.0, 100.0) * Player.TILE)
+	assert_vector(player.global_position).is_equal(_feet_on(Vector2i(140, 100)))
+
+	beacon.pop_to_pickup()
+	await get_tree().process_frame
+
+	_die_at(player, Vector2(140.0, 100.0) * Player.TILE)
+	assert_vector(player.global_position).is_equal(_feet_on(Vector2i(20, 60)))
+
+
+## The HUD announces off this payload, so the banner would otherwise say "at the
+## Core" while you stand at a beacon halfway across the map.
+func test_the_respawn_signal_reports_which_anchor_it_was() -> void:
+	_core_at(Vector2i(20, 60))
+	var player := _hurtable_player()
+	# Array, not a bool: lambdas capture value types by COPY (see above).
+	var at_beacon: Array[bool] = []
+	player.respawned.connect(func(flag: bool) -> void: at_beacon.append(flag))
+
+	_die_at(player, Vector2(140.0, 100.0) * Player.TILE)
+	_beacon_at(Vector2i(140, 100))
+	_die_at(player, Vector2(140.0, 100.0) * Player.TILE)
+
+	assert_array(at_beacon).contains_exactly([false, true])
+
+
+## No anchor at all — no Core, no beacon — leaves you where you fell rather than
+## teleporting you to the origin. 2.5's guard, still load-bearing.
+func test_with_nothing_to_anchor_to_you_stay_where_you_fell() -> void:
+	var player := _hurtable_player()
+	var fell_at := Vector2(1234.0, 567.0)
+
+	_die_at(player, fell_at)
+
+	assert_vector(player.global_position).is_equal(fell_at)
 
 # --- Level-up (2.6) ----------------------------------------------------------
 

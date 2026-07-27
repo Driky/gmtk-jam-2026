@@ -8,7 +8,10 @@ signal mana_changed(current: float, max_value: float)
 ## Died, with the seconds until respawn — the HUD announces off this (4.5
 ## replaces the banner with a real death screen).
 signal died(respawn_seconds: float)
-signal respawned
+## Respawned, and whether it was at a beacon rather than the Core (3.5c). The
+## payload exists because the HUD's announcement would otherwise name the Core
+## while you stand at a beacon — the WORDING stays in the HUD, the fact is here.
+signal respawned(at_beacon: bool)
 
 const TILE := TileLayout.TILE_SIZE
 
@@ -236,22 +239,51 @@ func _drop_loot_bag() -> void:
 	get_parent().add_child(bag)
 
 
+## Where you come back: the nearest beacon to where you fell, else the Core.
+##
+## ❗️A GROUP QUERY, not a `static var instance` and not most-recently-placed.
+## A static would dangle across a run restart — deployables are children of `Main`
+## and are freed with the scene reload without `on_removed` ever running, so it
+## would need its own `reset_run` hook where a group dies with the scene for free
+## (`Automation.reset_run`'s docstring makes the same argument). Most-recent is
+## also not stable across [save.md](../../docs/systems/save.md)'s
+## restore-in-file-order — the same reason the tick iterates row-major.
+##
+## And it is the better rule: build beacons across the map and you come back at
+## whichever one you died closest to.
+##
+## Both anchors answer `base_cell()`, so the caller never asks which it got.
+## `core.gd` has no `class_name`, hence `Node2D`.
+func _respawn_anchor(from: Vector2) -> Node2D:
+	# `Turret.pick_target` is the repo's one nearest-selector: a pure static over an
+	# untyped, is_instance_valid-filtered loop. `Waves.debug_poke_nearest` already
+	# reuses it generically at INF range; a second loop here would be the copy that
+	# forgets the freed-instance filter.
+	var beacon := Turret.pick_target(get_tree().get_nodes_in_group(&"respawn_beacon"), from, INF)
+	if beacon != null:
+		return beacon
+	return get_tree().get_first_node_in_group(&"core") as Node2D
+
+
 func _tick_respawn(delta: float) -> void:
 	_respawn_left -= delta
 	if _respawn_left > 0.0:
 		return
 	_respawn_left = 0.0
-	var core := get_tree().get_first_node_in_group(&"core") as Node2D
-	if core != null:
-		# On top of the Core's anchor cell, feet clear of the surface tile.
-		global_position = (Vector2(core.base_cell()) + Vector2(0.5, 0.0)) * TILE - Vector2(0.0, 12.0)
+	# ❗️Read BEFORE the move below overwrites it. No `_death_position` member is
+	# needed because `_step` returns early while dead, so the corpse has not moved
+	# since `_die` — `_drop_loot_bag` already depends on exactly that.
+	var anchor := _respawn_anchor(global_position)
+	if anchor != null:
+		# On top of the anchor's cell, feet clear of the surface tile.
+		global_position = (Vector2(anchor.base_cell()) + Vector2(0.5, 0.0)) * TILE - Vector2(0.0, 12.0)
 	current_hp = Progression.get_stat("max_hp")
 	visible = true
 	_visual.modulate.a = 1.0
 	set_deferred(&"collision_layer", COLLISION_LAYER_PLAYER)
 	# Land on your feet, not in a mob's mouth.
 	_invuln_left = INVULN_TIME
-	respawned.emit()
+	respawned.emit(anchor is RespawnBeacon)
 
 
 ## Touching a mob hurts, with no threat required — a wave you can walk through
