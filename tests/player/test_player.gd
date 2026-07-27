@@ -1307,3 +1307,111 @@ func test_a_walkers_hit_still_lands_through_the_full_authored_set() -> void:
 	var taken := PlayerScript.mitigate(8.0, equipment.armor_total())
 	assert_float(taken).is_greater(0.0)
 	assert_float(taken).is_less(8.0)
+
+# --- Movement while a screen is open (3.6a) ----------------------------------
+#
+# ❗️**Blocking movement is not an early return.** Skipping `_move` skips the
+# gravity block AND `move_and_slide()`, so the player would freeze in mid-air. The
+# input READS are what get zeroed, and these are the five sites.
+
+
+## Never leave either flag set for the next suite — the player reads them.
+func _with_screen_open(body: Callable) -> void:
+	CharacterScreen.is_open = true
+	body.call()
+	CharacterScreen.is_open = false
+
+
+func test_a_held_direction_does_not_move_you_while_a_screen_is_open() -> void:
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	_while_holding(
+		&"move_right",
+		func() -> void:
+			player._move(CLIMB_STEP)
+			assert_float(player.velocity.x).is_greater(0.0)
+			_with_screen_open(
+				func() -> void:
+					player._move(CLIMB_STEP)
+					assert_float(player.velocity.x).is_equal(0.0),
+			),
+	)
+
+
+## ❗️**The Space bug.** `jump` is Space and a focused `Button` consumes
+## `ui_accept`, so pressing Space over a tab button would activate it *and* jump.
+func test_space_does_not_jump_while_a_screen_is_open() -> void:
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	_terrain.set_tile(P + Vector2i.DOWN, "dirt")
+	player.global_position = (Vector2(P) + Vector2(0.5, 0.5)) * TileLayout.TILE_SIZE
+	_while_holding(
+		&"jump",
+		func() -> void:
+			_with_screen_open(
+				func() -> void:
+					player._move(CLIMB_STEP)
+					# No buffered press left behind either, or it fires on close.
+					assert_float(player._jump_buffer).is_equal(0.0)
+					assert_float(player.velocity.y).is_greater_equal(0.0),
+			),
+	)
+
+
+## ❗️Gravity still runs, which is the whole reason this is not a guard at the top of
+## `_step`: a suppressed `_move` would leave the player hanging in mid-air.
+func test_gravity_still_applies_while_a_screen_is_open() -> void:
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.global_position = (Vector2(P) + Vector2(0.5, 0.5)) * TileLayout.TILE_SIZE
+	_with_screen_open(
+		func() -> void:
+			player._move(CLIMB_STEP)
+			assert_float(player.velocity.y).is_greater(0.0),
+	)
+
+
+func test_a_held_climb_key_does_not_grab_a_ladder_while_a_screen_is_open() -> void:
+	var player := _climber_at(P)
+	_while_holding(
+		&"move_up",
+		func() -> void:
+			_with_screen_open(
+				func() -> void:
+					assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+					assert_float(player.velocity.y).is_equal(0.0),
+			)
+			# ...and it grabs again the moment the screen closes.
+			assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true(),
+	)
+
+
+## The climb branch decays the jump buffer itself, so the suppression has to reach
+## that read too — otherwise stepping off the top fires a jump you never pressed.
+func test_the_climb_branchs_jump_read_is_suppressed_too() -> void:
+	var player := _climber_at(P)
+	player._climbing = true
+	_while_holding(
+		&"jump",
+		func() -> void:
+			_with_screen_open(
+				func() -> void:
+					assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true()
+					assert_float(player._jump_buffer).is_equal(0.0),
+			),
+	)
+
+
+## ⚠️ The regression pin on the two-predicate split: the debug menu has always let
+## you walk around while its panel is up, and that must not change.
+func test_the_debug_menu_still_allows_movement() -> void:
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	DebugMenu.is_open = true
+	_while_holding(
+		&"move_right",
+		func() -> void:
+			player._move(CLIMB_STEP)
+			assert_float(player.velocity.x).is_greater(0.0),
+	)
+	DebugMenu.is_open = false

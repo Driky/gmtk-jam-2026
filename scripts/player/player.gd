@@ -164,8 +164,10 @@ func _step(delta: float) -> void:
 	_contact_damage()
 	_use_left = maxf(_use_left - delta, 0.0)
 	# Gameplay polls Input directly rather than going through the UI, so a click
-	# on a debug button would otherwise also swing at the world behind it.
-	if DebugMenu.is_open:
+	# on a debug button would otherwise also swing at the world behind it. One
+	# shared predicate rather than an OR that grows a term per screen
+	# ([ui.md](../../docs/systems/ui.md) §An open gameplay screen).
+	if UiState.blocks_gameplay_actions():
 		return
 	if Input.is_action_pressed("mine"):
 		_use(delta)
@@ -465,12 +467,45 @@ func rotate_placement() -> void:
 	var next := FACING_CYCLE.find(place_facing) + 1
 	place_facing = FACING_CYCLE[next % FACING_CYCLE.size()]
 
+# --- Movement input ----------------------------------------------------------
+#
+# ❗️**Blocking movement is not a guard at the top of `_step`.** Skipping `_move`
+# skips the gravity block *and* `move_and_slide()`, so the player freezes in
+# mid-air. It has to zero the input READS, which is these three wrappers over five
+# sites ([ui.md](../../docs/systems/ui.md) §An open gameplay screen).
+#
+# ❗️**Skipping this ships the Space bug.** `jump` is Space and a focused `Button`
+# consumes `ui_accept`, so pressing Space over a tab button in the character window
+# activates it *and* jumps the player.
+
+
+func _move_axis() -> float:
+	return 0.0 if UiState.blocks_movement() else Input.get_axis("move_left", "move_right")
+
+
+## Both the buffer stamp in `_move` and the one in the climb branch go through here,
+## so a screen opened mid-jump cannot leave a buffered press behind either.
+func _jump_pressed() -> bool:
+	return not UiState.blocks_movement() and Input.is_action_just_pressed("jump")
+
+
+func _climb_axis() -> float:
+	return 0.0 if UiState.blocks_movement() else Input.get_axis("move_up", "move_down")
+
+
+## The `_climb_locked` release check: a fresh up/down press is what clears the lock,
+## and while a screen is open there are no fresh presses.
+func _climb_repress() -> bool:
+	if UiState.blocks_movement():
+		return false
+	return Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("move_down")
+
 
 func _move(delta: float) -> void:
 	# While stunned, velocity.x is the knockback's — writing input over it would
 	# erase the shove on the very tick it lands.
 	if _stun_left <= 0.0:
-		velocity.x = Input.get_axis("move_left", "move_right") * Progression.get_stat("move_speed")
+		velocity.x = _move_axis() * Progression.get_stat("move_speed")
 	# Before the gravity block, and it owns velocity.y for the frame when it takes
 	# it — the whole of "no gravity while climbing" is this early return.
 	if _try_climb(Terrain, delta):
@@ -485,7 +520,7 @@ func _move(delta: float) -> void:
 	else:
 		_coyote = maxf(_coyote - delta, 0.0)
 		velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL_SPEED)
-	if Input.is_action_just_pressed("jump"):
+	if _jump_pressed():
 		_jump_buffer = JUMP_BUFFER
 	else:
 		_jump_buffer = maxf(_jump_buffer - delta, 0.0)
@@ -533,13 +568,11 @@ func _try_climb(terrain: Node, delta: float) -> bool:
 			velocity.y = 0.0
 		_climbing = false
 		return false
-	var axis := Input.get_axis("move_up", "move_down")
+	var axis := _climb_axis()
 	# ❗️A jump has to complete. Only a FRESH press re-grabs, so the key that was
 	# already down when you jumped cannot re-latch and cancel it.
 	if _climb_locked:
-		if not (
-			Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("move_down")
-		):
+		if not _climb_repress():
 			return false
 		_climb_locked = false
 	if not _climbing:
@@ -555,7 +588,7 @@ func _try_climb(terrain: Node, delta: float) -> bool:
 	# ❗️Decayed HERE too. The early return skips the gravity block, which is where
 	# the buffer normally ages out — climb for five seconds after a stray jump
 	# press and you would step off the top into an instant buffered jump.
-	if Input.is_action_just_pressed("jump"):
+	if _jump_pressed():
 		_jump_buffer = JUMP_BUFFER
 	else:
 		_jump_buffer = maxf(_jump_buffer - delta, 0.0)

@@ -106,6 +106,14 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	# ⚠️ Gated at 3.6a. `queue_redraw` was unconditional every frame, so with a
+	# screen open this slid a green/red placement ghost around the world while you
+	# sorted your bag — and the click it was promising is blocked anyway.
+	if UiState.blocks_gameplay_actions():
+		if visible:
+			visible = false
+		return
+	visible = true
 	var target: Vector2i = _player.target_tile()
 	if target != _target:
 		_target = target

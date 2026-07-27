@@ -196,6 +196,14 @@ static func set_inspector_enabled(enabled: bool) -> void:
 func _refresh_inspector() -> void:
 	if not inspector_enabled:
 		return
+	# ⚠️ Gated at 3.6a, and it is not just tidiness. `_hovered_slot` hit-tests only
+	# the ten hotbar rects, so hovering the character screen's grid falls through to
+	# a `Terrain.get_entity` probe plus a full enemies-group loop every frame — and
+	# names the tile *behind* the window, invisible under layer 5 and still costing.
+	# The slot tooltips are the readout over the grid.
+	if UiState.blocks_gameplay_actions():
+		_inspect_label.visible = false
+		return
 	var at := get_viewport().get_mouse_position()
 	var text := _inspect_text(at)
 	_inspect_label.visible = text != ""
