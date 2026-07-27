@@ -77,6 +77,13 @@ const TURRET: ItemStats = preload("res://data/items/turret.tres")
 ## `support_dirs = 4` as the turret — it is a floor tile that bites.
 const SPIKE_TRAP: ItemStats = preload("res://data/items/spike_trap.tres")
 
+## The two Utility deployables (3.5c) — the only category that neither ticks nor
+## fights ([automation.md](../docs/systems/automation.md) §Categories). The chest
+## is the first N-slot container and what 3.6's container view binds to; the
+## beacon overrides where you respawn.
+const CHEST: ItemStats = preload("res://data/items/chest.tres")
+const BEACON: ItemStats = preload("res://data/items/beacon.tres")
+
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
@@ -94,6 +101,8 @@ const STATS: Dictionary = {
 	"iron_ammo": IRON_AMMO,
 	"turret": TURRET,
 	"spike_trap": SPIKE_TRAP,
+	"chest": CHEST,
+	"beacon": BEACON,
 }
 
 

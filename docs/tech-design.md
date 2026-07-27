@@ -57,6 +57,8 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 | Machines take ore via `Terrain.extract_reserve` (1:1, no drops, no XP), not `damage_tile` | [systems/terrain.md](systems/terrain.md) |
 | Recipes are one static table (`data/recipe_defs.gd`), map-shaped inputs; stations route by item id | [systems/progression.md](systems/progression.md) |
 | Power = radius coverage grids (generator + relay), brownout `supply/demand` scaling | [systems/automation.md](systems/automation.md) |
+| Containers own an `Inventory` at their own slot count (chest = 20); `storage()` is the UI seam | [systems/automation.md](systems/automation.md) |
+| Respawn anchor = nearest beacon to the death position by group query, else the Core | [systems/player-combat.md](systems/player-combat.md) |
 | One mixed skill tree (recipes + leveled buffs) as Resource nodes; crafting range incl. nearby containers | [systems/progression.md](systems/progression.md) |
 | Tabbed character screen (Inventory/Crafting/Tree) with direct hotkeys; power overlay hotkey | [systems/ui.md](systems/ui.md) |
 | Pause: menu interactive, gameplay actions blocked | [systems/ui.md](systems/ui.md) |

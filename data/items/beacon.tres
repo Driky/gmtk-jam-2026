@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemStats" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_stats.gd" id="1_stats"]
+[ext_resource type="PackedScene" path="res://scenes/automation/respawn_beacon.tscn" id="2_beacon_scene"]
+
+[resource]
+script = ExtResource("1_stats")
+display_name = "Respawn Beacon"
+icon_color = Color(0.55, 0.9, 0.75, 1)
+use_kind = 0
+use_cooldown = 0.35
+mining_power = 1.0
+tool_tier = 1
+melee_damage = 1.0
+knockback = 30.0
+place_scene = ExtResource("2_beacon_scene")

@@ -37,5 +37,7 @@ Recipes span tiers across automation / logistics / power / defense / components,
 ## Crafting range
 All crafting-cost checks — hand crafting, player-initiated station crafting, and tree `resource_cost` unlocks — draw from player inventory **plus containers within a radius of the player**, via one reused query: `Items.gather_available(player_pos)`.
 
+"Containers" is the **chest** (3.5c), read through `Chest.storage()` — a live `Inventory`, so the query walks the same model as the player's own and the 3.6 UI binds the same `slot_changed` ([automation.md](automation.md) §Categories → Utility). The query itself lands at 3.6.
+
 ## Item list (jam targets)
 Ores, bars, coal, components (gear, circuit-ish), tools ×3 tiers, 1 melee weapon line, 1 bow + arrows, 1 spell tome, ammo, fuel. Equipment slots (armor/accessories) exist in the UI; stat-granting armor content is optional (cut line in [plan.md](../plan.md)).
