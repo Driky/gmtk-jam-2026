@@ -5,13 +5,13 @@
 [node name="Turret" type="Node2D"]
 script = ExtResource("1_turret")
 size = Vector2i(1, 1)
-max_hp = 30.0
+max_hp = 50.0
 support_dirs = 4
 removal_hits = 2
 item_id = "turret"
 directional = false
 power_demand = 0.5
-fire_ticks = 10
+fire_ticks = 5
 range_tiles = 8.0
 
 [node name="Visual" type="ColorRect" parent="."]
