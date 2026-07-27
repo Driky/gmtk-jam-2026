@@ -468,7 +468,24 @@ func test_the_defense_row_leaves_every_turret_powered_and_shooting() -> void:
 	add_child(player)
 
 	var built: Dictionary = menu.build_defense_chain()
-	automation.step_tick() # Lights the generators and solves the grid.
+	# ❗️**`drain_support_queue()` is NOT part of `step_tick()`** — it runs from
+	# `_process`, which this fixture disables. A suite that only calls
+	# `step_tick()` never re-checks support at all, so an UNSUPPORTED deployable
+	# survives the whole test and pops the moment a real game runs a frame. That
+	# is precisely how the first version of this fixture went green while quietly
+	# dropping a generator on the floor in the browser.
+	for i in 10:
+		automation.drain_support_queue()
+		automation.step_tick()
+
+	assert_int(built.generators.size()).override_failure_message(
+		"A generator fell out of the world — air is not support",
+	).is_equal(DebugMenuScript.CHAIN_GENERATORS)
+	assert_int(built.turrets.size()).is_equal(DebugMenuScript.CHAIN_TURRETS)
+	for node: Deployable in built.chain + built.generators + built.turrets:
+		assert_bool(is_instance_valid(node)).override_failure_message(
+			"A machine popped to a pickup — it was built somewhere nothing holds it up",
+		).is_true()
 
 	for turret: Deployable in built.turrets:
 		assert_bool(turret.is_powered()).override_failure_message(
