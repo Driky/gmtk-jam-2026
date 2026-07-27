@@ -942,3 +942,127 @@ func test_a_removed_cell_is_free_immediately() -> void:
 	var replacement: Torch = auto_free(TorchScene.instantiate())
 	replacement.setup(P)
 	assert_bool(replacement.register(_terrain)).is_true()
+
+# --- Climbing (3.5b) ---------------------------------------------------------
+
+const LadderScene := preload("res://scenes/automation/ladder.tscn")
+const CLIMB_STEP := 1.0 / 60.0
+
+
+## A player standing in the middle of cell `cell`, with a registered ladder in
+## the same cell. `_try_climb` floors the player's CENTRE to a cell, so the
+## position has to be the cell centre rather than its corner.
+func _climber_at(cell: Vector2i, with_ladder := true) -> Player:
+	if with_ladder:
+		var ladder: Ladder = auto_free(LadderScene.instantiate())
+		ladder.setup(cell)
+		add_child(ladder)
+		assert_bool(ladder.register(_terrain)).is_true()
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.global_position = (Vector2(cell) + Vector2(0.5, 0.5)) * TileLayout.TILE_SIZE
+	return player
+
+
+## Hold `action` for the body of `callable`, then let go. `Input.action_press`
+## is the only way to exercise the latch without a real keyboard, and a leaked
+## held action would poison every later test in the run.
+func _while_holding(action: StringName, body: Callable) -> void:
+	Input.action_press(action)
+	body.call()
+	Input.action_release(action)
+
+
+## ❗️The latch. Standing in a ladder cell is NOT climbing — otherwise walking
+## past a ladder on flat ground, or brushing one mid-jump, sticks you to it.
+func test_standing_in_a_ladder_cell_with_no_input_does_not_climb() -> void:
+	var player := _climber_at(P)
+	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+
+
+func test_holding_up_in_a_ladder_cell_climbs_at_climb_speed() -> void:
+	var player := _climber_at(P)
+	_while_holding(
+		&"move_up",
+		func() -> void:
+			assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true()
+			assert_float(player.velocity.y).is_equal_approx(-Player.CLIMB_SPEED, 0.001),
+	)
+
+
+func test_holding_down_in_a_ladder_cell_descends() -> void:
+	var player := _climber_at(P)
+	_while_holding(
+		&"move_down",
+		func() -> void:
+			assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true()
+			assert_float(player.velocity.y).is_equal_approx(Player.CLIMB_SPEED, 0.001),
+	)
+
+
+## Once engaged, the latch holds with no key down — that is what lets you stop
+## halfway up a shaft and hang there instead of sliding back down.
+func test_the_latch_holds_once_engaged_and_hangs_still() -> void:
+	var player := _climber_at(P)
+	_while_holding(&"move_up", func() -> void: player._try_climb(_terrain, CLIMB_STEP))
+	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true()
+	assert_float(player.velocity.y).is_equal(0.0)
+
+
+## And it drops the moment you are out of the cell, so nothing keeps hanging in
+## mid-air after the column ends.
+func test_leaving_the_ladder_cell_drops_the_latch() -> void:
+	var player := _climber_at(P)
+	_while_holding(&"move_up", func() -> void: player._try_climb(_terrain, CLIMB_STEP))
+	player.global_position += Vector2(0.0, -4.0 * TileLayout.TILE_SIZE)
+	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+
+
+## A cell with no ladder in it is not climbable however hard you hold up — and a
+## non-climbable deployable in the cell is not one either.
+func test_a_torch_is_not_a_ladder() -> void:
+	var player := _climber_at(P, false)
+	_torch_at(P)
+	_while_holding(
+		&"move_up",
+		func() -> void: assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false(),
+	)
+
+
+## ❗️A hit knocks you off. `apply_knockback` writes `velocity.y = -HURT_LIFT`,
+## so an unguarded climb would erase the lift on the tick it lands — the same
+## bug `_stun_left` already guards `velocity.x` against.
+func test_a_hit_knocks_you_off_the_ladder_instead_of_erasing_the_lift() -> void:
+	var player := _climber_at(P)
+	_while_holding(
+		&"move_up",
+		func() -> void:
+			assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true()
+			player.apply_knockback(Vector2.RIGHT, 140.0)
+			assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+			assert_float(player.velocity.y).is_equal(-Player.HURT_LIFT),
+	)
+
+
+## ❗️The climb's early return skips the gravity block, which is where the jump
+## buffer normally ages out. Without a decay of its own, climbing for a while
+## after a stray jump press fires an instant buffered jump the moment you step
+## off the top.
+func test_the_jump_buffer_still_decays_while_climbing() -> void:
+	var player := _climber_at(P)
+	_while_holding(&"move_up", func() -> void: player._try_climb(_terrain, CLIMB_STEP))
+	player._jump_buffer = Player.JUMP_BUFFER
+	# One frame longer than the buffer: it must be spent, not banked.
+	player._try_climb(_terrain, Player.JUMP_BUFFER + CLIMB_STEP)
+	assert_float(player._jump_buffer).is_equal(0.0)
+
+
+## Jumping off releases the latch and hands the frame back to the EXISTING
+## coyote + buffer path, which is why stepping off a ladder needs no second
+## jump implementation.
+func test_a_buffered_jump_releases_the_climb() -> void:
+	var player := _climber_at(P)
+	_while_holding(&"move_up", func() -> void: player._try_climb(_terrain, CLIMB_STEP))
+	player._jump_buffer = Player.JUMP_BUFFER
+	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+	assert_float(player._coyote).is_equal(Player.COYOTE_TIME)

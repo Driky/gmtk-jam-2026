@@ -7,7 +7,15 @@ Owner of: player controller, mining interaction, inventory & pickups, placement,
 
 **HP/mana stub (1.7):** `current_hp` / `current_mana` on the player — clamped setters emitting `health_changed(current, max_value)` / `mana_changed(current, max_value)`, seeded from `Progression.get_stat` in `_ready`. Combat (Day 2) only mutates the fields; HUD binding is owned by [ui.md](ui.md).
 
-**Locked numbers (1.6 — feel defaults, tune freely):** move 110 px/s instant (no accel) · gravity 1200, max fall 700 px/s (< 1 tile/frame at 60 fps — no tunneling) · jump −370 (~3.6-tile apex: clears 3, not 4) · coyote 0.10 s · jump buffer 0.12 s · collision box 12×22 px (fits 1-wide tunnels).
+**Locked numbers (1.6 — feel defaults, tune freely):** move 110 px/s instant (no accel) · gravity 1200, max fall 700 px/s (< 1 tile/frame at 60 fps — no tunneling) · jump −370 (~3.6-tile apex: clears 3, not 4) · coyote 0.10 s · jump buffer 0.12 s · collision box 12×22 px (fits 1-wide tunnels) · climb 90 px/s (3.5b).
+
+**Climbing (3.5b).** `W`/`S` on a climbable cell ([automation.md](automation.md) §Categories → Utility owns the ladder itself). `_move` gains **one early return** and no state machine: `_try_climb` takes the frame, writes `velocity.y` and skips the gravity block entirely.
+- ❗️**A grid query, not physics.** Deployables carry no collision bodies at all — a torch scene is a `Node2D` and a `ColorRect` — and the player's mask only sees the tilemap, so there is nothing for an area or a shapecast to detect. `_try_climb` asks `Deployable.climbable_at` for the cell under the player's centre, exactly as `loot_bag.gd` asks `Terrain.is_solid` directly instead of carrying a body.
+- ❗️**Latched, not automatic.** It engages only while `move_up`/`move_down` is held, then holds until you leave the cell, jump or take a hit — so you can stop halfway up a shaft and hang there. Automatic engagement would stick you to a ladder you walked past on flat ground, or brushed mid-jump.
+- ❗️**Gated on `_stun_left`, like `velocity.x` already is, and for the same reason.** `apply_knockback` writes `velocity.y = -HURT_LIFT`, so an unguarded climb would erase the shove on the very tick it lands (§Taking damage). A hit knocking you off the ladder is also the better feel.
+- ❗️**The jump buffer is decayed inside the climb branch.** The early return skips the gravity block, which is where it normally ages out — climb for five seconds after a stray jump press and you would step off the top into an instant buffered jump.
+- **Stepping off needs no second jump implementation**: a climbing frame stamps a fresh `_coyote`, and a buffered jump simply releases the latch and hands the frame back to the existing coyote + buffer path.
+- Fall damage is mobs-only ([enemies.md](enemies.md) §Pathfinding), so descending a long column costs the player nothing and needs no equivalent of the mob's `_air_top_y` reset.
 
 **Camera:** on the player scene; limits computed from `WorldConfig` (playable band × world height — never hardcoded pixels), position smoothing speed 8. Zoom cycling owned by [ui.md](ui.md).
 

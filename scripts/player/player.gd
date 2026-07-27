@@ -20,6 +20,9 @@ const MAX_FALL_SPEED := 700.0 ## < 1 tile/frame at 60 fps — no tunneling.
 const JUMP_VELOCITY := -370.0 ## ~3.6-tile apex: clears 3, not 4.
 const COYOTE_TIME := 0.10
 const JUMP_BUFFER := 0.12
+## Climb rate on a ladder, against a `move_speed` of 110: slower than walking, so
+## going up reads as deliberate, fast enough that a 20-rung shaft is not a chore.
+const CLIMB_SPEED := 90.0
 const REACH_RADIUS_PX := 4.5 * TILE ## Player center → tile center.
 const COLLISION_EXTENTS := Vector2(6.0, 11.0) ## 12×22 box, fits 1-wide tunnels.
 ## Physics layer 2 ("player" in project.godot) — restored after a death.
@@ -83,6 +86,11 @@ var place_facing := Vector2i.RIGHT
 
 var _coyote := 0.0
 var _jump_buffer := 0.0
+## On a ladder right now. ❗️A LATCH, not a per-frame answer: it engages on an
+## up/down press inside a climbable cell and holds until you leave the cell, jump
+## or take a hit. Without the latch, walking past a ladder on flat ground — or
+## brushing one mid-jump — would stick you to it.
+var _climbing := false
 ## Seconds until the active item may be used again — one clock for swings and
 ## shots alike, because ItemStats.use_cooldown is one knob.
 var _use_left := 0.0
@@ -216,6 +224,9 @@ func _tick_invulnerability(delta: float) -> void:
 func _die() -> void:
 	_respawn_left = RESPAWN_TIME
 	velocity = Vector2.ZERO
+	# Dropped with the velocity: respawning inside a ladder cell must not resume a
+	# climb nobody asked for.
+	_climbing = false
 	_drop_loot_bag()
 	# Also puts the Light child out — a corpse must not keep glowing. That's why
 	# there is no light code here; don't "fix" it by reaching into the node.
@@ -423,6 +434,11 @@ func _move(delta: float) -> void:
 	# erase the shove on the very tick it lands.
 	if _stun_left <= 0.0:
 		velocity.x = Input.get_axis("move_left", "move_right") * Progression.get_stat("move_speed")
+	# Before the gravity block, and it owns velocity.y for the frame when it takes
+	# it — the whole of "no gravity while climbing" is this early return.
+	if _try_climb(Terrain, delta):
+		move_and_slide()
+		return
 	if is_on_floor():
 		_coyote = COYOTE_TIME
 	else:
@@ -437,6 +453,50 @@ func _move(delta: float) -> void:
 		_coyote = 0.0
 		_jump_buffer = 0.0
 	move_and_slide()
+
+
+## Climb a ladder for this frame, or report that we are not on one. True means
+## `_move` skips gravity entirely and `velocity.y` is ours.
+##
+## ❗️**A grid query, not physics.** Deployables carry no collision bodies at all
+## (a torch scene is a `Node2D` and a `ColorRect`) and the player's mask only sees
+## the tilemap, so there is nothing to detect — this asks the entity dict directly,
+## exactly as `loot_bag.gd` asks `Terrain.is_solid` instead of carrying a body.
+##
+## Terrain is a parameter for the same reason `_hit_deployable` takes one: this
+## unit-tests on a fresh instance rather than against the live world.
+func _try_climb(terrain: Node, delta: float) -> bool:
+	# ❗️A hit knocks you off, and the guard is the same one `velocity.x` has for
+	# the same reason: `apply_knockback` writes `velocity.y = -HURT_LIFT`, so an
+	# unguarded climb would erase the shove on the very tick it lands. Being
+	# knocked off a ladder is also the better feel.
+	if _stun_left > 0.0:
+		_climbing = false
+		return false
+	if not Deployable.climbable_at(terrain, Vector2i((global_position / TILE).floor())):
+		_climbing = false
+		return false
+	var axis := Input.get_axis("move_up", "move_down")
+	if not _climbing:
+		if is_zero_approx(axis):
+			return false
+		_climbing = true
+	# ❗️Decayed HERE too. The early return skips the gravity block, which is where
+	# the buffer normally ages out — climb for five seconds after a stray jump
+	# press and you would step off the top into an instant buffered jump.
+	if Input.is_action_just_pressed("jump"):
+		_jump_buffer = JUMP_BUFFER
+	else:
+		_jump_buffer = maxf(_jump_buffer - delta, 0.0)
+	# Stepping off is the EXISTING coyote + buffer path, which is why jumping off a
+	# ladder needs no second jump implementation: hand it a fresh coyote window and
+	# let go of the frame.
+	_coyote = COYOTE_TIME
+	if _jump_buffer > 0.0:
+		_climbing = false
+		return false
+	velocity.y = axis * CLIMB_SPEED
+	return true
 
 
 func _mine(delta: float, stats: ItemStats) -> void:
