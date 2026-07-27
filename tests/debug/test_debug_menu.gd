@@ -239,6 +239,10 @@ func test_full_bright_tolerates_a_missing_light_map() -> void:
 # --- Factory rig (3.3) -------------------------------------------------------
 
 const TerrainScript := preload("res://scripts/terrain/terrain.gd")
+const MinerScene := preload("res://scenes/automation/miner.tscn")
+const FurnaceScene := preload("res://scenes/automation/furnace.tscn")
+const AmmoPressScene := preload("res://scenes/automation/ammo_press.tscn")
+const TurretScene := preload("res://scenes/automation/turret.tscn")
 
 
 ## The rig is the only practical way into a production chain in an exported
@@ -299,6 +303,51 @@ func test_the_factory_rig_hands_over_the_whole_chain() -> void:
 	assert_int(Items.player_inventory.count_of(DebugMenuScript.RIG_FUEL)).override_failure_message(
 		"The rig handed over no fuel, so nothing it built can ever run",
 	).is_equal(DebugMenuScript.RIG_FUEL_COUNT)
+
+
+## ❗️**The pocket has to actually FIT the chain it hands out**, and "22 was
+## already tight" is exactly the kind of thing that goes stale the next time a
+## machine joins the kit. Measured off the AUTHORED footprints rather than
+## restated as a number, so widening a machine fails here instead of in a browser.
+##
+## Right to left from the seam, along the pocket's bottom row:
+##   turret · ins · belt · ins · press · ins · belt · ins · furnace · ins · belt ·
+##   ins · miner · ore
+func test_the_pocket_is_wide_enough_for_the_chain_the_kit_builds() -> void:
+	var machines := {
+		"miner": MinerScene,
+		"furnace": FurnaceScene,
+		"ammo_press": AmmoPressScene,
+		"turret": TurretScene,
+	}
+	var needed := DebugMenuScript.RIG_ORE_WIDTH
+	for id: String in machines:
+		needed += Deployable.scene_size(machines[id]).x
+	# Three links, each an extractor, a belt tile and a feeder.
+	needed += 3 * 3
+
+	assert_int(DebugMenuScript.RIG_WIDTH).override_failure_message(
+		"RIG_WIDTH %d cannot hold the %d cells the kit's chain needs"
+		% [DebugMenuScript.RIG_WIDTH, needed],
+	).is_greater_equal(needed)
+
+
+## The two links 3.5a added. Named explicitly rather than left to the loop above,
+## because the loop only proves the kit is self-consistent — not that the chain
+## reaches all the way to something that shoots.
+func test_the_kit_reaches_the_end_of_the_chain() -> void:
+	assert_bool(DebugMenuScript.RIG_KIT.has("ammo_press")).is_true()
+	assert_bool(DebugMenuScript.RIG_KIT.has("turret")).is_true()
+
+
+## The trap needs no rig row: an `ItemDefs.STATS` entry earns it a give-item row
+## for free, which is the whole reason that dropdown exists.
+func test_every_defense_deployable_is_reachable_in_an_exported_build() -> void:
+	var ids := DebugMenuScript.giveable_ids()
+	for id: String in ["turret", "spike_trap", "ammo_press", "copper_ammo", "iron_ammo"]:
+		assert_bool(ids.has(id)).override_failure_message(
+			"'%s' cannot be obtained in an exported build" % id,
+		).is_true()
 
 
 ## No player in the tree (a headless tool, or the beat after a death) must be a

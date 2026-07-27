@@ -49,7 +49,15 @@ const GIVE_DEFAULT_COUNT := 20
 const RIG_ORE_MATERIAL := "copper_deposit"
 const RIG_ORE_WIDTH := 3
 const RIG_HEIGHT := 4
-const RIG_WIDTH := 22
+## Wide enough for the FOUR-machine chain 3.5a made possible, laid right to left
+## from the seam along the pocket's bottom row:
+##
+##     turret ins belt ins [press 2] ins belt ins [furnace 2] ins belt ins [miner 3] [ore 3]
+##
+## which is 20 cells with a single belt tile per link. At the old 22 that left
+## two spare and no room to make a mistake; this is that layout with three belt
+## tiles per link plus slack, measured off the footprints rather than guessed.
+const RIG_WIDTH := 30
 ## Clear of the player's own body, so the pocket does not carve him out of the
 ## floor he is standing on.
 const RIG_OFFSET := Vector2i(3, 1)
@@ -61,11 +69,19 @@ const RIG_OFFSET := Vector2i(3, 1)
 ## became a chain that can never run: `STARTING_KIT` hands out no machines at
 ## all, and 3.6's crafting does not exist yet — so an exported build had no way
 ## to make a single bar ([automation.md](../../docs/systems/automation.md) §Power).
+##
+## ❗️**The ammo press and the turret joined at 3.5a** for the same reason: they
+## are the two new links in the chain this rig exists to demonstrate, and an
+## exported build has no other way to reach them ([ui.md](../../docs/systems/ui.md)).
+## The spike trap needs nothing here — its `ItemDefs.STATS` row puts it in the
+## give-item dropdown for free.
 const RIG_KIT: Array[String] = [
 	"miner",
 	"inserter",
 	"conveyor_t1",
 	"furnace",
+	"ammo_press",
+	"turret",
 	"generator",
 	"relay",
 ]
