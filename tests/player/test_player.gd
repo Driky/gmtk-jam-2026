@@ -952,12 +952,16 @@ const CLIMB_STEP := 1.0 / 60.0
 ## A player standing in the middle of cell `cell`, with a registered ladder in
 ## the same cell. `_try_climb` floors the player's CENTRE to a cell, so the
 ## position has to be the cell centre rather than its corner.
-func _climber_at(cell: Vector2i, with_ladder := true) -> Player:
+##
+## `rungs` builds a column DOWNWARD from `cell` — so `cell` is always the TOP
+## rung, which is the one the ladder-top floor cares about.
+func _climber_at(cell: Vector2i, with_ladder := true, rungs := 1) -> Player:
 	if with_ladder:
-		var ladder: Ladder = auto_free(LadderScene.instantiate())
-		ladder.setup(cell)
-		add_child(ladder)
-		assert_bool(ladder.register(_terrain)).is_true()
+		for i in rungs:
+			var ladder: Ladder = auto_free(LadderScene.instantiate())
+			ladder.setup(cell + Vector2i.DOWN * i)
+			add_child(ladder)
+			assert_bool(ladder.register(_terrain)).is_true()
 	var player: Player = auto_free(PlayerScene.instantiate())
 	add_child(player)
 	player.global_position = (Vector2(cell) + Vector2(0.5, 0.5)) * TileLayout.TILE_SIZE
@@ -1066,3 +1070,104 @@ func test_a_buffered_jump_releases_the_climb() -> void:
 	player._jump_buffer = Player.JUMP_BUFFER
 	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
 	assert_float(player._coyote).is_equal(Player.COYOTE_TIME)
+
+# --- Standing on top of a column (3.5b follow-up) ----------------------------
+
+
+## A player standing ON TOP of the top rung of a column: feet flush with the
+## rung cell's top edge, centre in the cell ABOVE it.
+func _stander_on(cell: Vector2i, rungs := 1) -> Player:
+	var player := _climber_at(cell, true, rungs)
+	player.global_position.y = cell.y * TileLayout.TILE_SIZE - Player.COLLISION_EXTENTS.y
+	return player
+
+
+## The virtual floor: a falling player is caught at the rung's top edge, not one
+## frame past it, and arrives with no residual downward velocity.
+func test_falling_onto_a_column_top_clamps_the_feet_and_zeroes_velocity() -> void:
+	var player := _climber_at(P)
+	var edge := float(P.y * TileLayout.TILE_SIZE)
+	player.global_position.y = edge - Player.COLLISION_EXTENTS.y - 2.0
+	player.velocity.y = 300.0
+	assert_bool(player._stand_on_climbable(_terrain, CLIMB_STEP)).is_true()
+	assert_float(player.global_position.y).is_equal_approx(edge - Player.COLLISION_EXTENTS.y, 0.001)
+	assert_float(player.velocity.y).is_equal(0.0)
+
+
+## ❗️**Top rung only**, which is the whole of "falling down a shaft is never
+## interrupted". Without the second lookup every rung is a platform and a drop
+## down your own column stops at the first one.
+func test_a_rung_with_another_rung_above_it_does_not_catch_a_fall() -> void:
+	var player := _stander_on(P, 2)
+	var edge := float((P.y + 1) * TileLayout.TILE_SIZE)
+	player.global_position.y = edge - Player.COLLISION_EXTENTS.y - 2.0
+	player.velocity.y = 300.0
+	assert_bool(player._stand_on_climbable(_terrain, CLIMB_STEP)).is_false()
+
+
+## Jumping UP through a column is not landing on it.
+func test_rising_through_a_column_top_does_not_catch() -> void:
+	var player := _climber_at(P)
+	player.global_position.y = float(P.y * TileLayout.TILE_SIZE) - Player.COLLISION_EXTENTS.y
+	player.velocity.y = Player.JUMP_VELOCITY
+	assert_bool(player._stand_on_climbable(_terrain, CLIMB_STEP)).is_false()
+
+
+## Standing still re-satisfies the crossing test every frame, so the floor holds
+## you there rather than needing an "am I standing" flag of its own.
+func test_standing_still_on_a_column_top_keeps_holding() -> void:
+	var player := _stander_on(P)
+	assert_bool(player._stand_on_climbable(_terrain, CLIMB_STEP)).is_true()
+	assert_float(player.global_position.y).is_equal_approx(
+		float(P.y * TileLayout.TILE_SIZE) - Player.COLLISION_EXTENTS.y,
+		0.001,
+	)
+
+
+## ❗️The climb is asked FIRST in `_move`, so pressing `S` on top of a column
+## descends instead of standing on it. Without this the top rung would be a floor
+## you could never get off downwards.
+func test_climbing_suppresses_the_ladder_top_floor() -> void:
+	var player := _stander_on(P)
+	_while_holding(
+		&"move_down",
+		func() -> void: assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true(),
+	)
+	assert_bool(player._stand_on_climbable(_terrain, CLIMB_STEP)).is_false()
+
+
+## `S` from on top of a column is the only way back onto the ladder, so this
+## branch is load-bearing rather than a guard.
+func test_down_from_on_top_of_a_column_engages_the_climb() -> void:
+	var player := _stander_on(P)
+	_while_holding(
+		&"move_down",
+		func() -> void:
+			assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_true()
+			assert_float(player.velocity.y).is_equal_approx(Player.CLIMB_SPEED, 0.001),
+	)
+
+
+## ❗️And `W` from up there must NOT re-grab — it would sink you into the rung
+## under your feet, which is the bobbing bug in a new costume.
+func test_up_from_on_top_of_a_column_does_not_re_engage() -> void:
+	var player := _stander_on(P)
+	_while_holding(
+		&"move_up",
+		func() -> void: assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false(),
+	)
+
+
+## Climbing out of the top drops the latch one pixel above the standing position.
+## ❗️Zeroing `velocity.y` there is what stops the player hopping ~3 px at
+## CLIMB_SPEED and settling over several frames.
+func test_climbing_out_of_the_top_drops_the_latch_and_zeroes_velocity() -> void:
+	var player := _climber_at(P)
+	_while_holding(&"move_up", func() -> void: player._try_climb(_terrain, CLIMB_STEP))
+	assert_float(player.velocity.y).is_equal_approx(-Player.CLIMB_SPEED, 0.001)
+	# Both probes clear: centre above the rung, feet past its top edge.
+	player.global_position.y = (
+		float(P.y * TileLayout.TILE_SIZE) - Player.COLLISION_EXTENTS.y - 2.0
+	)
+	assert_bool(player._try_climb(_terrain, CLIMB_STEP)).is_false()
+	assert_float(player.velocity.y).is_equal(0.0)

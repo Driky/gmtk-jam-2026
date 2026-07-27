@@ -23,6 +23,10 @@ const JUMP_BUFFER := 0.12
 ## Climb rate on a ladder, against a `move_speed` of 110: slower than walking, so
 ## going up reads as deliberate, fast enough that a 20-rung shaft is not a chore.
 const CLIMB_SPEED := 90.0
+## How far below the feet the second climb probe sits. 1 px, so Godot's collision
+## separation margin — which can leave the feet a hair ABOVE a surface — cannot
+## floor the probe into the cell above the rung the player is standing on.
+const FOOT_PROBE_PX := 1.0
 const REACH_RADIUS_PX := 4.5 * TILE ## Player center → tile center.
 const COLLISION_EXTENTS := Vector2(6.0, 11.0) ## 12×22 box, fits 1-wide tunnels.
 ## Physics layer 2 ("player" in project.godot) — restored after a death.
@@ -439,7 +443,11 @@ func _move(delta: float) -> void:
 	if _try_climb(Terrain, delta):
 		move_and_slide()
 		return
-	if is_on_floor():
+	# A column's top rung reads as ground. Stamping `_coyote` is what makes jumping
+	# off a ladder top work through the EXISTING jump path — `is_on_floor()` itself
+	# stays false, and `_move` is its only reader, so nothing else notices the floor
+	# is virtual.
+	if is_on_floor() or _stand_on_climbable(Terrain, delta):
 		_coyote = COYOTE_TIME
 	else:
 		_coyote = maxf(_coyote - delta, 0.0)
@@ -473,12 +481,34 @@ func _try_climb(terrain: Node, delta: float) -> bool:
 	if _stun_left > 0.0:
 		_climbing = false
 		return false
-	if not Deployable.climbable_at(terrain, Vector2i((global_position / TILE).floor())):
+	# TWO probes, because one cannot tell "topped out" from "not on a ladder": the
+	# centre is the cell you are climbing THROUGH, the feet are the cell you are
+	# standing ON. Standing on top of a column only the second one is climbable.
+	var on := Deployable.climbable_at(terrain, Vector2i((global_position / TILE).floor()))
+	var feet := global_position.y + COLLISION_EXTENTS.y + FOOT_PROBE_PX
+	var below := Deployable.climbable_at(
+		terrain,
+		Vector2i((Vector2(global_position.x, feet) / TILE).floor()),
+	)
+	# Held while EITHER is true — that is what carries you the last 11 px up and
+	# out of a column instead of dropping the latch at the lip.
+	if not (on or below):
+		if _climbing:
+			# ❗️Topped out one pixel above the standing position, still moving up at
+			# CLIMB_SPEED. Without this zero you hop ~3 px and settle over several
+			# frames; with it `_stand_on_climbable` plants you on the next one.
+			velocity.y = 0.0
 		_climbing = false
 		return false
 	var axis := Input.get_axis("move_up", "move_down")
 	if not _climbing:
 		if is_zero_approx(axis):
+			return false
+		# ❗️Standing ON TOP of a column (centre clear, feet on the rung): only DOWN
+		# re-grabs. UP would sink you into the rung under your feet, which is the
+		# bobbing bug in a new costume. This branch is also the ONLY way back onto a
+		# ladder from its top, so it is load-bearing rather than a guard.
+		if not on and axis < 0.0:
 			return false
 		_climbing = true
 	# ❗️Decayed HERE too. The early return skips the gravity block, which is where
@@ -496,6 +526,43 @@ func _try_climb(terrain: Node, delta: float) -> bool:
 		_climbing = false
 		return false
 	velocity.y = axis * CLIMB_SPEED
+	return true
+
+
+## Plant the player on top of a column, the way a terrain tile would. True when
+## it did, having clamped the feet to the rung's top edge and zeroed `velocity.y`.
+##
+## ❗️**A grid query, not a one-way collision body**, for the same reason the climb
+## is one: deployables carry no collision bodies at all, so a `StaticBody2D` per
+## rung would have reversed that decision, needed a new physics layer plus a
+## deferred mask toggle, and made EVERY rung a platform — falling down a shaft
+## would stop at the first one.
+##
+## ❗️**Top rung only.** That one extra lookup is the whole of "falling down a
+## shaft is never interrupted", on a frame that was already doing one.
+##
+## Standing still re-satisfies the crossing test every frame (`feet == edge`,
+## `velocity.y == 0`), so this holds you there rather than needing an "am I
+## standing" flag of its own.
+##
+## Terrain is a parameter for the same reason `_try_climb` takes one.
+func _stand_on_climbable(terrain: Node, delta: float) -> bool:
+	# Descending (`S` from the top) must beat standing on it — hence the call
+	# order in `_move` — and jumping UP through a column is not landing on it.
+	if _climbing or velocity.y < 0.0:
+		return false
+	var feet := global_position.y + COLLISION_EXTENTS.y
+	var next_feet := feet + velocity.y * delta
+	var rung := Vector2i((Vector2(global_position.x, next_feet) / TILE).floor())
+	var edge := float(rung.y * TILE)
+	if feet > edge or next_feet < edge:
+		return false
+	if not Deployable.climbable_at(terrain, rung):
+		return false
+	if Deployable.climbable_at(terrain, rung + Vector2i.UP):
+		return false
+	global_position.y = edge - COLLISION_EXTENTS.y
+	velocity.y = 0.0
 	return true
 
 
