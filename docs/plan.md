@@ -27,7 +27,7 @@ Sequencing rule: implement in day order; within a day, systems before content.
 4. Spell line (keep melee + bow; mana stat still shown).
 5. Relay towers (generator radius only).
 6. Conveyor tier 2, stacking inserter, Stacker.
-7. Equipment panel → tool/weapon slots only.
+7. Equipment **content** → fewer authored armor/accessory pieces (the 8 slots themselves stay). ❗️Rewritten at 3.6a; it used to read "→ tool/weapon slots only", which is now backwards. There are no tool or weapon slots to fall back to — they were dropped on their own merits, because LMB is locked as "use the active hotbar item" and a weapon slot would be a second source of truth for what you swing ([ui.md](systems/ui.md) §Character screen). The slots are cheap and the pieces are the scope; firing this cuts pieces.
 8. Rope/pole climbables (ladder only) + the air field (flyers → direct steering + chew).
 9. Reachability-adaptive spawn skew (fixed unlock waves for crawler/flyer instead).
 

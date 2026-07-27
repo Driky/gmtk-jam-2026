@@ -66,6 +66,14 @@ Recorded so a future step argues from it rather than re-deriving it. No shipping
 | Respawn anchor = nearest beacon to the death position by group query, else the Core | [systems/player-combat.md](systems/player-combat.md) |
 | One mixed skill tree (recipes + leveled buffs) as Resource nodes; crafting range incl. nearby containers | [systems/progression.md](systems/progression.md) |
 | Tabbed character screen (Inventory/Crafting/Tree) with direct hotkeys; power overlay hotkey | [systems/ui.md](systems/ui.md) |
+| Equipment = 5 armor + 3 accessory slots, no tool/weapon slot (LMB stays the hotbar item) | [systems/ui.md](systems/ui.md) |
+| Stacks move as a held stack on the cursor + shift-click quick-move; the screen is a panel that never pauses | [systems/ui.md](systems/ui.md) |
+| An open gameplay screen blocks actions AND movement without pausing, via a shared static predicate | [systems/ui.md](systems/ui.md) |
+| Armor = diminishing damage reduction summed off an `Equipment` model on `Items`, outside `get_stat` | [systems/player-combat.md](systems/player-combat.md) |
+| Every UI-facing `Inventory` mutation is total and returns a detached stack; no `set_slot` | [systems/player-combat.md](systems/player-combat.md) |
+| `station = "hand"` recipes; every row carries `category` + `unlocked_by`; first-time-craft XP cut | [systems/progression.md](systems/progression.md) |
+| `gather_available` pairs with a two-phase `consume_available`; equipment excluded from both | [systems/progression.md](systems/progression.md) |
+| Containers are found by the `&"container"` group, not a registry or an entity-cell walk | [systems/automation.md](systems/automation.md) |
 | Pause: menu interactive, gameplay actions blocked | [systems/ui.md](systems/ui.md) |
 | Save = seed + diff, autosave at build-phase start only (never serialize live monsters) | [systems/save.md](systems/save.md) |
 | Placeholder tilesets generated from template by palette remap; TileSet built from `materials.gd` | [systems/pipeline.md](systems/pipeline.md) |
