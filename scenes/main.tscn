@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://ky78m7otb228"]
+[gd_scene load_steps=8 format=3 uid="uid://ky78m7otb228"]
 
 [ext_resource type="Script" path="res://scripts/game/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/items/pickup_spawner.gd" id="2_pickups"]
@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/game_over.tscn" id="4_game_over"]
 [ext_resource type="Script" path="res://scripts/combat/projectile_pool.gd" id="5_projectiles"]
 [ext_resource type="Script" path="res://scripts/terrain/light_map.gd" id="6_light_map"]
+[ext_resource type="PackedScene" path="res://scenes/ui/character_screen.tscn" id="7_character"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -71,6 +72,9 @@ max_value = 1.0
 step = 0.001
 
 [node name="HUD" parent="." instance=ExtResource("3_hud")]
+unique_name_in_owner = true
+
+[node name="CharacterScreen" parent="." instance=ExtResource("7_character")]
 unique_name_in_owner = true
 
 [node name="GameOverUI" parent="." instance=ExtResource("4_game_over")]

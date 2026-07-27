@@ -22,6 +22,7 @@ var _gen: WorldGen
 @onready var _loading_ui: CanvasLayer = %LoadingUI
 @onready var _loading_bar: ProgressBar = %LoadingBar
 @onready var _hud: CanvasLayer = %HUD
+@onready var _character_screen: CanvasLayer = %CharacterScreen
 @onready var _game_over_ui: CanvasLayer = %GameOverUI
 @onready var _camera: Camera2D = $Camera2D
 
@@ -86,6 +87,11 @@ func _finish_generation() -> void:
 	_hud.bind_player(player)
 	_hud.bind_core(core)
 	_hud.visible = true
+	# ❗️Bound, not shown. The character screen owns its own visibility and starts
+	# closed; what this moment hands over is the player it needs for the stats
+	# readout and the death drop — and until it lands, `I` is refused, so nothing
+	# can put an inventory over the loading bar.
+	_character_screen.bind_player(player)
 	Game.start_build_phase()
 	_gen = null
 

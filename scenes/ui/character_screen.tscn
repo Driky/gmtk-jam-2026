@@ -1,0 +1,148 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/character_screen.gd" id="1_screen"]
+
+[node name="CharacterScreen" type="CanvasLayer"]
+visible = false
+script = ExtResource("1_screen")
+
+[node name="Window" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 120.0
+offset_top = 92.0
+offset_right = -420.0
+offset_bottom = -170.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Window"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="Window/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TabBar" type="HBoxContainer" parent="Window/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Pages" type="MarginContainer" parent="Window/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="InventoryPage" type="HBoxContainer" parent="Window/Margin/VBox/Pages"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Bag" type="VBoxContainer" parent="Window/Margin/VBox/Pages/InventoryPage"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="GridLabel" type="Label" parent="Window/Margin/VBox/Pages/InventoryPage/Bag"]
+layout_mode = 2
+text = "Inventory"
+theme_override_font_sizes/font_size = 12
+
+[node name="Grid" type="GridContainer" parent="Window/Margin/VBox/Pages/InventoryPage/Bag"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 10
+
+[node name="HotbarLabel" type="Label" parent="Window/Margin/VBox/Pages/InventoryPage/Bag"]
+layout_mode = 2
+text = "Hotbar"
+theme_override_font_sizes/font_size = 12
+
+[node name="Hotbar" type="GridContainer" parent="Window/Margin/VBox/Pages/InventoryPage/Bag"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 10
+
+[node name="Gear" type="VBoxContainer" parent="Window/Margin/VBox/Pages/InventoryPage"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="EquipmentLabel" type="Label" parent="Window/Margin/VBox/Pages/InventoryPage/Gear"]
+layout_mode = 2
+text = "Equipment"
+theme_override_font_sizes/font_size = 12
+
+[node name="EquipmentGrid" type="GridContainer" parent="Window/Margin/VBox/Pages/InventoryPage/Gear"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 4
+
+[node name="StatsLabel" type="Label" parent="Window/Margin/VBox/Pages/InventoryPage/Gear"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/font_size = 12
+
+[node name="CraftingPage" type="CenterContainer" parent="Window/Margin/VBox/Pages"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="Placeholder" type="Label" parent="Window/Margin/VBox/Pages/CraftingPage"]
+layout_mode = 2
+text = "Crafting lands at 3.6b."
+
+[node name="SkillsPage" type="CenterContainer" parent="Window/Margin/VBox/Pages"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="Placeholder" type="Label" parent="Window/Margin/VBox/Pages/SkillsPage"]
+layout_mode = 2
+text = "The skill tree lands at 3.7."
+
+[node name="ContainerPanel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -400.0
+offset_top = 92.0
+offset_right = -120.0
+offset_bottom = -170.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="ContainerPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="ContainerPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ContainerTitle" type="Label" parent="ContainerPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="ContainerGrid" type="GridContainer" parent="ContainerPanel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 5
