@@ -875,3 +875,26 @@ func test_interact_refuses_a_chest_out_of_reach() -> void:
 	_player.global_position = Vector2(0.0, 0.0)
 	assert_bool(_player.interact(_screen_terrain, Vector2i(100, 100))).is_false()
 	assert_bool(CharacterScreen.is_open).is_false()
+
+
+## ❗️Regression pin on a bug no other test could see and every one of them missed:
+## the container panel shipped with `anchors_preset = 15`, so its `anchor_left` was
+## 0 and `offset_left = -400` placed it at x = **-400** — fully off the left edge of
+## the screen, while `visible` was cheerfully true. Only a screenshot found it.
+func test_both_panels_are_inside_the_viewport_and_do_not_overlap() -> void:
+	var chest := _chest()
+	CharacterScreen.open_container(chest)
+	await get_tree().process_frame
+
+	var screen_rect := Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var window: Control = _screen._window
+	var panel: Control = _screen._container_panel
+	for control: Control in [window, panel]:
+		var rect := control.get_global_rect()
+		assert_bool(screen_rect.encloses(rect)).override_failure_message(
+			"%s is at %s, outside the %s viewport" % [control.name, rect, screen_rect.size],
+		).is_true()
+		assert_float(rect.size.x).is_greater(0.0)
+		assert_float(rect.size.y).is_greater(0.0)
+	# Alongside, not on top of: the container view must not cover the bag.
+	assert_bool(window.get_global_rect().intersects(panel.get_global_rect())).is_false()

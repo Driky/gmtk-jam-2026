@@ -114,14 +114,15 @@ text = "The skill tree lands at 3.7."
 [node name="ContainerPanel" type="PanelContainer" parent="."]
 unique_name_in_owner = true
 visible = false
-anchors_preset = 15
+anchors_preset = 11
+anchor_left = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -400.0
 offset_top = 92.0
 offset_right = -120.0
 offset_bottom = -170.0
-grow_horizontal = 2
+grow_horizontal = 0
 grow_vertical = 2
 
 [node name="Margin" type="MarginContainer" parent="ContainerPanel"]
