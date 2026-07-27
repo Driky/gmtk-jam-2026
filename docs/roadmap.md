@@ -120,10 +120,21 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 - [x] Coverage circles in placement mode (the ghost's prospective one, the overlay's existing ones); persistent power-overlay hotkey **P** — the one sanctioned exception to [ui.md](systems/ui.md)'s "debug overlays own no keybindings", because this one is player-facing; bolt icon on unpowered and browned-out machines. **Conveyors and inserters draw nothing** and run everywhere free.
 - [x] The F3 factory rig hands a generator, a relay and a stack of coal — it had to: with the gate live, the old kit built a chain that could never run, and an exported build has no other way in.
 
-### 3.5 Defense
-- [ ] **Projectile pool must scale with spawner count before turrets ship** — the 2.5 pool is a fixed 32 and steals in-flight shots once exceeded ([player-combat.md](systems/player-combat.md)).
-- [ ] Basic turret: auto-target, shared projectiles, ammo slot fed by inserter/hand; spike trap.
-- [ ] Chest, respawn beacon, ladder (rope/pole Day 4, ✂️8).
+### 3.5 Defense — split into 3.5a / 3.5b / 3.5c
+Six new deployables, a shared-pool refactor, a widened support predicate, a new player movement mode and changes to the flow field: too big for one pass. Each sub-step below has a **self-contained step doc** under [steps/](steps/) carrying the file-by-file work, the traps found while researching it, and its own verification — enough that each can be picked up cold. Suggested order **3.5a → 3.5c → 3.5b**: 3.5c is smallest and unblocks 3.6's container view, and 3.5b is last because it is the only one touching a predicate four systems read *plus* the flow field *plus* mob locomotion.
+
+#### 3.5a Turrets & traps ([steps/3.5a-turrets-and-traps.md](steps/3.5a-turrets-and-traps.md))
+- [ ] 🔴 **Projectile pool must scale with spawner count before turrets ship** — the 2.5 pool is a fixed 32 and steals in-flight shots once exceeded ([player-combat.md](systems/player-combat.md)). Each spawner reserves its worst case on place; grow-never-shrink.
+- [ ] `Waves.enemies()` + pure static target selection; basic turret: auto-target nearest in range, shared projectiles, power **and** an ammo slot fed by inserter/hand; spike trap.
+- [ ] **Ammo press pulled forward from 4.2** — it costs no new script ([automation.md](systems/automation.md) §Categories: a `.tscn`, a `station_id` and recipe rows), and it makes the chain `miner → furnace → ammo press → turret`. Ammo tiers ship copper + iron only; gold/magmatite wait on their bars (4.2).
+
+#### 3.5b Ladder & climbing ([steps/3.5b-ladder-and-climbing.md](steps/3.5b-ladder-and-climbing.md))
+- [ ] Ladder + player climb on the (already declared, unused) `move_up`/`move_down` actions; one `is_climbable` export serving four readers, which also resolves the support-stacking clause [automation.md](systems/automation.md) §Deployable base parked at 3.5 — climbables stack **downward only**.
+- [ ] **Mobs climb it too**, gated on `is_biped` — [enemies.md](systems/enemies.md) §Climbables already locks that, so a player-only ladder would contradict its owning doc. Ground-field vertical edge + the CLIMB locomotion action. ✂️8 not fired: it reads "ladder only", so rope/pole and the *directional* profiles stay 4.1.
+
+#### 3.5c Chest & respawn beacon ([steps/3.5c-chest-and-beacon.md](steps/3.5c-chest-and-beacon.md))
+- [ ] Chest — the first N-slot container; reuses `Inventory` via one defaulted `slot_count`, so 3.6's container view binds the signals the hotbar already uses. The panel itself stays 3.6 ([player-combat.md](systems/player-combat.md) §Hand-feeding).
+- [ ] Respawn beacon overriding the Core as the respawn anchor, resolved **nearest to the death position** ([player-combat.md](systems/player-combat.md) §Death & respawn).
 
 ### 3.6 Character screen ([ui.md](systems/ui.md))
 - [ ] Tabbed window, `I`/`C`/`K` direct shortcuts: inventory + equipment panel (✂️7) + stats readout; crafting tab with category tabs, unlock filtering, greyed-missing-inputs; skill-tree tab node graph.
@@ -140,7 +151,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 
 ### 4.1 Remaining enemies ([enemies.md](systems/enemies.md))
 - [ ] Leaper, digger (mostly `EnemyStats` data on the Day-2 base).
-- [ ] Crawler: wall-climb + climbable use; climbable directional profiles + rope/pole (✂️8).
+- [ ] Crawler: wall-climb. Climbable **directional** profiles + rope/pole (✂️8) — the symmetric ladder and the `is_biped` climbable-use gate shipped at 3.5b, so what is left here is the direction-respecting half (rope = up slow, pole = down only).
 - [ ] Flyer + air flow field (✂️8 fallback: direct steering + chew).
 - [ ] Fortification score → reachability-adaptive composition (✂️9); debug-overlay readout, calibrate live.
 - [ ] Spitter, boss + arena — stretch only (✂️1).
