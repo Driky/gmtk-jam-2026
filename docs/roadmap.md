@@ -136,6 +136,9 @@ Six new deployables, a shared-pool refactor, a widened support predicate, a new 
 - [ ] Chest — the first N-slot container; reuses `Inventory` via one defaulted `slot_count`, so 3.6's container view binds the signals the hotbar already uses. The panel itself stays 3.6 ([player-combat.md](systems/player-combat.md) §Hand-feeding).
 - [ ] Respawn beacon overriding the Core as the respawn anchor, resolved **nearest to the death position** ([player-combat.md](systems/player-combat.md) §Death & respawn).
 
+#### Standing item — GYM scenes for scenario testing ([ui.md](systems/ui.md))
+- [ ] Debug row + dropdown loading a pre-made scenario `.tscn` from a gym folder. **This is how scenarios are tested from now on**; debug affordances themselves keep growing as normal. Raised at 3.5a, when every bug in the procedural `build_defense_chain` fixture turned out to be a geometry bug invisible until the game ran. Not scheduled — do it when a second scenario is needed.
+
 ### 3.6 Character screen ([ui.md](systems/ui.md))
 - [ ] Tabbed window, `I`/`C`/`K` direct shortcuts: inventory + equipment panel (✂️7) + stats readout; crafting tab with category tabs, unlock filtering, greyed-missing-inputs; skill-tree tab node graph.
 - [ ] Crafting UI over the 3.3 recipe table (`data/recipe_defs.gd`) — the DB itself landed there, as the item half landed at 2.5; `gather_available(player_pos)` crafting-range query used by all cost checks ([progression.md](systems/progression.md)).
