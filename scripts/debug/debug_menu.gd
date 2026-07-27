@@ -17,8 +17,10 @@ extends CanvasLayer
 ## are meant for the panel.
 static var is_open := false
 
-## Above the HUD (0) and the game-over screen (10); below the perf readout
-## (100), which must stay legible on top of everything.
+## Above the HUD (1), the character screen (5) and the game-over screen (10);
+## below the perf readout (100), which must stay legible on top of everything.
+## ⚠️ The HUD is 1, not the 0 this said until 3.6a: `hud.tscn` sets no `layer` and
+## takes Godot's CanvasLayer default. No actual layer number changed.
 const LAYER := 50
 const PANEL_SIZE := Vector2(232.0, 0.0)
 const MARGIN := Vector2(12.0, 96.0) ## Clears the HUD bars on the left.
