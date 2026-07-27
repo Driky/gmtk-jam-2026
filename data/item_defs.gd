@@ -69,6 +69,9 @@ const IRON_AMMO: ItemStats = preload("res://data/items/iron_ammo.tres")
 ## support is NOT all four: a standard turret wants a horizontal base under it
 ## ([automation.md](../docs/systems/automation.md) §Deployable base).
 const TURRET: ItemStats = preload("res://data/items/turret.tres")
+## The cheapest defense there is: no power, no ammo, no targeting. Same
+## `support_dirs = 4` as the turret — it is a floor tile that bites.
+const SPIKE_TRAP: ItemStats = preload("res://data/items/spike_trap.tres")
 
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
@@ -86,6 +89,7 @@ const STATS: Dictionary = {
 	"copper_ammo": COPPER_AMMO,
 	"iron_ammo": IRON_AMMO,
 	"turret": TURRET,
+	"spike_trap": SPIKE_TRAP,
 }
 
 
