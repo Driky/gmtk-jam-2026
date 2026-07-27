@@ -107,10 +107,14 @@ func _finish_generation() -> void:
 ##
 ## ❗️**Every entry costs a HOTBAR slot, and there are only ten.** The kit is
 ## added first, so anything handed over later — the F3 rig's machines, a wave's
-## loot — lands behind it, and past slot ten it is unreachable until 3.6 builds
-## the inventory UI. 3.5a hit exactly that: the rig's kit overflowed and the coal
-## fell off the end, leaving a chain that could never be fuelled
+## loot — lands behind it. 3.5a hit exactly that: the rig's kit overflowed and the
+## coal fell off the end, leaving a chain that could never be fuelled
 ## ([ui.md](../../docs/systems/ui.md)). Keep this list as short as a run needs.
+##
+## ✅ **The "unreachable past slot ten" half of that is fixed at 3.6a**: the
+## character screen renders all 40 slots and `I` moves a stack down into the
+## hotbar. What remains true is that the hotbar is what LMB and RMB can reach, so
+## a kit that fills it still pushes everything else a keypress away.
 ##
 ## ⚠️ `bolt_caster` was dropped at 3.5a. `data/item_defs.gd` had always said it
 ## existed only "before 3.5's turrets depend on it" — the turret is a live
