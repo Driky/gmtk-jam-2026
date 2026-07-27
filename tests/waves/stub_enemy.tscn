@@ -2,5 +2,5 @@
 
 [ext_resource type="Script" path="res://tests/waves/stub_enemy.gd" id="1_stub"]
 
-[node name="StubEnemy" type="Node2D"]
+[node name="StubEnemy" type="Node2D" groups=["enemies"]]
 script = ExtResource("1_stub")

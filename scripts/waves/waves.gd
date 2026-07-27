@@ -140,15 +140,30 @@ func debug_poke_nearest() -> void:
 	var player: Node2D = get_tree().get_first_node_in_group(&"player")
 	if player == null:
 		return
-	var nearest: Node = null
+	var nearest: Node2D = null
 	var best := INF
-	for enemy: Node2D in get_tree().get_nodes_in_group(&"enemies"):
+	for enemy: Node2D in enemies():
 		var dist := enemy.global_position.distance_to(player.global_position)
 		if dist < best:
 			best = dist
 			nearest = enemy
 	if nearest != null:
 		nearest.take_damage(5.0, player)
+
+# --- Aggro helpers -----------------------------------------------------------
+
+
+## Every mob in the world, for anything that needs to pick a target: turrets and
+## traps (3.5a) and the debug poke below. Deliberately the **group**, not
+## `_alive` — a mob spawned by F4 outside the wave budget is still something a
+## turret must shoot, and `_alive` is the wave manager's clear-check bookkeeping
+## rather than a census ([tech-design.md](../../docs/tech-design.md) assigns
+## aggro helpers here).
+##
+## ⚠️ Freed instances can linger in a group for a frame, so every consumer
+## filters with `is_instance_valid` — see `Turret.pick_target`.
+func enemies() -> Array[Node]:
+	return get_tree().get_nodes_in_group(&"enemies")
 
 # --- Wave manager (2.4) ------------------------------------------------------
 

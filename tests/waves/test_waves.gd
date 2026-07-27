@@ -201,6 +201,42 @@ func test_debug_clear_wave_is_inert_outside_a_wave() -> void:
 	_waves.debug_clear_wave()
 	assert_int(_game.waves_survived).is_equal(0)
 
+# --- Aggro helpers -----------------------------------------------------------
+
+
+## The one "find the mobs" query turrets and traps (3.5a) select out of.
+func test_enemies_reports_every_mob_in_the_group() -> void:
+	_enter_wave_phase()
+	_pump_spawns(3)
+
+	assert_int(_waves.enemies().size()).is_equal(3)
+	assert_array(_waves.enemies()).contains_exactly_in_any_order(_waves._alive)
+
+
+## ❗️Deliberately the GROUP, not `_alive`: a mob dropped by F4 outside the wave
+## budget never enters the wave manager's bookkeeping, and a turret must still
+## shoot it.
+func test_enemies_includes_a_mob_spawned_outside_the_wave_budget() -> void:
+	_enter_wave_phase()
+	_pump_spawns(1)
+	var loose: Node2D = auto_free(StubEnemyScene.instantiate())
+	_spawn_root.add_child(loose)
+
+	assert_int(_waves.enemies().size()).is_equal(2)
+	assert_int(_waves.alive_count()).is_equal(1)
+
+
+func test_enemies_drops_a_mob_once_it_dies() -> void:
+	_enter_wave_phase()
+	_pump_spawns(2)
+
+	_kill(_waves._alive[0])
+	# queue_free lands at the end of the frame; the group is authoritative only
+	# once it has, which is why every consumer filters invalid instances.
+	await get_tree().process_frame
+
+	assert_int(_waves.enemies().size()).is_equal(1)
+
 # --- Run reset ---------------------------------------------------------------
 
 
