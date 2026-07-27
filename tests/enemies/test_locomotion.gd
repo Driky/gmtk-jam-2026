@@ -3,14 +3,21 @@
 extends GdUnitTestSuite
 
 ## Minimal stand-in for the Terrain autoload: the reads EnemyLocomotion uses.
+## `get_entity` joined at 3.5b — `Deployable.climbable_at` asks the entity dict,
+## so a double with only `is_solid` can no longer drive `decide`.
 class TerrainDouble:
 	extends Node
 
 	var solids: Dictionary[Vector2i, bool] = { }
+	var entities: Dictionary[Vector2i, Node] = { }
 
 
 	func is_solid(pos: Vector2i) -> bool:
 		return solids.get(pos, false)
+
+
+	func get_entity(pos: Vector2i) -> Node:
+		return entities.get(pos)
 
 
 	func set_solid(pos: Vector2i) -> void:
@@ -34,6 +41,15 @@ func _lay_floor(from_x: int, to_x: int, y := 10) -> void:
 
 func _decide(cell: Vector2i, dir: Vector2i) -> Dictionary:
 	return EnemyLocomotion.decide(_terrain, cell, dir, _stats)
+
+
+## A registered climbable in `cell`. A bare `Deployable` rather than the ladder
+## scene: `climbable_at` reads the export, and the rule under test is the export's.
+func _rung(cell: Vector2i) -> void:
+	var node: Deployable = auto_free(Deployable.new())
+	node.is_climbable = true
+	node.setup(cell)
+	_terrain.entities[cell] = node
 
 # --- Walk / fall basics ------------------------------------------------------
 
@@ -122,6 +138,58 @@ func test_up_through_air_is_none() -> void:
 	# The field routed a wall-climb this mob can't do — caller falls back.
 	var d := _decide(Vector2i(5, 9), Vector2i.UP)
 	assert_int(d.action).is_equal(EnemyLocomotion.Action.NONE)
+
+# --- Climbables (3.5b) -------------------------------------------------------
+
+
+## The feature: a biped routed up into a ladder rung climbs it instead of
+## falling through to NONE. Only the DESTINATION is climbable here — the mob is
+## standing on the ground beside the column, which is how it gets on.
+func test_up_into_a_rung_climbs_it() -> void:
+	_lay_floor(0, 10)
+	_rung(Vector2i(5, 8))
+	var d := _decide(Vector2i(5, 9), Vector2i.UP)
+	assert_int(d.action).is_equal(EnemyLocomotion.Action.CLIMB)
+	assert_that(d.target).is_equal(Vector2i(5, 8))
+
+
+## Down a column too deep to jump: ride it rather than taking the drop. A SAFE
+## drop still just falls — the climb is the answer to an unsafe one.
+func test_down_a_rung_over_an_unsafe_drop_climbs() -> void:
+	_rung(Vector2i(5, 10))
+	var d := _decide(Vector2i(5, 9), Vector2i.DOWN)
+	assert_int(d.action).is_equal(EnemyLocomotion.Action.CLIMB)
+	assert_that(d.target).is_equal(Vector2i(5, 10))
+
+
+func test_a_safe_drop_beside_a_rung_still_just_falls() -> void:
+	_terrain.set_solid(Vector2i(5, 12)) # Floor 2 below: a safe drop.
+	_rung(Vector2i(5, 10))
+	assert_int(_decide(Vector2i(5, 9), Vector2i.DOWN).action).is_equal(
+		EnemyLocomotion.Action.FALL,
+	)
+
+
+## ❗️`is_biped` gates ASCENDING and nothing else. A crawler facing a ladder
+## returns neither CLIMB nor CHEW — nothing chews a climbable (the skip lives in
+## `Enemy._attackable_entity`) — so it falls through to NONE and the caller's
+## direct fallback picks another way round. That over-connectivity is the
+## documented accepted error, backed by the stuck watchdog.
+func test_a_non_biped_neither_climbs_a_rung_nor_chews_it() -> void:
+	_lay_floor(0, 10)
+	_rung(Vector2i(5, 8))
+	_stats.is_biped = false
+	var d := _decide(Vector2i(5, 9), Vector2i.UP)
+	assert_int(d.action).is_equal(EnemyLocomotion.Action.NONE)
+
+
+## A solid above still wins: a rung does not make rock passable, and the mob
+## chews through the ceiling exactly as it did at 2.3.
+func test_solid_above_still_chews_even_with_a_rung_beyond_it() -> void:
+	_terrain.set_solid(Vector2i(5, 8))
+	_rung(Vector2i(5, 8))
+	var d := _decide(Vector2i(5, 9), Vector2i.UP)
+	assert_int(d.action).is_equal(EnemyLocomotion.Action.CHEW)
 
 # --- Stair-digging (2.3, never-cut) ------------------------------------------
 

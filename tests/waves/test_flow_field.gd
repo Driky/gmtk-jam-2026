@@ -30,11 +30,14 @@ class TerrainDouble:
 		return cells
 
 
-## A deployable stand-in: FlowField duck-types on a current_hp property.
+## A deployable stand-in: FlowField duck-types on current_hp and (3.5b)
+## is_climbable, both through untyped `get()` probes, so nothing here needs to be
+## a real Deployable.
 class EntityDouble:
 	extends Node2D
 
 	var current_hp := 100.0
+	var is_climbable := false
 
 
 var _terrain: TerrainDouble
@@ -180,6 +183,41 @@ func test_entity_hp_surcharge_and_core_exemption() -> void:
 	assert_float(_field.cost_at(Vector2i(7, 9))).is_equal_approx(open_cost, 0.0001)
 
 
+## ❗️The 3.5b feature, stated as the difference it makes: the SAME open shaft
+## that `test_ascending_needs_support` proves unreachable becomes a finite,
+## MOVE_COST-per-rung route once the player builds a ladder up it. A column of
+## climbables is what makes a floating goal reachable without a wall beside it.
+func test_a_climbable_column_is_a_cheap_vertical_route_where_bare_air_is_not() -> void:
+	_lay_floor()
+	# The top of the column, six tiles over the floor and nowhere near a wall.
+	var goal := Vector2i(5, FLOOR_Y - 6)
+	_field.recompute([goal] as Array[Vector2i])
+	assert_float(_field.cost_at(Vector2i(5, 9))).is_equal(INF) # Open sky: no route.
+
+	for y in range(FLOOR_Y - 6, FLOOR_Y):
+		var rung: EntityDouble = auto_free(EntityDouble.new())
+		rung.is_climbable = true
+		rung.current_hp = 0.0 # No HP surcharge, so the arithmetic below is exact.
+		_terrain.entities[Vector2i(5, y)] = rung
+	_field.recompute([goal] as Array[Vector2i])
+
+	# Five rungs from (5, 9) up to the top of the column, one MOVE_COST each —
+	# exactly what the wall-supported shaft in `test_ascending_needs_support`
+	# costs per tile. A ladder is an ordinary vertical corridor, not a discount.
+	assert_float(_field.cost_at(Vector2i(5, 9))).is_equal_approx(
+		5 * FlowField.MOVE_COST,
+		0.0001,
+	)
+	assert_vector(_field.get_flow_dir(Vector2i(5, 9))).is_equal(Vector2i.UP)
+
+	# ❗️And it goes away with the ladder. `_climbable` comes from the SPARSE
+	# entity walk, so without the fill() beside the resize a stale array would
+	# keep routing mobs up a column that was taken down.
+	_terrain.entities.clear()
+	_field.recompute([goal] as Array[Vector2i])
+	assert_float(_field.cost_at(Vector2i(5, 9))).is_equal(INF)
+
+
 func test_snapshot_costs_is_independent_copy() -> void:
 	_lay_floor()
 	_field.recompute(_goal())
@@ -211,6 +249,28 @@ func test_cost_of_entering_cases() -> void:
 	var into_dirt := _field.cost_of_entering(Vector2i(2, 9), Vector2i(3, 9))
 	assert_float(into_dirt).is_equal_approx(1.0 + 1.0 / FlowField.REFERENCE_DIG_POWER, 0.0001)
 	assert_float(_field.cost_of_entering(Vector2i(5, 9), Vector2i(4, 9))).is_equal(INF)
+
+
+## ❗️The climbable edge has a twin in the Dijkstra loop, which inlines this exact
+## logic for speed. Add one without the other and the two silently disagree —
+## this pair is the cross-check that catches it. Same open sky as the INF case
+## above, with one rung in it.
+func test_cost_of_entering_ascends_into_a_climbable() -> void:
+	_lay_floor()
+	var rung: EntityDouble = auto_free(EntityDouble.new())
+	rung.is_climbable = true
+	_terrain.entities[Vector2i(8, 3)] = rung
+	_field.recompute(_goal())
+	var up_a_rung := _field.cost_of_entering(Vector2i(8, 4), Vector2i(8, 3))
+	var surcharge: float = 100.0 * FlowField.ENTITY_HP_COST_FACTOR
+	assert_float(up_a_rung).is_equal_approx(FlowField.MOVE_COST + surcharge, 0.0001)
+	# Per CELL, not per column: one rung up, open sky again, and the clause is
+	# gone. Descending out of it is the fall branch, unchanged.
+	assert_float(_field.cost_of_entering(Vector2i(8, 3), Vector2i(8, 2))).is_equal(INF)
+	assert_float(_field.cost_of_entering(Vector2i(8, 3), Vector2i(8, 4))).is_equal_approx(
+		FlowField.FALL_COST,
+		0.0001,
+	)
 
 # --- Amortized solve (perf work: browser frame budget) --------------------------
 

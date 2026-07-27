@@ -22,7 +22,11 @@ enum MoveClass { GROUND, FLY }
 @export var move_class := MoveClass.GROUND
 @export var jump_height := 1 ## Tiles cleared by a hop; 0 = can't jump.
 @export var climb_speed := 0.0 ## 0 = can't wall-climb.
-@export var is_biped := true ## Gates climbable use (Day 3).
+## Can this mob ASCEND a climbable (3.5b)? Read at exactly ONE site — the CLIMB
+## branch in `EnemyLocomotion.decide`. It does not gate *chewing*: nothing chews a
+## climbable, so a non-biped goes around a ladder (or, at 4.1, wall-climbs
+## alongside it) rather than eating it.
+@export var is_biped := true
 @export var dig_power := 1.0 ## Hardness/s chewed (player tool is 4.0).
 @export var max_safe_fall := 3 ## Tiles fallen without taking damage.
 @export var color := Color(0.75, 0.2, 0.2) ## Placeholder visual tint.

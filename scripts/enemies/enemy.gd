@@ -140,6 +140,9 @@ func _update_stuck(action: EnemyLocomotion.Action, delta: float) -> void:
 		action == EnemyLocomotion.Action.WALK
 		or action == EnemyLocomotion.Action.FALL
 		or action == EnemyLocomotion.Action.JUMP
+		# ❗️CLIMB belongs here (3.5b) or a mob wedged on a ladder never arms the
+		# direct-dig fallback and hangs there for the rest of the wave.
+		or action == EnemyLocomotion.Action.CLIMB
 	)
 	if not moving or global_position.distance_to(_stuck_anchor) > STUCK_EPSILON_PX:
 		_stuck_anchor = global_position
@@ -261,6 +264,20 @@ func _actuate(decision: Dictionary, pos: Vector2i, delta: float) -> void:
 				var tiles: int = decision.jump_tiles
 				# +0.6 tiles of apex slack so the body clears the ledge lip.
 				velocity.y = -sqrt(2.0 * Player.GRAVITY * (tiles + 0.6) * TILE)
+		EnemyLocomotion.Action.CLIMB:
+			velocity.x = 0.0
+			# ❗️`stats.speed`, NOT `stats.climb_speed`. `climb_speed` is
+			# wall-climbing and belongs to 4.1's crawler; a walker has 0 and must
+			# still use a ladder, because the gate is `is_biped`.
+			velocity.y = signi(target.y - pos.y) * stats.speed
+			# Gravity is applied at the TOP of `_step`, so writing velocity.y here
+			# overrides it for the frame.
+			#
+			# ❗️And the reset is not optional: `_step` accumulates `_air_top_y`
+			# every frame off the floor and `_check_landing` bills the drop as
+			# damage. Without this, descending ten rungs and stepping off costs
+			# ten tiles of fall damage.
+			_air_top_y = INF
 		EnemyLocomotion.Action.CHEW:
 			# Standing still keeps the cell (and thus the target) stable, so
 			# the 2 s damage-abandon sweep never claws back mob progress.
@@ -305,12 +322,28 @@ func _find_player() -> Node2D:
 ## that reasoning does not transfer to a 1×1 torch the mob has by definition
 ## already walked through. Worse, the early return in `_push_core` skips
 ## `_update_stuck`, so a mob parked on a torch starves the watchdog it needs to
-## escape a cycling route. The `pos + dir` probe keeps every deployable —
-## chewing what is in front of you is the intended 3.1 behaviour.
+## escape a cycling route. The `pos + dir` probe otherwise keeps every deployable
+## — chewing what is in front of you is the intended 3.1 behaviour.
+##
+## ❗️**A second narrow exception (3.5b): NOTHING chews a climbable.** This helper
+## runs BEFORE `EnemyLocomotion.decide`, so without the skip a mob facing into a
+## ladder returns it as an attackable entity, stops, and eats it — the CLIMB
+## branch is unreachable and the whole feature silently does nothing.
+##
+## ⚠️ **Direction-agnostic, and NOT gated on `is_biped`.** Narrowing it to
+## vertical intent looks tidier and breaks the feature: the field routes a mob
+## into a column from the side, so `dir` is horizontal on the frame it arrives and
+## the mob would chew rung 0 before ever climbing. And a non-biped that cannot
+## *ascend* a ladder still goes around it (or, at 4.1, crawls alongside) rather
+## than eating it — so `is_biped` is read at exactly one site, the CLIMB branch,
+## and means "can ascend a climbable" ([enemies.md](../../docs/systems/enemies.md)
+## §Climbables).
 func _attackable_entity(pos: Vector2i, dir: Vector2i) -> Node:
 	var here: Node = terrain.get_entity(pos)
 	if here != null and not (here is Deployable) and here.has_method(&"take_damage"):
 		return here
+	if Deployable.climbable_at(terrain, pos + dir):
+		return null
 	var ahead: Node = terrain.get_entity(pos + dir)
 	if ahead != null and ahead.has_method(&"take_damage"):
 		return ahead

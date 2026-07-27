@@ -6,7 +6,7 @@
 class_name EnemyLocomotion
 extends RefCounted
 
-enum Action { NONE, WALK, JUMP, CHEW, FALL }
+enum Action { NONE, WALK, JUMP, CHEW, FALL, CLIMB }
 
 ## Drops deeper than this scan read as "unsafe" (bottomless as far as the
 ## mob knows).
@@ -17,7 +17,8 @@ const DROP_SCAN_MAX := 24
 ## the cell moved into (WALK/FALL/JUMP landing) or chewed (CHEW); NONE keeps
 ## the mob still and tells the caller to try the direct-to-Core fallback.
 ## Resolution order (owning doc): walk -> jump -> chew; capabilities are
-## speed, digging is correctness.
+## speed, digging is correctness. CLIMB (3.5b) joins the two VERTICAL branches
+## only, and it is the single site that reads `EnemyStats.is_biped`.
 static func decide(terrain: Node, cell: Vector2i, dir: Vector2i, stats: EnemyStats) -> Dictionary:
 	if dir.x != 0:
 		var ahead := cell + Vector2i(dir.x, 0)
@@ -42,6 +43,9 @@ static func decide(terrain: Node, cell: Vector2i, dir: Vector2i, stats: EnemySta
 			return _make(Action.CHEW, below)
 		if drop_tiles(terrain, cell) <= stats.max_safe_fall:
 			return _make(Action.FALL, below)
+		# A ladder makes the unsafe drop safe: ride it down rather than jumping.
+		if stats.is_biped and Deployable.climbable_at(terrain, below):
+			return _make(Action.CLIMB, below)
 		# Below is air yet the drop is unsafe (straddling a neighbor column):
 		# nothing diggable below — let the direct fallback pick a side.
 		return _make(Action.NONE, cell)
@@ -49,6 +53,14 @@ static func decide(terrain: Node, cell: Vector2i, dir: Vector2i, stats: EnemySta
 		var above := cell + Vector2i.UP
 		if terrain.is_solid(above):
 			return _make(Action.CHEW, above)
+		# ❗️Before the NONE fall-through, and gated on the mob's ONE remaining
+		# read of `is_biped`: the player's ladders are biped highways during a
+		# wave, which is deliberate emergent texture rather than an oversight
+		# ([enemies.md](../../docs/systems/enemies.md) §Climbables). Only the
+		# DESTINATION has to be climbable, which is what lets a mob step up into
+		# rung 0 from the ground beside it — the field's edge asks the same.
+		if stats.is_biped and Deployable.climbable_at(terrain, above):
+			return _make(Action.CLIMB, above)
 		# Air above: the field routed a wall-climb the walker can't do
 		# (climb_speed 0) — the caller's direct fallback absorbs it.
 		return _make(Action.NONE, cell)

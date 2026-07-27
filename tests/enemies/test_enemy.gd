@@ -265,3 +265,109 @@ func test_knockback_clears_the_stuck_watchdog() -> void:
 		enemy._update_stuck(EnemyLocomotion.Action.WALK, 1.0 / 60.0)
 	enemy.apply_knockback(Vector2.RIGHT, 100.0)
 	assert_float(enemy._stuck_timer).is_equal(0.0)
+
+# --- Climbables (3.5b) -------------------------------------------------------
+
+const LadderScene := preload("res://scenes/automation/ladder.tscn")
+
+
+func _ladder_at(terrain: Node, cell: Vector2i) -> Ladder:
+	var ladder: Ladder = auto_free(LadderScene.instantiate())
+	ladder.setup(cell)
+	add_child(ladder)
+	assert_bool(ladder.register(terrain)).is_true()
+	return ladder
+
+
+## ❗️Blocker (a). This helper runs BEFORE `EnemyLocomotion.decide`, so without
+## the skip a mob facing into a ladder returns it as an attackable entity, stops,
+## and eats it — the CLIMB branch is unreachable and the feature silently does
+## nothing.
+func test_a_climbable_in_front_of_the_mob_is_not_attacked() -> void:
+	var enemy := _enemy_with_terrain()
+	_ladder_at(enemy.terrain, MOB_CELL + Vector2i.UP)
+	assert_object(enemy._attackable_entity(MOB_CELL, Vector2i.UP)).is_null()
+
+
+## ⚠️ **Direction-agnostic.** Narrowing the skip to vertical intent looks tidier
+## and breaks the feature: the field routes a mob into a column from the SIDE, so
+## `dir` is horizontal on the frame it arrives and the mob would chew rung 0
+## before ever climbing.
+func test_the_climbable_skip_holds_for_a_sideways_approach() -> void:
+	var enemy := _enemy_with_terrain()
+	_ladder_at(enemy.terrain, MOB_CELL + Vector2i.RIGHT)
+	assert_object(enemy._attackable_entity(MOB_CELL, Vector2i.RIGHT)).is_null()
+
+
+## ⚠️ **And it is NOT gated on `is_biped`: nothing chews a climbable.** A mob
+## that cannot ascend a ladder goes around it — or, at 4.1, wall-climbs alongside
+## it — rather than eating it, which is what leaves `is_biped` read at exactly one
+## site with one meaning.
+func test_a_non_biped_does_not_chew_a_climbable_either() -> void:
+	var enemy := _enemy_with_terrain()
+	enemy.stats.is_biped = false
+	_ladder_at(enemy.terrain, MOB_CELL + Vector2i.UP)
+	assert_object(enemy._attackable_entity(MOB_CELL, Vector2i.UP)).is_null()
+
+
+## The skip is narrow: a torch beside the ladder is still chewed exactly as it
+## was at 3.1.
+func test_a_torch_beside_a_ladder_is_still_attacked() -> void:
+	var enemy := _enemy_with_terrain()
+	_ladder_at(enemy.terrain, MOB_CELL + Vector2i.UP)
+	var torch := _torch_at(enemy.terrain, MOB_CELL + Vector2i.RIGHT)
+	assert_object(enemy._attackable_entity(MOB_CELL, Vector2i.RIGHT)).is_same(torch)
+
+
+## ❗️Blocker (b). A mob wedged on a ladder must still arm the direct-dig
+## fallback, or it hangs there for the rest of the wave.
+func test_climbing_without_moving_arms_direct_mode() -> void:
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(100.0, 100.0)
+	for i in 95: # 95 frames at 1/60 s > STUCK_WINDOW (1.5 s).
+		enemy._update_stuck(EnemyLocomotion.Action.CLIMB, 1.0 / 60.0)
+	assert_float(enemy._direct_left).is_greater(0.0)
+
+
+## ❗️Blocker (c). `_step` accumulates `_air_top_y` every frame off the floor and
+## `_check_landing` bills the drop as damage — descend ten rungs, step off, take
+## ten tiles of fall damage. The CLIMB actuation resets the apex.
+func test_climbing_down_is_not_billed_as_a_fall() -> void:
+	var enemy := _make_enemy()
+	enemy.global_position = Vector2(0.0, 2.0 * 16.0)
+	enemy._air_top_y = 0.0 # As ten airborne frames would have left it.
+	var decision := {
+		"action": EnemyLocomotion.Action.CLIMB,
+		"target": Vector2i(5, 12),
+		"jump_tiles": 0,
+	}
+	enemy._actuate(decision, Vector2i(5, 11), 1.0 / 60.0)
+	assert_float(enemy._air_top_y).is_equal(INF)
+
+	enemy.global_position = Vector2(0.0, 12.0 * 16.0) # Ten tiles lower.
+	enemy._check_landing()
+	assert_float(enemy.current_hp).is_equal(enemy.stats.max_hp)
+
+
+## ⚠️ **`stats.speed`, not `stats.climb_speed`.** `climb_speed` is wall-climbing
+## and belongs to 4.1's crawler; a walker has `climb_speed = 0` and must still be
+## able to use a ladder, because the gate is `is_biped`.
+func test_climbing_uses_walk_speed_not_climb_speed() -> void:
+	var enemy := _make_enemy()
+	enemy.stats.climb_speed = 0.0
+	var up := {
+		"action": EnemyLocomotion.Action.CLIMB,
+		"target": Vector2i(5, 10),
+		"jump_tiles": 0,
+	}
+	enemy._actuate(up, Vector2i(5, 11), 1.0 / 60.0)
+	assert_float(enemy.velocity.y).is_equal(-enemy.stats.speed)
+	assert_float(enemy.velocity.x).is_equal(0.0)
+
+	var down := {
+		"action": EnemyLocomotion.Action.CLIMB,
+		"target": Vector2i(5, 12),
+		"jump_tiles": 0,
+	}
+	enemy._actuate(down, Vector2i(5, 11), 1.0 / 60.0)
+	assert_float(enemy.velocity.y).is_equal(enemy.stats.speed)

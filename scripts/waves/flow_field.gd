@@ -70,6 +70,11 @@ var _build_usec := 0
 ## support flag (any cardinal solid), sparse entity surcharge by flat index.
 var _sid := PackedInt32Array()
 var _supported := PackedByteArray()
+## Cells holding a climbable deployable (3.5b), from the same sparse entity walk
+## as `_entity_cost`. An ASCENDING move into one is a MOVE_COST edge regardless
+## of `_supported`, which is what makes a ladder column a cheap vertical route
+## where bare air is unreachable.
+var _climbable := PackedByteArray()
 var _entity_cost: Dictionary[int, float] = { }
 ## Per-source enter cost for solid cells (INF = unminable), from materials.gd.
 var _dig_cost_by_source := PackedFloat32Array()
@@ -165,6 +170,16 @@ func step_recompute(budget_usec: int) -> bool:
 				step = dig
 			elif uy > vy:
 				step = FALL_COST # u below v: the mob falls in.
+			elif uy < vy and _climbable[u] == 1:
+				# ASCENDING into a climbable (3.5b): a ladder rung is a MOVE_COST
+				# edge whether or not either end has a solid neighbour, which is
+				# the whole of "cheap vertical edges". Mind the swapped roles
+				# documented at the top of the file — `uy > vy` is already the
+				# falling branch, so ascending is `uy < vy`. Only the DESTINATION
+				# need be climbable, which is what lets a mob enter the column from
+				# the cell below the bottom rung; the chain continues because every
+				# rung above is climbable too.
+				step = MOVE_COST
 			elif _supported[v] == 1 or _supported[u] == 1:
 				# Up/sideways air move: needs support at either end — `to`
 				# covers floors/wall-climbs, `from` covers stepping off a
@@ -232,6 +247,10 @@ func snapshot_costs() -> PackedFloat32Array:
 ## neighbor `to`. Reads the last recompute() snapshot — the Dijkstra loop
 ## inlines this exact logic (GDScript call overhead x 120k edges); tests
 ## cross-check both paths.
+##
+## ❗️Every clause here has a twin in that loop, including 3.5b's climbable edge.
+## Change one without the other and the two silently disagree — which is exactly
+## what `test_cost_of_entering_cases` exists to catch.
 func cost_of_entering(from: Vector2i, to: Vector2i) -> float:
 	if not _in_region(from) or not _in_region(to):
 		return INF
@@ -244,6 +263,8 @@ func cost_of_entering(from: Vector2i, to: Vector2i) -> float:
 			return INF
 	elif to.y > from.y:
 		step = FALL_COST
+	elif to.y < from.y and _climbable[ti] == 1:
+		step = MOVE_COST
 	elif _supported[ti] == 1 or _supported[from.y * region_width + from.x] == 1:
 		step = MOVE_COST
 	else:
@@ -263,6 +284,12 @@ func _snapshot() -> void:
 	var rows := region_rows
 	_sid.resize(w * rows)
 	_supported.resize(w * rows)
+	# ❗️`fill`ed where `_supported` is not, and the difference is load-bearing:
+	# the double loop below writes EVERY cell of `_supported`, where `_climbable`
+	# comes from the sparse entity walk. Without the wipe a stale array keeps last
+	# solve's ladders, and the field routes mobs up columns that were taken down.
+	_climbable.resize(w * rows)
+	_climbable.fill(0)
 	var i := 0
 	for y in rows:
 		for x in w:
@@ -292,6 +319,12 @@ func _snapshot() -> void:
 		var hp: Variant = ent.get("current_hp")
 		if hp != null:
 			_entity_cost[pos.y * w + pos.x] = float(hp) * ENTITY_HP_COST_FACTOR
+		# Read as an untyped probe like `current_hp` above, and for the same
+		# reason: `get()` on a node without the property returns null, so the Core
+		# and any future non-Deployable entity stay safe with no branch and
+		# nothing here ever casts an entity.
+		if ent.get("is_climbable"):
+			_climbable[pos.y * w + pos.x] = 1
 
 
 func _heap_push(cell: int, key: float) -> void:
