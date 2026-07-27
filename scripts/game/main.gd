@@ -98,9 +98,21 @@ func _finish_generation() -> void:
 ## Data rather than a sequence of calls so a test can assert what a run opens
 ## with — this list was silently emptied of its torches once by a stray
 ## `git checkout` and nothing caught it but a screenshot.
+##
+## ❗️**Every entry costs a HOTBAR slot, and there are only ten.** The kit is
+## added first, so anything handed over later — the F3 rig's machines, a wave's
+## loot — lands behind it, and past slot ten it is unreachable until 3.6 builds
+## the inventory UI. 3.5a hit exactly that: the rig's kit overflowed and the coal
+## fell off the end, leaving a chain that could never be fuelled
+## ([ui.md](../../docs/systems/ui.md)). Keep this list as short as a run needs.
+##
+## ⚠️ `bolt_caster` was dropped at 3.5a. `data/item_defs.gd` had always said it
+## existed only "before 3.5's turrets depend on it" — the turret is a live
+## consumer of the pooled projectile system now, so the placeholder no longer
+## earns a permanent slot. It is still an authored item and still in the F3
+## give-item dropdown, so the player's ranged path stays one click away.
 const STARTING_KIT: Array[Array] = [
 	["pickaxe_t1", 1],
-	["bolt_caster", 1],
 	["torch", 20],
 ]
 

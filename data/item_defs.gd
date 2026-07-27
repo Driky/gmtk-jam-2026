@@ -17,8 +17,12 @@ const BARE_HAND: ItemStats = preload("res://data/items/bare_hand.tres")
 const BLOCK_DEFAULT: ItemStats = preload("res://data/items/block_default.tres")
 
 const PICKAXE_T1: ItemStats = preload("res://data/items/pickaxe_t1.tres")
-## Placeholder ranged weapon: exists so the pooled projectile system has a live
-## consumer before 3.5's turrets depend on it. Crafted bows (4.2) replace it.
+## Placeholder ranged weapon: existed so the pooled projectile system had a live
+## consumer before 3.5's turrets depended on it. ✅ That job is done — the turret
+## is that consumer — so 3.5a dropped it from `STARTING_KIT`, where it was
+## costing one of ten hotbar slots. Kept as an authored item (and so a give-item
+## row) because it is still the only way to exercise the player's own ranged
+## path by hand. Crafted bows (4.2) replace it.
 const BOLT_CASTER: ItemStats = preload("res://data/items/bolt_caster.tres")
 ## The first placeable that is a SCENE rather than a tile — light you carry and
 ## mount on a wall ([terrain.md](../docs/systems/terrain.md) §Lighting).
