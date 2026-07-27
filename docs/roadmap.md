@@ -74,7 +74,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 ### 2.5 Combat ([player-combat.md](systems/player-combat.md))
 - [x] **LMB = use the active hotbar item**; every combat/mining number is an `ItemStats` Resource, resolved authored > block default > bare hand. Lands the item half of 3.6's DB early — **3.6's "item/recipe DB" bullet is now recipes only**.
 - [x] Melee: `Area2D` hitbox arc, damage + knockback; instanced on equip, enabled on swing.
-- [x] Shared projectile system: pooled scene + `ProjectileStats` — built so turrets (Day 3) and spells (Day 4, ✂️4) reuse it verbatim. ⚠️ Pool size must scale with spawner count before 3.5.
+- [x] Shared projectile system: pooled scene + `ProjectileStats` — built so turrets (Day 3) and spells (Day 4, ✂️4) reuse it verbatim. ⚠️ Pool size must scale with spawner count before 3.5 — **done at 3.5a**.
 - [x] Mobs damage the player: attack of opportunity + contact damage, 0.6 s grace window with a blink ([enemies.md](systems/enemies.md) owns the mob-side rule).
 - [x] Death/respawn: loot-bag drop (hotbar kept), respawn at Core after timer (beacon override Day 3).
 
@@ -124,7 +124,7 @@ Legend: 🔴 = on a "never cut" path · ✂️n = covered by cut line *n* in [pl
 Six new deployables, a shared-pool refactor, a widened support predicate, a new player movement mode and changes to the flow field: too big for one pass. Each sub-step below has a **self-contained step doc** under [steps/](steps/) carrying the file-by-file work, the traps found while researching it, and its own verification — enough that each can be picked up cold. Suggested order **3.5a → 3.5c → 3.5b**: 3.5c is smallest and unblocks 3.6's container view, and 3.5b is last because it is the only one touching a predicate four systems read *plus* the flow field *plus* mob locomotion.
 
 #### 3.5a Turrets & traps ([steps/3.5a-turrets-and-traps.md](steps/3.5a-turrets-and-traps.md))
-- [ ] 🔴 **Projectile pool must scale with spawner count before turrets ship** — the 2.5 pool is a fixed 32 and steals in-flight shots once exceeded ([player-combat.md](systems/player-combat.md)). Each spawner reserves its worst case on place; grow-never-shrink.
+- [x] 🔴 **Projectile pool must scale with spawner count before turrets ship** — the 2.5 pool is a fixed 32 and steals in-flight shots once exceeded ([player-combat.md](systems/player-combat.md)). Each spawner reserves its worst case on place; grow-never-shrink. Landed with a per-shot `damage_scale`, the seam a `turret_damage` buff needs.
 - [ ] `Waves.enemies()` + pure static target selection; basic turret: auto-target nearest in range, shared projectiles, power **and** an ammo slot fed by inserter/hand; spike trap.
 - [ ] **Ammo press pulled forward from 4.2** — it costs no new script ([automation.md](systems/automation.md) §Categories: a `.tscn`, a `station_id` and recipe rows), and it makes the chain `miner → furnace → ammo press → turret`. Ammo tiers ship copper + iron only; gold/magmatite wait on their bars (4.2).
 

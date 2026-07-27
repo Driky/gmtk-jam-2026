@@ -33,6 +33,9 @@ var stats: ProjectileStats = null
 ## Who fired it — carried so damage attributes threat to the real attacker
 ## (a turret tanks its own aggro) and so a shot can't hit its own shooter.
 var source: Node2D = null
+## Per-shot multiplier on `stats.damage`, stamped by `launch`. 1.0 for the
+## player's own shots — the buff seam for turrets and (4.2) spells.
+var damage_scale := 1.0
 
 var _velocity := Vector2.ZERO
 var _life_left := 0.0
@@ -46,8 +49,8 @@ var _hit_bodies: Array[Node2D] = []
 
 
 func _ready() -> void:
-	# Sub-resources are shared across instances of a PackedScene, so all 32
-	# pooled projectiles would otherwise share one circle — a spell orb launch
+	# Sub-resources are shared across instances of a PackedScene, so every
+	# pooled projectile would otherwise share one circle — a spell orb launch
 	# would resize every bolt already in the air.
 	_shape.shape = _shape.shape.duplicate()
 	_deactivate()
@@ -62,15 +65,21 @@ static func mask_for(faction: Faction) -> int:
 
 
 ## Called by the pool. `direction` need not be normalized.
+##
+## `damage_scale` is per SHOT rather than per stats: a turret's
+## `turret_damage` buff and 4.2's `spell_damage` scale the same shared
+## `ProjectileStats` without either duplicating the Resource.
 func launch(
 		projectile_stats: ProjectileStats,
 		origin: Vector2,
 		direction: Vector2,
 		faction: Faction,
 		shooter: Node2D,
+		scale := 1.0,
 ) -> void:
 	stats = projectile_stats
 	source = shooter
+	damage_scale = scale
 	var dir := direction.normalized() if not direction.is_zero_approx() else Vector2.RIGHT
 	global_position = origin
 	_velocity = dir * stats.speed
@@ -119,7 +128,7 @@ func _resolve_contacts() -> void:
 			_deactivate() # Terrain or scenery: the shot stops here.
 			return
 		_hit_bodies.append(body)
-		body.take_damage(stats.damage, source)
+		body.take_damage(stats.damage * damage_scale, source)
 		if body.has_method(&"apply_knockback"):
 			body.apply_knockback(_velocity, stats.knockback)
 		if _pierce_left <= 0:
@@ -138,6 +147,7 @@ func _deactivate() -> void:
 	_hit_bodies.clear()
 	stats = null
 	source = null
+	damage_scale = 1.0
 
 
 func _draw() -> void:

@@ -106,6 +106,31 @@ func test_shot_damages_and_shoves_a_target() -> void:
 	assert_array(target.shoves).contains_exactly([60.0])
 
 
+## The per-shot buff seam (3.5a): a turret's `turret_damage` and 4.2's
+## `spell_damage` scale a SHARED `ProjectileStats` rather than each duplicating
+## the Resource, so the multiplier has to ride the shot, not the stats.
+func test_damage_scale_multiplies_the_hit_without_touching_the_stats() -> void:
+	var target := TargetDouble.new()
+	target.position = Vector2(60.0, 0.0)
+	var arena := _build_arena([target])
+	var runner := scene_runner(arena.root)
+	await runner.simulate_frames(2)
+	var stats := _make_stats()
+	(arena.pool as ProjectilePool).fire_from_pool(
+		stats,
+		Vector2.ZERO,
+		Vector2.RIGHT,
+		Projectile.Faction.PLAYER,
+		null,
+		1.5,
+	)
+	await runner.simulate_frames(30)
+	assert_array(target.hits).contains_exactly([9.0])
+	# The shared Resource is untouched — a scaled shot must not re-tune the ammo
+	# for everything else firing it.
+	assert_float(stats.damage).is_equal(6.0)
+
+
 ## No pierce means the shot is spent on the first body — it must not carry on
 ## and clip the mob behind.
 func test_no_pierce_stops_on_the_first_target() -> void:
@@ -208,15 +233,16 @@ func test_shot_into_empty_space_returns_to_the_pool() -> void:
 	assert_int(pool.active_count()).is_equal(0)
 
 
-## Nothing is instantiated while shots fly: firing more than the pool holds
-## recycles rather than allocating.
+## Nothing is instantiated while shots FLY: firing more than the pool holds
+## recycles rather than allocating. Capacity only ever changes on a `reserve`,
+## which happens at placement time and never mid-flight (test_projectile_pool).
 func test_pool_never_grows_past_its_size() -> void:
 	var arena := _build_arena([])
 	var runner := scene_runner(arena.root)
 	await runner.simulate_frames(2)
 	var pool: ProjectilePool = arena.pool
 	var child_count := pool.get_child_count()
-	for i in ProjectilePool.POOL_SIZE + 10:
+	for i in pool.pool_size() + 10:
 		pool.fire_from_pool(
 			_make_stats(),
 			Vector2.ZERO,
@@ -225,7 +251,7 @@ func test_pool_never_grows_past_its_size() -> void:
 			null,
 		)
 	assert_int(pool.get_child_count()).is_equal(child_count)
-	assert_int(pool.active_count()).is_equal(ProjectilePool.POOL_SIZE)
+	assert_int(pool.active_count()).is_equal(pool.pool_size())
 
 
 ## Turrets (3.5) reach the pool statically, with no node path.
