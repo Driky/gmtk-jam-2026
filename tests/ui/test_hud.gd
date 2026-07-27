@@ -127,27 +127,29 @@ func test_icon_cache_returns_same_instance() -> void:
 
 func test_add_item_updates_slot_zero() -> void:
 	_inv.add_item("dirt", 10)
-	assert_str(_hud._slot_counts[0].text).is_equal("10")
-	assert_object(_hud._slot_icons[0].texture).is_not_null()
+	assert_str(_hud._slots[0].count_text()).is_equal("10")
+	assert_object(_hud._slots[0].icon_texture()).is_not_null()
 
 
 func test_emptied_slot_clears_display() -> void:
 	_inv.add_item("dirt", 10)
 	_inv.remove_from_slot(0, 10)
-	assert_str(_hud._slot_counts[0].text).is_equal("")
-	assert_object(_hud._slot_icons[0].texture).is_null()
+	assert_str(_hud._slots[0].count_text()).is_equal("")
+	assert_object(_hud._slots[0].icon_texture()).is_null()
 
 
 func test_selection_highlight_moves() -> void:
-	assert_that(_hud._slot_bgs[0].color).is_equal(HudScript.SELECTED_BG)
+	assert_that(_hud._slots[0].color).is_equal(ItemSlot.SELECTED_BG)
 	_inv.selected_slot = 3
-	assert_that(_hud._slot_bgs[3].color).is_equal(HudScript.SELECTED_BG)
-	assert_that(_hud._slot_bgs[0].color).is_equal(HudScript.NORMAL_BG)
+	assert_that(_hud._slots[3].color).is_equal(ItemSlot.SELECTED_BG)
+	assert_that(_hud._slots[0].color).is_equal(ItemSlot.NORMAL_BG)
 
 
+## ⚠️ Pins the widget's child order, which `ItemSlot._init` promises: a key label
+## that moved would still look right and break every caller reading child 1.
 func test_key_labels_run_1_to_9_then_0() -> void:
-	var bg: ColorRect = _hud._slot_bgs[Inventory.HOTBAR_SIZE - 1]
-	var key := bg.get_child(1) as Label # Child order: icon, key, count.
+	var slot: ItemSlot = _hud._slots[Inventory.HOTBAR_SIZE - 1]
+	var key := slot.get_child(1) as Label # Child order: icon, key, count.
 	assert_str(key.text).is_equal("0")
 
 
@@ -155,8 +157,8 @@ func test_non_hotbar_slot_change_leaves_hotbar_untouched() -> void:
 	for i in Inventory.HOTBAR_SIZE:
 		_inv.add_item("dirt", Inventory.STACK_SIZE)
 	_inv.add_item("dirt", 5) # Overflows into slot 10 — beyond the hotbar.
-	assert_str(_hud._slot_counts[Inventory.HOTBAR_SIZE - 1].text).is_equal("99")
-	assert_int(_hud._slot_counts.size()).is_equal(Inventory.HOTBAR_SIZE)
+	assert_str(_hud._slots[Inventory.HOTBAR_SIZE - 1].count_text()).is_equal("99")
+	assert_int(_hud._slots.size()).is_equal(Inventory.HOTBAR_SIZE)
 
 # --- Bars --------------------------------------------------------------------
 

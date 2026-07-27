@@ -9,11 +9,11 @@ extends CanvasLayer
 
 const _TILESET: TileSet = preload("res://assets/generated/terrain_tileset.tres")
 
+## The fallback swatch's pixel size. ⚠️ Stays here rather than moving to
+## `ItemSlot` with the layout constants: `icon_for` below is its only reader, and
+## parking it on the widget would leave this script reaching back into the class
+## it constructs, which is the cycle the extraction exists to avoid.
 const ICON_SIZE := 16
-const SLOT_SIZE := Vector2(44, 44)
-const SLOT_MARGIN := 6.0
-const NORMAL_BG := Color(0, 0, 0, 0.45)
-const SELECTED_BG := Color(0.95, 0.85, 0.3, 0.55)
 const FALLBACK_COLOR := Color(0.6, 0.6, 0.6)
 
 const FINAL_COLOR := Color(1.0, 0.35, 0.3)
@@ -66,9 +66,10 @@ var _toast_tween: Tween = null
 var _toast_message := ""
 var _wave_number := 0
 
-var _slot_bgs: Array[ColorRect] = []
-var _slot_icons: Array[TextureRect] = []
-var _slot_counts: Array[Label] = []
+## The hotbar row. ONE array of `ItemSlot`s since 3.6a, replacing the three
+## parallel arrays this used to keep — the character screen needs 68 more of these
+## widgets, and a fourth set of parallel arrays was the copy that would drift.
+var _slots: Array[ItemSlot] = []
 
 @onready var _hp_bar: ProgressBar = %HPBar
 @onready var _hp_label: Label = %HPLabel
@@ -254,8 +255,8 @@ static func tile_text(data: Dictionary) -> String:
 ## Which hotbar slot the pointer is over, or -1. Hit-tested against the slot
 ## backgrounds themselves, so it cannot drift from where they were laid out.
 func _hovered_slot(at: Vector2) -> int:
-	for i in _slot_bgs.size():
-		if _slot_bgs[i].get_global_rect().has_point(at):
+	for i in _slots.size():
+		if _slots[i].get_global_rect().has_point(at):
 			return i
 	return -1
 
@@ -492,7 +493,7 @@ func _on_slot_changed(index: int) -> void:
 
 func _on_selected_changed(index: int) -> void:
 	for i in Inventory.HOTBAR_SIZE:
-		_slot_bgs[i].color = SELECTED_BG if i == index else NORMAL_BG
+		_slots[i].set_selected(i == index)
 	_refresh_selected_label()
 
 
@@ -506,44 +507,12 @@ func _refresh_selected_label() -> void:
 
 
 func _refresh_slot(index: int) -> void:
-	var slot := inventory.get_slot(index)
-	if slot.is_empty():
-		_slot_icons[index].texture = null
-		_slot_counts[index].text = ""
-	else:
-		_slot_icons[index].texture = icon_for(slot.id)
-		_slot_counts[index].text = str(slot.count)
+	_slots[index].set_stack(inventory.get_slot(index))
 
 
+## The hotbar's ten widgets, key-labelled — the one thing that distinguishes them
+## from the character screen's grid slots (action hotbar_10 = key "0" = slot 9).
 func _make_slot(index: int) -> void:
-	var bg := ColorRect.new()
-	bg.custom_minimum_size = SLOT_SIZE
-	bg.color = NORMAL_BG
-	_hotbar.add_child(bg)
-	_slot_bgs.append(bg)
-
-	var icon := TextureRect.new()
-	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-	icon.offset_left = SLOT_MARGIN
-	icon.offset_top = SLOT_MARGIN
-	icon.offset_right = -SLOT_MARGIN
-	icon.offset_bottom = -SLOT_MARGIN
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	bg.add_child(icon)
-	_slot_icons.append(icon)
-
-	var key := Label.new()
-	key.text = str((index + 1) % 10) # Action hotbar_10 = key "0" = slot 9.
-	key.add_theme_font_size_override("font_size", 10)
-	key.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 3)
-	bg.add_child(key)
-
-	var count := Label.new()
-	count.add_theme_font_size_override("font_size", 12)
-	count.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 3)
-	count.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	count.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bg.add_child(count)
-	_slot_counts.append(count)
+	var slot := ItemSlot.new(index, str((index + 1) % 10))
+	_hotbar.add_child(slot)
+	_slots.append(slot)
