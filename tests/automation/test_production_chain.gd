@@ -3,6 +3,10 @@
 ##
 ##     miner → inserter → belt → inserter → furnace → inserter → belt
 ##
+## and since 3.5a all the way to something that shoots:
+##
+##     → inserter → ammo press → inserter → belt → inserter → turret
+##
 ## Every piece has its own suite; this one exists because the *seams between
 ## them* are where a factory that looks right produces nothing — a station that
 ## hands its input back, an inserter that never sees a machine as a source, a
@@ -17,6 +21,9 @@ const FurnaceScene := preload("res://scenes/automation/furnace.tscn")
 const ConveyorScene := preload("res://scenes/automation/conveyor.tscn")
 const InserterScene := preload("res://scenes/automation/inserter.tscn")
 const GeneratorScene := preload("res://scenes/automation/generator.tscn")
+const AmmoPressScene := preload("res://scenes/automation/ammo_press.tscn")
+const TurretScene := preload("res://scenes/automation/turret.tscn")
+const PoolScript := preload("res://scripts/combat/projectile_pool.gd")
 
 ## Playable (x in [50, 150)) and far from world edges.
 const ORIGIN := Vector2i(80, 100)
@@ -26,17 +33,44 @@ const POWER_CELL := ORIGIN + Vector2i(2, -3)
 ## Far enough that no footprint cell of the chain is inside the disc, so the
 ## negative twin is genuinely "out of radius" rather than "just barely".
 const FAR_POWER_CELL := ORIGIN + Vector2i(60, 0)
-const POWER_RADIUS := 12.0 ## Tiles; covers the whole line from POWER_CELL.
+## Tiles; covers the whole line from POWER_CELL — widened at 3.5a when the line
+## grew a press and a turret on the far end.
+const POWER_RADIUS := 20.0
 ## More than enough coal for RUN_TICKS, so these tests measure the chain rather
 ## than the fuel burn — `test_generator.gd` owns that.
 const FUEL_STACK := 20
 ## Generous: the chain has three cooldowns in series (miner 10, three inserters
 ## at 5) plus a 20-tick smelt, and this asserts arrival, not throughput.
 const RUN_TICKS := 200
+## The 3.5a tail adds a 20-tick press and three more inserter hops behind the
+## 3.3 chain, so the full run to a loaded turret needs its own budget.
+const LONG_RUN_TICKS := 500
+
+
+## The turret asks its aggro helper for targets; this suite has no business
+## spawning real mobs into a fixture that is about item flow.
+class WavesDouble:
+	extends Node
+
+	var mobs: Array[Node] = []
+
+
+	func enemies() -> Array[Node]:
+		return mobs
+
+
+class MobDouble:
+	extends Node2D
+
+	func take_damage(_amount: float, _attacker: Node2D = null) -> void:
+		pass
+
 
 var _terrain: Node
 var _automation: Node
 var _game: Node
+var _waves: WavesDouble
+var _pool: ProjectilePool
 
 
 func before_test() -> void:
@@ -49,6 +83,10 @@ func before_test() -> void:
 	_automation.game = _game
 	add_child(_automation)
 	_automation.set_process(false)
+	_waves = auto_free(WavesDouble.new())
+	add_child(_waves)
+	_pool = auto_free(PoolScript.new())
+	add_child(_pool)
 
 
 ## A real generator, hand-fed real coal. ❗️Deliberately not a supply double: the
@@ -105,7 +143,7 @@ func _build(power_cell := POWER_CELL) -> Dictionary:
 		_terrain.set_tile(ore, "copper_deposit")
 	# A floor under the whole line, so the two supported machines stand for the
 	# same reason they would in a real placement.
-	for x in range(-4, 9):
+	for x in range(-4, 16):
 		_terrain.set_tile(ORIGIN + Vector2i(x, 2), "dirt")
 	var chain := {
 		miner = _place(MinerScene, miner_cell, Vector2i.LEFT),
@@ -117,6 +155,25 @@ func _build(power_cell := POWER_CELL) -> Dictionary:
 		feed_out = _place(InserterScene, ORIGIN + Vector2i(6, 0)),
 		belt_out = _place(ConveyorScene, ORIGIN + Vector2i(7, 0)),
 	}
+	return chain
+
+
+## The 3.5a tail, bolted onto the 3.3 chain rather than replacing it:
+##
+##   x:  8    9..10   11   12    13   14
+##       ins  PRESS   ins  belt  ins  TURRET
+##
+## The press picks bars off `belt_out` and the turret is fed the ammo the same
+## way every other machine is fed — through the seam, with nobody clicking.
+func _build_defense_tail(chain: Dictionary) -> Dictionary:
+	chain.feed_press = _place(InserterScene, ORIGIN + Vector2i(8, 0))
+	chain.press = _place(AmmoPressScene, ORIGIN + Vector2i(9, 0))
+	chain.feed_ammo = _place(InserterScene, ORIGIN + Vector2i(11, 0))
+	chain.belt_ammo = _place(ConveyorScene, ORIGIN + Vector2i(12, 0))
+	chain.feed_turret = _place(InserterScene, ORIGIN + Vector2i(13, 0))
+	var turret: Turret = _place(TurretScene, ORIGIN + Vector2i(14, 0))
+	turret.waves = _waves
+	chain.turret = turret
 	return chain
 
 
@@ -230,3 +287,69 @@ func test_a_blocked_tail_jams_the_chain_without_losing_anything() -> void:
 	var furnace: CraftingStation = chain.furnace
 	assert_int(furnace.output_slot().count).is_greater(0)
 	assert_bool((chain.belt_out as Conveyor).slot_empty()).is_true()
+
+# --- The defense tail (3.5a) --------------------------------------------------
+
+
+## ❗️**The 3.5a exit criterion, minus the physics.** A deposit becomes loaded
+## ammo inside a turret with nobody clicking anything — four machines, five
+## inserters and three belts, and the only thing putting an item into the factory
+## is still the miner eating the deposit.
+##
+## The shot itself is asserted below rather than here: contact needs real physics
+## frames, and this fixture drives `step_tick()` by hand.
+func test_a_deposit_becomes_loaded_ammo_in_a_turret_with_nobody_clicking() -> void:
+	var chain := _build_defense_tail(_build())
+
+	_run(LONG_RUN_TICKS)
+
+	var turret: Turret = chain.turret
+	assert_bool(turret.ammo_slot().is_empty()).override_failure_message(
+		"No ammo reached the turret in %d ticks" % LONG_RUN_TICKS,
+	).is_false()
+	assert_str(turret.ammo_slot().id).is_equal("copper_ammo")
+	assert_bool(turret.is_idle()).is_false()
+
+
+## And the loop closes: the turret the factory loaded shoots at a mob, using the
+## projectile its ammo carries. This is the whole point of the tail — a chain
+## that ends in a full ammo slot and never fires would pass the test above.
+func test_the_turret_the_factory_loaded_actually_fires() -> void:
+	var chain := _build_defense_tail(_build())
+	_run(LONG_RUN_TICKS)
+	var turret: Turret = chain.turret
+	var loaded: int = turret.ammo_slot().count
+
+	var mob: MobDouble = auto_free(MobDouble.new())
+	mob.position = turret.global_position + Vector2(TileLayout.TILE_SIZE * 2.0, 0.0)
+	add_child(mob)
+	_waves.mobs.append(mob)
+	_automation.step_tick()
+
+	assert_int(_pool.active_count()).is_equal(1)
+	assert_int(turret.ammo_slot().count).is_equal(loaded - 1)
+
+
+## ❗️The fantasy again, one link further out: the turret is fed BY the factory
+## while the wave is on, so a defense that runs dry mid-wave refills itself.
+func test_the_factory_keeps_feeding_the_turret_during_a_wave() -> void:
+	var chain := _build_defense_tail(_build())
+	_game.state = GameScript.State.WAVE_PHASE
+
+	for i in LONG_RUN_TICKS:
+		_automation.advance(AutomationScript.TICK_INTERVAL)
+
+	assert_str((chain.turret as Turret).ammo_slot().get("id", "")).is_equal("copper_ammo")
+
+
+## The negative twin, for the tail: no power, no ammo, and therefore a turret
+## that is idle rather than one that quietly fires on an empty slot.
+func test_an_unpowered_tail_leaves_the_turret_empty_and_idle() -> void:
+	var chain := _build_defense_tail(_build(FAR_POWER_CELL))
+
+	_run(LONG_RUN_TICKS)
+
+	var turret: Turret = chain.turret
+	assert_bool(turret.ammo_slot().is_empty()).is_true()
+	assert_bool(turret.is_idle()).is_true()
+	assert_int(_pool.active_count()).is_equal(0)
