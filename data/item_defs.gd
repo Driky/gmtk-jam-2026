@@ -84,6 +84,13 @@ const SPIKE_TRAP: ItemStats = preload("res://data/items/spike_trap.tres")
 const CHEST: ItemStats = preload("res://data/items/chest.tres")
 const BEACON: ItemStats = preload("res://data/items/beacon.tres")
 
+## The third Utility deployable and the first CLIMBABLE (3.5b): the one thing the
+## player builds that changes how the world is traversed — by the player and, by
+## design, by any biped in a wave ([enemies.md](../docs/systems/enemies.md)
+## §Climbables). 4.1's rope and pole are a `.tscn` and a `.tres` on the same
+## `is_climbable` export, not a second script.
+const LADDER: ItemStats = preload("res://data/items/ladder.tres")
+
 const STATS: Dictionary = {
 	"pickaxe_t1": PICKAXE_T1,
 	"bolt_caster": BOLT_CASTER,
@@ -103,6 +110,7 @@ const STATS: Dictionary = {
 	"spike_trap": SPIKE_TRAP,
 	"chest": CHEST,
 	"beacon": BEACON,
+	"ladder": LADDER,
 }
 
 

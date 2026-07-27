@@ -80,6 +80,12 @@ var _ghost_directional := false
 ## harvest block sits three cells to the left is unreadable without it, and the
 ## whole placement rule is "point the arrow at the ore".
 var _ghost_harvests := false
+## Is this placement a climbable (3.5b's ladder)? Cached with the rest and handed
+## straight to `can_place_at`, which is what lets a rung stand on the rung below
+## it. ❗️Two halves, and missing either one is the same bug: cache it here and
+## pass it in `_draw_ghost`, or the argument is always false and a column tints
+## red from the second rung up while the click happily accepts it.
+var _ghost_climbable := false
 ## Coverage radius in TILES this placement would emit, 0 for anything that is not
 ## a generator or a relay. ❗️**One owner per meaning**: existing coverage belongs
 ## to the power overlay, your-coverage-to-be belongs here, so the two cannot
@@ -136,6 +142,7 @@ func _refresh_placement() -> void:
 	_ghost_dirs = Player.placement_support_dirs(id)
 	_ghost_directional = Player.placement_directional(id)
 	_ghost_harvests = Player.placement_harvests(id)
+	_ghost_climbable = Player.placement_is_climbable(id)
 	_ghost_power_radius = Player.placement_power_radius(id)
 	_ghost_item = Rect2()
 	if _ghost_size == Vector2i.ZERO:
@@ -210,6 +217,7 @@ func _draw_ghost() -> void:
 			_ghost_dirs,
 			_player.place_facing,
 			_ghost_harvests,
+			_ghost_climbable,
 		)
 	)
 	var color := GHOST_COLOR if valid else REJECT_COLOR

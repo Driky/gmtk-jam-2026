@@ -549,6 +549,7 @@ func _place_scene(terrain: Node, cell: Vector2i, scene: PackedScene) -> void:
 		node.support_dirs,
 		node.facing,
 		node.harvests_deposits,
+		node.is_climbable,
 	):
 		node.free()
 		return
@@ -628,7 +629,8 @@ func tile_rect() -> Rect2i:
 ## the block rule, unchanged, so every block call site stays a three-argument
 ## call and the 2.7 behaviour is preserved by construction. `facing`/`harvests`
 ## default the same way, so 3.1's five-argument deployable call sites are
-## untouched too.
+## untouched too, and 3.5b's `climbable` joins the same bargain: it is what lets
+## a ladder rung stand on the rung below it and nothing else changes.
 ##
 ## ❗️`harvests` is ONE generic clause, not a `Miner` type check: a deployable
 ## that harvests must have at least one deposit in its harvest block, which is
@@ -643,6 +645,7 @@ static func can_place_at(
 		support_dirs := Deployable.SUPPORT_ALL,
 		facing := Vector2i.RIGHT,
 		harvests := false,
+		climbable := false,
 ) -> bool:
 	for cell: Vector2i in Deployable.footprint_at(origin, size):
 		if not terrain.can_player_edit(cell):
@@ -657,7 +660,7 @@ static func can_place_at(
 		var harvest := Deployable.harvest_cells_at(origin, size, facing)
 		if not Deployable.has_deposit_in(terrain, harvest):
 			return false
-	return Deployable.is_supported_at(terrain, origin, size, support_dirs)
+	return Deployable.is_supported_at(terrain, origin, size, support_dirs, climbable)
 
 
 ## What placing this item id would occupy. `ZERO` means "not placeable at all",
@@ -702,6 +705,21 @@ static func placement_harvests(item_id: String) -> bool:
 		return false
 	var scene := Items.stats_for(item_id).place_scene
 	return scene != null and Deployable.scene_harvests(scene)
+
+
+## Whether placing this item puts a climbable down — the ghost's fourth question,
+## and the one that decides whether a rung may stand on the rung below it. Same
+## two branches again: a block is never climbable.
+##
+## ❗️Without this the ghost tints red exactly where the click accepts, on every
+## rung of a column above the first — the one thing the "ghost validity IS
+## `can_place_at`" invariant exists to prevent
+## ([player-combat.md](../../docs/systems/player-combat.md) §Placement).
+static func placement_is_climbable(item_id: String) -> bool:
+	if item_id == "":
+		return false
+	var scene := Items.stats_for(item_id).place_scene
+	return scene != null and Deployable.scene_is_climbable(scene)
 
 
 ## Coverage radius (in TILES) placing this item would emit, `0.0` for anything

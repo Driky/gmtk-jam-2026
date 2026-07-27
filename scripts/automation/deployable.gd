@@ -16,6 +16,10 @@ const TILE := TileLayout.TILE_SIZE
 const SUPPORT_OFFSETS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const SUPPORT_ALL := 15
 const SUPPORT_NONE := 0
+## The Down bit on its own, named because the climbable-stacking clause below is
+## gated on it: "a climbable under me holds me up" is a *downward* support
+## direction, so a deployable that does not mount downward must not gain one.
+const SUPPORT_DOWN := 4
 
 ## Backstop on the support drain, asserted in debug builds only. A cascade
 ## terminates because every step permanently removes one deployable; this
@@ -56,6 +60,17 @@ const MAX_DRAIN_STEPS := 4096
 ## in tiles and multiplied by `TILE` at the one place the graph is built, so no
 ## reader has to remember which unit it is holding.
 @export var power_radius := 0.0
+## Can something go UP and DOWN through this cell? The ladder (3.5b) and 4.1's
+## rope and pole are the only things that say true.
+##
+## ❗️**One export, four readers, and it also carries the stacking rule.** The
+## player's climb, the flow field's cheap vertical edge, `EnemyLocomotion`'s CLIMB
+## branch and `Enemy._attackable_entity`'s skip all ask this same question — a
+## second copy of it (a `stack_group`, a `Ladder` type check) would be a second
+## name for the same set. The stacking rule *is* "a climbable is held up by the
+## climbable below it", so 4.1's rope and pole get it for free by authoring this
+## one bool ([automation.md](../../docs/systems/automation.md) §Deployable base).
+@export var is_climbable := false
 
 ## Which way it points. RIGHT by default, so a non-directional deployable still
 ## has a defined facing that nobody reads. Runtime rather than authored: the
@@ -167,6 +182,20 @@ static func has_deposit_in(terrain: Node, cells: Array[Vector2i]) -> bool:
 			return true
 	return false
 
+# --- Climbables (3.5b) --------------------------------------------------------
+
+
+## Is this cell climbable? THE predicate, mirroring `is_deposit_at`: four systems
+## ask it (the player's climb, the flow-field snapshot, `EnemyLocomotion.decide`
+## and `Enemy._attackable_entity`) and none of them ever learns what a Ladder is.
+##
+## `as Deployable` rather than a group or a type check, for the same reason
+## `_hit_deployable` uses one: the Core is a plain `Node2D`, so it answers false
+## with no special case anywhere.
+static func climbable_at(terrain: Node, cell: Vector2i) -> bool:
+	var occupant := terrain.get_entity(cell) as Deployable
+	return occupant != null and occupant.is_climbable
+
 # --- Registration ------------------------------------------------------------
 
 
@@ -201,20 +230,51 @@ func unregister(terrain: Node) -> void:
 ## Support means a solid TILE neighbour: a deployable never holds up another
 ## deployable, so a chain is one deep and a cascade is a rare special case
 ## rather than the norm. `dirs == 0` opts out entirely.
-static func is_supported_at(terrain: Node, origin: Vector2i, area: Vector2i, dirs: int) -> bool:
+##
+## ❗️**One exception, and it is DIRECTIONAL: a climbable is held up by the
+## climbable BELOW it** (3.5b). `climbable` is a defaulted fifth argument — "this
+## deployable is itself climbable" — so every pre-3.5b call site keeps the 3.1
+## behaviour by construction, the same bargain `facing`/`harvests` made at 3.3.
+##
+## ❗️The naive symmetric version ("a climbable neighbour holds me up") is a real
+## bug: two ladders floating in mid-air each point at the other and both claim
+## support forever, and `is_supported_at` is a **one-step predicate, not a
+## reachability query**, so nothing can see the cycle. Reading only DOWNWARD makes
+## the relation strictly increase in `y` toward a solid anchor, so a cycle is
+## impossible by construction — and you build a column bottom-up from the floor,
+## which is the direction you climb anyway. The cell below is skipped when it is
+## part of this deployable's own footprint, so a future 1×2 climbable cannot stand
+## on itself either.
+##
+## Gated on the Down bit so `support_dirs` keeps meaning exactly what it says
+## ("which cardinal neighbours can hold this up"), and `dirs == SUPPORT_NONE`
+## still opts out by construction.
+static func is_supported_at(
+		terrain: Node,
+		origin: Vector2i,
+		area: Vector2i,
+		dirs: int,
+		climbable := false,
+) -> bool:
 	if dirs == SUPPORT_NONE:
 		return true
+	var footprint := Rect2i(origin, area)
 	for cell_pos: Vector2i in footprint_at(origin, area):
 		for i in SUPPORT_OFFSETS.size():
 			if dirs & (1 << i) == 0:
 				continue
 			if terrain.is_solid(cell_pos + SUPPORT_OFFSETS[i]):
 				return true
+		if not climbable or dirs & SUPPORT_DOWN == 0:
+			continue
+		var below := cell_pos + Vector2i.DOWN
+		if not footprint.has_point(below) and climbable_at(terrain, below):
+			return true
 	return false
 
 
 func is_supported(terrain: Node) -> bool:
-	return is_supported_at(terrain, _cell, size, support_dirs)
+	return is_supported_at(terrain, _cell, size, support_dirs, is_climbable)
 
 # --- Coming off the wall -----------------------------------------------------
 
@@ -448,6 +508,7 @@ static var _scene_directional_cache := { }
 static var _scene_harvests_cache := { }
 static var _scene_power_radius_cache := { }
 static var _scene_power_demand_cache := { }
+static var _scene_climbable_cache := { }
 
 
 ## A scene's authored footprint, for the placement ghost. The ghost redraws
@@ -498,6 +559,15 @@ static func scene_power_demand(scene: PackedScene) -> float:
 	return _scene_power_demand_cache[scene]
 
 
+## Whether placing this scene would put a climbable down — which is what lets the
+## ghost stay green on a column built rung by rung. Same anti-drift contract as
+## `scene_size`: the ghost's validity and the click's are one answer read off an
+## authored instance, not two copies of it.
+static func scene_is_climbable(scene: PackedScene) -> bool:
+	_cache_scene(scene)
+	return _scene_climbable_cache[scene]
+
+
 ## The authored look, so the ghost can show WHAT is being placed rather than
 ## only where and how big. `{}` when the scene has no coloured rect to preview.
 ##
@@ -518,6 +588,7 @@ static func _cache_scene(scene: PackedScene) -> void:
 	_scene_harvests_cache[scene] = probe.harvests_deposits
 	_scene_power_radius_cache[scene] = probe.power_radius
 	_scene_power_demand_cache[scene] = probe.power_demand
+	_scene_climbable_cache[scene] = probe.is_climbable
 	_scene_visual_cache[scene] = _probe_visual(probe)
 	probe.free()
 
