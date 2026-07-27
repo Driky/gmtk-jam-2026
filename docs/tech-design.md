@@ -32,7 +32,7 @@ A repeating literal countdown (the jam theme). **Build phase:** fixed countdown 
 - **Stair-digging** — mob behavior: chew a diagonal step down instead of taking fall damage.
 - **Conveyor** — 1-slot scaffold tube; slots carry item **stacks**. **Stacker** — merges identical items into stacks under saturation. **Inserter** — mandatory machine I/O device.
 - **Fortification score** — spawn-cell path cost vs. baseline; skews waves toward crawlers/flyers.
-- **Climbable** — ladder/rope/pole deployable with directional climb profile; biped-only for mobs.
+- **Climbable** — ladder/rope/pole deployable with directional climb profile; `is_biped` gates ASCENDING one, and nothing chews one.
 
 ## Post-jam intent (NOT locked, not scheduled)
 Recorded so a future step argues from it rather than re-deriving it. No shipping code obeys any of it, so none of it appears in the log below.
@@ -51,7 +51,8 @@ Recorded so a future step argues from it rather than re-deriving it. No shipping
 | Melee hitbox + ONE shared projectile system (ranged, spells, turrets); death drops loot bag | [systems/player-combat.md](systems/player-combat.md) |
 | Capability-driven mobs; two dig-weighted flow fields; stair-digging; dig = universal fallback | [systems/enemies.md](systems/enemies.md) |
 | Threat-table aggro (Core default); reachability-adaptive wave composition | [systems/enemies.md](systems/enemies.md) |
-| Climbables biped-only, directional profiles (pole = down-only) | [systems/enemies.md](systems/enemies.md) |
+| Nothing chews a climbable; `is_biped` gates ascending only; directional profiles (pole = down-only) | [systems/enemies.md](systems/enemies.md) |
+| Climbables stack, DOWNWARD only (symmetric would cycle); carried by one `is_climbable` export | [systems/automation.md](systems/automation.md) |
 | One `Deployable` base (W×H, HP, direction-bitmask support, one `pop_to_pickup` drop path) | [systems/automation.md](systems/automation.md) |
 | 10 Hz deterministic tick; 1-slot conveyors carrying stacks; inserters mandatory; tick order fixed | [systems/automation.md](systems/automation.md) |
 | Tick iteration row-major by cell (not insertion order); catch-up clamp drops backlog | [systems/automation.md](systems/automation.md) |
