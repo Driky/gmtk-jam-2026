@@ -1192,3 +1192,40 @@ func test_crafting_is_refused_before_the_player_is_bound() -> void:
 	# ⚠️ Freed here rather than `auto_free`d: it claimed `_instance` on `_ready`, and
 	# `_exit_tree` clears the static only while it is still the one holding it.
 	unbound.free()
+
+
+## ⚠️ **Layout, asserted rather than eyeballed** — the sibling case below this one
+## exists because the container panel shipped fully off-screen with `visible` true
+## and only a screenshot found it. The crafting tab is the same risk: 13 rows of
+## six Controls inside a `ScrollContainer`, and a row that overflows the window
+## horizontally puts its Craft button somewhere unclickable.
+func test_the_crafting_page_and_every_row_stay_inside_the_window() -> void:
+	_screen.open(ScreenScript.Tab.CRAFTING)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var window: Control = _screen._window
+	var page: Control = _screen._pages[ScreenScript.Tab.CRAFTING]
+	var window_rect := window.get_global_rect()
+	assert_bool(
+		Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size).encloses(window_rect),
+	).is_true()
+	assert_bool(window_rect.encloses(page.get_global_rect())).override_failure_message(
+		"CraftingPage at %s escapes the window at %s" % [page.get_global_rect(), window_rect],
+	).is_true()
+
+	# The list scrolls vertically, so only the horizontal fit is asserted: a row
+	# wider than the window is a Craft button pushed out of reach.
+	for i in _screen.crafting_row_count():
+		var row := _screen._recipe_rows[i].root as Control
+		var rect := row.get_global_rect()
+		assert_float(rect.size.x).override_failure_message(
+			"Recipe row %d has no width" % i,
+		).is_greater(0.0)
+		assert_bool(rect.end.x <= window_rect.end.x + 1.0).override_failure_message(
+			"Recipe row %d ends at x=%.1f, past the window's %.1f" % [
+				i,
+				rect.end.x,
+				window_rect.end.x,
+			],
+		).is_true()
