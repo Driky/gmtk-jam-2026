@@ -33,11 +33,32 @@ func test_every_output_resolves_an_icon() -> void:
 		assert_object(Hud.icon_for(recipe.output.id)).is_not_null()
 
 
-## Zero or negative counts and ticks are the shapes that make a station either
-## craft nothing or craft infinitely on one tick.
-func test_every_recipe_has_positive_counts_and_a_positive_duration() -> void:
+## Every row must carry all six keys. A row missing `category` or `unlocked_by`
+## (3.6b) does not raise anywhere — it makes the crafting tab drop it out of every
+## filter, or show a row 3.7 meant to hide.
+func test_every_row_carries_all_six_keys() -> void:
 	for recipe: Dictionary in RecipeDefs.RECIPES:
-		assert_int(recipe.ticks).is_greater(0)
+		for key: String in ["station", "inputs", "output", "ticks", "category", "unlocked_by"]:
+			assert_bool(recipe.has(key)).override_failure_message(
+				"Recipe for '%s' is missing the '%s' key" % [recipe.get("output", { }).get("id", "?"), key],
+			).is_true()
+		assert_bool(recipe.output.has("id") and recipe.output.has("count")).is_true()
+
+
+## Zero or negative counts are the shapes that make a station craft nothing.
+##
+## ⚠️ **`ticks` splits by station.** A station row must be positive or it crafts
+## infinitely on one tick; a hand row must be **exactly 0**, because the hand path
+## does not tick at all and a non-zero duration there would be a number nothing
+## reads pretending to be a cost.
+func test_every_recipe_has_positive_counts_and_the_right_duration() -> void:
+	for recipe: Dictionary in RecipeDefs.RECIPES:
+		if recipe.station == RecipeDefs.HAND:
+			assert_int(recipe.ticks).override_failure_message(
+				"Hand recipe '%s' must be ticks = 0" % recipe.output.id,
+			).is_equal(0)
+		else:
+			assert_int(recipe.ticks).is_greater(0)
 		assert_int(recipe.output.count).is_greater(0)
 		assert_bool(recipe.inputs.is_empty()).is_false()
 		for id: String in recipe.inputs:
@@ -94,3 +115,134 @@ func test_every_ammo_output_carries_a_projectile() -> void:
 		assert_object(ItemDefs.stats_for(recipe.output.id).projectile).override_failure_message(
 			"Ammo '%s' resolves no ProjectileStats" % recipe.output.id,
 		).is_not_null()
+
+
+## The filter row the crafting tab builds, and its order.
+func test_categories_are_distinct_and_in_table_order() -> void:
+	assert_array(RecipeDefs.categories_for_station(RecipeDefs.HAND)).contains_exactly(
+		["utility", "logistics", "automation", "power", "defense"],
+	)
+	assert_array(RecipeDefs.categories_for_station("furnace")).contains_exactly(["components"])
+	assert_array(RecipeDefs.categories_for_station("assembler")).is_empty()
+
+# --- The hand station (3.6b) --------------------------------------------------
+
+
+## The whole point of 3.6b. An empty hand station is a crafting tab with nothing
+## to press, and the F3 dropdown back as the only way to obtain a machine.
+func test_the_hand_station_has_rows() -> void:
+	assert_int(RecipeDefs.for_station(RecipeDefs.HAND).size()).is_greater(0)
+
+
+## ❗️Hand rows are invisible to a real `CraftingStation` **only because no scene
+## authors that `station_id`** — both queries filter on the string alone, so the
+## day one does, a furnace starts eating stone and copper and the hand rows show
+## up in a machine's selection loop. Nothing in the code prevents it, so this scans
+## the scenes rather than trusting it.
+func test_no_scene_authors_the_hand_station_id() -> void:
+	for path in _scene_paths("res://scenes"):
+		var text := FileAccess.get_file_as_string(path)
+		assert_bool(text.contains('station_id = "%s"' % RecipeDefs.HAND)).override_failure_message(
+			"%s authors station_id = \"hand\" — a machine would run the player's rows" % path,
+		).is_false()
+
+
+## A hand row whose output is not placeable is a crafted item with nowhere to go:
+## RMB does nothing with it and it sits in the bag forever.
+func test_every_hand_output_is_placeable() -> void:
+	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		assert_object(ItemDefs.stats_for(recipe.output.id).place_scene).override_failure_message(
+			"Hand recipe output '%s' has no place_scene" % recipe.output.id,
+		).is_not_null()
+
+
+## ❗️**The pin on the tool-tier retune.** Every hand input must be reachable by a
+## fresh run: either a material a `tool_tier = 1` pickaxe can break, or the output
+## of a recipe whose own inputs are (transitively). Price one row in `ice_stone`
+## and the tab silently becomes unusable until 4.2 ships a better pickaxe.
+func test_every_hand_input_is_reachable_at_tool_tier_one() -> void:
+	var reachable := _reachable_from_tier_one()
+	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		for id: String in recipe.inputs:
+			assert_bool(reachable.has(id)).override_failure_message(
+				"Hand recipe '%s' needs '%s', which a tier-1 pickaxe cannot reach" % [
+					recipe.output.id,
+					id,
+				],
+			).is_true()
+
+
+## ❗️**The bootstrap set, and it is load-bearing.** All three of these carry
+## `power_demand = 1.0`, so smelting needs a generator — a generator (or the
+## furnace, or the miner that feeds it) priced in a BAR is a deadlock with no way
+## out but the F3 console. Directly mineable inputs only, no crafting step.
+func test_the_bootstrap_machines_cost_only_mined_materials() -> void:
+	var mined := _tier_one_material_drops()
+	for id: String in ["furnace", "generator", "miner"]:
+		var recipe := _hand_recipe_for(id)
+		assert_bool(recipe.is_empty()).override_failure_message(
+			"No hand recipe for the bootstrap machine '%s'" % id,
+		).is_false()
+		for input_id: String in recipe.inputs:
+			assert_bool(mined.has(input_id)).override_failure_message(
+				"Bootstrap machine '%s' needs '%s', which must itself be crafted" % [id, input_id],
+			).is_true()
+
+# --- Helpers ------------------------------------------------------------------
+
+
+func _hand_recipe_for(output_id: String) -> Dictionary:
+	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		if recipe.output.id == output_id:
+			return recipe
+	return { }
+
+
+## Item ids a `tool_tier = 1` pickaxe can put in the bag by mining: anything a
+## material with `min_tool_tier <= 1` drops. Deposits count — they drop their ore.
+func _tier_one_material_drops() -> Dictionary:
+	var out: Dictionary = { }
+	for id: String in Materials.ORDER:
+		var mat: Dictionary = Materials.MATERIALS[id]
+		if mat.min_tool_tier <= 1 and mat.drop_id != "":
+			out[mat.drop_id] = true
+	return out
+
+
+## The mined set, closed over every recipe in the table — a bar is reachable
+## because a furnace smelts one out of ore you can already dig.
+func _reachable_from_tier_one() -> Dictionary:
+	var out := _tier_one_material_drops()
+	var grew := true
+	while grew:
+		grew = false
+		for recipe: Dictionary in RecipeDefs.RECIPES:
+			if out.has(recipe.output.id):
+				continue
+			var have_all := true
+			for id: String in recipe.inputs:
+				if not out.has(id):
+					have_all = false
+					break
+			if have_all:
+				out[recipe.output.id] = true
+				grew = true
+	return out
+
+
+func _scene_paths(root: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var dir := DirAccess.open(root)
+	if dir == null:
+		return out
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		var path := root.path_join(entry)
+		if dir.current_is_dir():
+			out.append_array(_scene_paths(path))
+		elif entry.ends_with(".tscn"):
+			out.append(path)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	return out
