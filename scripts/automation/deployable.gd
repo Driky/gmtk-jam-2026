@@ -21,6 +21,14 @@ const SUPPORT_NONE := 0
 ## direction, so a deployable that does not mount downward must not gain one.
 const SUPPORT_DOWN := 4
 
+## Nudge before the floor in `apply_yield`, and it is load-bearing rather than
+## defensive. ❗️No authored rate is exact in binary: `+20%` accumulated five
+## times lands on `1.9999999999999998`, which floors to **one** — so the bonus
+## slips a tick, and ten extractions at ×1.2 return eleven items instead of
+## twelve. Small enough that no reachable multiplier reaches it by accident, and
+## it makes the accumulator answer the number a player can work out on paper.
+const YIELD_EPSILON := 1e-6
+
 ## Backstop on the support drain, asserted in debug builds only. A cascade
 ## terminates because every step permanently removes one deployable; this
 ## catches a future predicate that breaks that argument.
@@ -87,6 +95,19 @@ var current_hp := max_hp
 ## A plain var rather than an @export — cross-class enum exports are finicky in
 ## 4.x and there is no authoring need until a turret picks a side.
 var faction := Projectile.Faction.PLAYER
+
+## Injected by tests; falls back to the autoload. ❗️**On the BASE, one seam for
+## every machine that reads a buff** — the turret's `turret_damage`, the miner's
+## `resource_yield`, the station's `crafting_speed` and `crafting_yield`. The
+## turret declared its own until 3.7; three copies of one accessor is three things
+## a suite has to remember to inject.
+var progression: Node = null
+
+## Fractional-yield carry, in items — see `apply_yield`. ⚠️ **Per instance by
+## construction**, so two miners never share a counter, and deliberately NOT
+## serialized at 4.3: at most one item per machine is lost across a reload, which
+## is not worth a save field ([save.md](../../docs/systems/save.md)).
+var _yield_credit := 0.0
 
 ## Stamped by `Automation` before every machine pass. ❗️Defaults to **1.0**, and
 ## that default is deliberate rather than optimistic: the only reader that ever
@@ -473,7 +494,45 @@ func spend_power_tick() -> bool:
 	_power_accum -= 1.0
 	return true
 
+# --- Yield buffs (3.7) --------------------------------------------------------
+
+
+## Deterministic whole-item output for a fractional yield multiplier.
+##
+## ❗️**A ×1.1 on an output of 1 is 1 forever if it is floored, and a coin flip a
+## deterministic tick has no business making if it is rolled** — and a random tick
+## contradicts [automation.md](../../docs/systems/automation.md)'s determinism. So
+## it accumulates: 20% over ten extractions is two bonus items, on the second and
+## the seventh, every run. Exactly the `spend_power_tick` bargain one field up.
+##
+## Returns at most `cap` and banks **only what it hands out**, so a bonus a full
+## slot cannot take is kept for the next call rather than destroyed — the same
+## conservation that keeps a brownout's part-ticks.
+##
+## ⚠️ **Neutral by construction at ×1.0**: `base * 1.0` is exact for the small
+## integers involved, so an unbuffed machine never moves the credit at all.
+func apply_yield(base: int, stat_name: String, cap: int) -> int:
+	# Annotated, not inferred: `_progression()` is a `Node`, so its `get_stat` has
+	# no declared return type for `:=` to read.
+	var total: float = base * _progression().get_stat(stat_name) + _yield_credit
+	# `maxi(cap, 0)`: a caller with no room at all banks the whole thing rather
+	# than handing back a negative count and going into credit debt.
+	var whole := mini(floori(total + YIELD_EPSILON), maxi(cap, 0))
+	_yield_credit = total - whole
+	return whole
+
+
+## The carry, for the tests and the debug overlay.
+func yield_credit() -> float:
+	return _yield_credit
+
 # --- Internals ---------------------------------------------------------------
+
+
+func _progression() -> Node:
+	if progression == null:
+		progression = Progression
+	return progression
 
 
 ## Risk-1 guard: `var current_hp := max_hp` runs before the scene loader applies

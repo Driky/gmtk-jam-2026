@@ -34,10 +34,11 @@ const MUZZLE_OFFSET_PX := 6.0
 ## tier-2 ammo is a row here, not a second script — `Generator.fuel_ids` again.
 @export var ammo_ids: PackedStringArray = ["copper_ammo", "iron_ammo"]
 
-## Injected by tests; fall back to the autoloads.
+## Injected by tests; fall back to the autoloads. ⚠️ `progression` is NOT here:
+## it moved to `Deployable` at 3.7, when the miner and the crafting station grew
+## buffs of their own, and GDScript refuses to shadow a base member.
 var automation: Node = null
 var waves: Node = null
-var progression: Node = null
 
 ## THE ammo slot: `{}` or `{ id, count }`, byte-identical to a conveyor slot and
 ## an `Inventory`'s, so ammo reaches it press → belt → inserter → turret with no
@@ -252,9 +253,3 @@ func _waves() -> Node:
 	if waves == null:
 		waves = Waves
 	return waves
-
-
-func _progression() -> Node:
-	if progression == null:
-		progression = Progression
-	return progression

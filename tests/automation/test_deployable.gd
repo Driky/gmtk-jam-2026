@@ -17,6 +17,18 @@ func before_test() -> void:
 	add_child(_terrain)
 
 
+## One flat multiplier for every stat — the yield cases are about the
+## accumulator, not about which node granted the buff.
+class ProgressionDouble:
+	extends Node
+
+	var multiplier := 1.0
+
+
+	func get_stat(_stat_name: String) -> float:
+		return multiplier
+
+
 ## Records what the real spawner would have dropped, without the autoload
 ## wiring or a Pickup in the tree.
 class SpawnerDouble:
@@ -438,6 +450,16 @@ func _drawing(demand := 1.0) -> Deployable:
 	return node
 
 
+## A bare deployable whose injected `Progression` reports one flat multiplier —
+## the base's own seam, so this needs neither a tree nor the autoload.
+func _yielding(multiplier: float) -> Deployable:
+	var node: Deployable = auto_free(DeployableScript.new())
+	var double: ProgressionDouble = auto_free(ProgressionDouble.new())
+	double.multiplier = multiplier
+	node.progression = double
+	return node
+
+
 ## Counts the ticks a machine would actually have ACTED on, which is the only
 ## observable the brownout rule has.
 func _fired_in(node: Deployable, ticks: int) -> int:
@@ -509,6 +531,75 @@ func test_the_ratio_is_clamped_to_zero_one() -> void:
 ## hand — which is what keeps 3.3's miner and furnace suites green unchanged.
 func test_an_unstamped_machine_defaults_to_full_power() -> void:
 	assert_float(_drawing().power_ratio()).is_equal_approx(1.0, 0.0001)
+
+# --- The yield accumulator (3.7) ----------------------------------------------
+#
+# The fractional half of a yield buff, and the reason it is not a `randf()`: a
+# ×1.2 miner has to produce the SAME ore on the same tick every run, or a
+# deterministic tick is not deterministic. Same bargain `spend_power_tick` makes
+# one section up, so the cases mirror it.
+
+
+## ⚠️ **The property, not the arithmetic.** An unbuffed machine must be bit-exact
+## with the machine that existed before 3.7 — same output, and a credit that never
+## moves, so nothing accumulates a rounding error over a long run.
+func test_an_unbuffed_machine_yields_exactly_its_base_and_banks_nothing() -> void:
+	var node := _yielding(1.0)
+	for _i in 100:
+		assert_int(node.apply_yield(1, "resource_yield", 99)).is_equal(1)
+	assert_float(node.yield_credit()).is_equal_approx(0.0, 0.0001)
+
+
+## ❗️The whole point: +20% over ten extractions is exactly two bonus items. A
+## floor would give ten and a roll would give a different number every run.
+func test_ten_extractions_at_one_point_two_return_exactly_twelve() -> void:
+	var node := _yielding(1.2)
+	var total := 0
+	for _i in 10:
+		total += node.apply_yield(1, "resource_yield", 99)
+	assert_int(total).is_equal(12)
+
+
+## And the bonus lands on a stated tick rather than "somewhere in there".
+func test_the_bonus_lands_on_the_fifth_and_the_tenth() -> void:
+	var node := _yielding(1.2)
+	var got := PackedInt32Array()
+	for _i in 10:
+		got.append(node.apply_yield(1, "resource_yield", 99))
+	assert_array(got).contains_exactly([1, 1, 1, 1, 2, 1, 1, 1, 1, 2])
+
+
+## ❗️**A bonus the destination cannot take is KEPT, never destroyed.** The credit
+## banks only what it handed out, so a full slot costs the machine a tick rather
+## than the item — the conservation `spend_power_tick` keeps for part-ticks.
+func test_a_cap_truncates_the_output_and_keeps_the_surplus() -> void:
+	var node := _yielding(2.0)
+	assert_int(node.apply_yield(2, "resource_yield", 1)).is_equal(1)
+	assert_float(node.yield_credit()).is_equal_approx(3.0, 0.0001)
+	# The next call with room hands the banked three back on top of its own four.
+	assert_int(node.apply_yield(2, "resource_yield", 99)).is_equal(7)
+	assert_float(node.yield_credit()).is_equal_approx(0.0, 0.0001)
+
+
+## No room at all banks the whole thing rather than going into credit debt.
+func test_no_room_at_all_banks_everything() -> void:
+	var node := _yielding(1.5)
+	assert_int(node.apply_yield(2, "resource_yield", 0)).is_equal(0)
+	assert_float(node.yield_credit()).is_equal_approx(3.0, 0.0001)
+
+
+## ❗️**Per instance, not per player.** Two miners each at ×1.5 must each produce
+## their own bonus on their own schedule — one shared pool would make a second
+## machine finish the first one's fraction, which is invisible and wrong.
+func test_two_machines_do_not_share_a_counter() -> void:
+	var first := _yielding(1.5)
+	var second := _yielding(1.5)
+	assert_int(first.apply_yield(1, "resource_yield", 99)).is_equal(1)
+	assert_float(first.yield_credit()).is_equal_approx(0.5, 0.0001)
+	assert_float(second.yield_credit()).is_equal_approx(0.0, 0.0001)
+	assert_int(second.apply_yield(1, "resource_yield", 99)).is_equal(1)
+	assert_int(first.apply_yield(1, "resource_yield", 99)).is_equal(2)
+	assert_int(second.apply_yield(1, "resource_yield", 99)).is_equal(2)
 
 
 ## Same contract for the item preview: it is read off the scene's own ColorRect,
