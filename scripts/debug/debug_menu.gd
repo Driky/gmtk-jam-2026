@@ -17,7 +17,7 @@ extends CanvasLayer
 ## are meant for the panel.
 static var is_open := false
 
-## Above the HUD (1), the character screen (5) and the game-over screen (10);
+## Above the HUD (1), the character screen (5) and the game-over screen (10)
 ## below the perf readout (100), which must stay legible on top of everything.
 ## ⚠️ The HUD is 1, not the 0 this said until 3.6a: `hud.tscn` sets no `layer` and
 ## takes Godot's CanvasLayer default. No actual layer number changed.
@@ -69,8 +69,13 @@ const RIG_OFFSET := Vector2i(3, 1)
 ## ❗️**The generator and the relay are not optional here as of 3.4.** The moment
 ## `is_powered()` stopped being a stub, a kit of miner/inserter/belt/furnace
 ## became a chain that can never run: `STARTING_KIT` hands out no machines at
-## all, and 3.6's crafting does not exist yet — so an exported build had no way
-## to make a single bar ([automation.md](../../docs/systems/automation.md) §Power).
+## all — so an exported build had no way to make a single bar
+## ([automation.md](../../docs/systems/automation.md) §Power).
+##
+## ✅ **3.6b's crafting tab is now the other way in**, so this rig is no longer the
+## only one. It stays because it also carves the **deposit seam** a miner needs:
+## deposits only generate underground, so demonstrating the tick still means a
+## twenty-row dig without it ([ui.md](../../docs/systems/ui.md) §Build factory rig).
 ##
 ## ❗️**Bounded by the HOTBAR, not by the inventory.** 3.5a briefly added
 ## `ammo_press` and `turret` here, which pushed the kit past

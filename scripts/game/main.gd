@@ -99,7 +99,11 @@ func _finish_generation() -> void:
 ## has to open with a tool or the first minute is a slog; torches because depth
 ## is where the good ore is and depth is dark, so a run that opens without light
 ## cannot descend at all ([terrain.md](../../docs/systems/terrain.md) §Lighting).
-## Crafting (4.2) is what eventually replaces the hand-out.
+## ✅ **Crafting replaced the hand-out at 3.6b**, not 4.2: the character screen's
+## crafting tab makes every deployable reachable from a pickaxe and a dig
+## ([progression.md](../../docs/systems/progression.md) §Recipe tiers). What is
+## left here is the *bootstrap* — light and something to dig with — which is why
+## the list did not shrink.
 ##
 ## Data rather than a sequence of calls so a test can assert what a run opens
 ## with — this list was silently emptied of its torches once by a stray

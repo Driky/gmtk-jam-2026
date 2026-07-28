@@ -156,9 +156,15 @@ A tabbed window, a 40-slot grid with a new interaction model, an equipment panel
 - **The shell shipped before the predicate** (the step doc's §6 before its §5): `UiState` names `CharacterScreen.is_open`, which does not parse until that class exists. And `main.gd` **binds** the player to the screen rather than showing it — the screen owns its own visibility and starts closed.
 
 #### 3.6b Crafting tab ([steps/3.6b-crafting-tab.md](steps/3.6b-crafting-tab.md))
-- [ ] `station = "hand"` recipe rows for the deployables ([progression.md](systems/progression.md) §Recipe tiers). ❗️**This is the step that stops the F3 give-item dropdown being the only way to obtain a machine** — `STARTING_KIT` is a pickaxe and torches, and an exported build has no console ([ui.md](systems/ui.md) §Build factory rig).
-- [ ] Crafting UI over the 3.3 recipe table (`data/recipe_defs.gd`) — the DB itself landed there, as the item half landed at 2.5; `gather_available(player_pos)` plus its two-phase `consume_available` counterpart, used by all cost checks ([progression.md](systems/progression.md) §Crafting range).
-- [ ] ~~First-time-craft XP~~ — **cut, not deferred** ([progression.md](systems/progression.md) §XP): it needs a `crafted_ids` set plus a `reset_run` line and is worth nothing until there is a reason to craft twice.
+- [x] `station = "hand"` recipe rows for the deployables ([progression.md](systems/progression.md) §Recipe tiers). ❗️**This is the step that stops the F3 give-item dropdown being the only way to obtain a machine** — `STARTING_KIT` is a pickaxe and torches, and an exported build has no console ([ui.md](systems/ui.md) §Build factory rig).
+- [x] Crafting UI over the 3.3 recipe table (`data/recipe_defs.gd`) — the DB itself landed there, as the item half landed at 2.5; `gather_available(player_pos)` plus its two-phase `consume_available` counterpart, used by all cost checks ([progression.md](systems/progression.md) §Crafting range).
+- [x] ~~First-time-craft XP~~ — **cut, not deferred** ([progression.md](systems/progression.md) §XP): it needs a `crafted_ids` set plus a `reset_run` line and is worth nothing until there is a reason to craft twice.
+
+⚠️ Four decisions moved against the step doc as written:
+- **The tool-tier retune came first, and without it the step's exit criterion is unreachable.** `pickaxe_t1` is `tool_tier = 1` — as is *every* authored item — while `stone` and `iron` were `min_tool_tier = 2`, so a fresh run could never dig past row 250 by hand and the hand recipes would have been priced in ore nothing could mine. `stone`, `iron` and `iron_deposit` drop to tier 1; the gate **moves** to the crystal band rather than disappearing ([terrain.md](systems/terrain.md)).
+- **`ticks = 0` on hand rows breaks an existing assertion**, which the step doc expected to stay green. `test_recipe_defs`'s duration check now splits by station: positive for a station row, exactly 0 for a hand row.
+- **A `Timer` scoped to the tab's visibility drives the repaint** — the step doc specified greying and the in-range count but never said what refreshes them, and 3.6a's screen has no `_process` by design. Without it, walking toward a chest leaves the row grey ([ui.md](systems/ui.md) §Character screen).
+- **`consume_available`'s container order is stated: row-major by `global_position`.** `get_nodes_in_group` is scene-tree order, which [save.md](systems/save.md)'s restore-in-file-order reshuffles ([progression.md](systems/progression.md) §Crafting range).
 
 ### 3.7 Skill tree system ([progression.md](systems/progression.md))
 - [ ] `SkillNode` Resources (prereqs, costs, recipe unlocks, leveled buffs) + ~10 nodes; buffs live through `get_stat`.

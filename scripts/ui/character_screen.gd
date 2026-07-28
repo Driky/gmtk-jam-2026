@@ -41,6 +41,34 @@ const MAX_CONTAINER_SLOTS := 20
 const GHOST_OFFSET := Vector2(14.0, 12.0)
 const GHOST_MARGIN := 6.0
 
+## How often the crafting tab repaints while it is up (3.6b).
+##
+## ⚠️ **Nothing else would ever repaint a greyed row.** Rows are built once and
+## affordability is a function of where you are STANDING and of what an inserter
+## has put in a chest since — neither of which emits anything this node listens to.
+## Walk toward a chest and a row that should have gone green stays grey, which
+## reads as broken. A `Timer` scoped to this tab's visibility covers both cases,
+## costs nothing while the tab is down, and keeps 3.6a's no-`_process` rule.
+const CRAFT_REFRESH_SECONDS := 0.25
+
+## Shift-clicking Craft makes up to this many, stopping on the first refusal.
+## Shift already means "bulk" everywhere else in this screen.
+const CRAFT_BULK_COUNT := 5
+
+## The filter that shows everything — `All`, and the value `_category` holds for it.
+const ALL_CATEGORIES := ""
+
+## An input you cannot pay for. ⚠️ A theme colour override, not `modulate`: the
+## label has to go back to the theme's own colour when the input becomes payable,
+## and `remove_theme_color_override` is the only way to say that without hardcoding
+## what the theme's colour was.
+const MISSING_INPUT_COLOR := Color(0.95, 0.45, 0.4)
+
+## Wide enough that the input costs line up down the list rather than starting at
+## a different x per row.
+const RECIPE_NAME_WIDTH := 150.0
+const RECIPE_INPUT_FONT_SIZE := 12
+
 ## True while the window is showing. Mirrors `DebugMenu.is_open` — gameplay polls
 ## `Input` directly rather than routing through the UI, so a screen that blocks
 ## anything has to be readable from the player without a node path
@@ -62,6 +90,14 @@ var game: Node = null
 ## Injected by tests before add_child; falls back to the live autoload — the sink
 ## the held stack falls into when it cannot go back in the bag.
 var progression: Node = null
+## Injected by tests before add_child; falls back to the live autoload. The
+## crafting tab's *only* model: `gather_available` / `consume_available` reach the
+## player's bag plus every container in range through it
+## ([progression.md](../../docs/systems/progression.md) §Crafting range).
+##
+## ⚠️ Inject it **together with `inventory`** (`screen.inventory = items.player_inventory`)
+## or a craft drains one bag and pays into another.
+var items: Node = null
 
 var _tab := Tab.INVENTORY
 var _player: Player = null
@@ -93,6 +129,16 @@ var _equipment_slots: Array[ItemSlot] = []
 var _container_slots: Array[ItemSlot] = []
 var _tab_buttons: Array[Button] = []
 
+## One entry per hand recipe, in `RecipeDefs` table order:
+## `{ recipe, root: HBoxContainer, button: Button, inputs: {item_id: Label} }`.
+## ⚠️ Every node in here is a child built in `_ready` and never freed, which is
+## what makes the `Dictionary` loop variable below safe.
+var _recipe_rows: Array[Dictionary] = []
+var _category_buttons: Array[Button] = []
+## Which category the filter row is on; `ALL_CATEGORIES` shows every unlocked row.
+var _category := ALL_CATEGORIES
+var _craft_timer: Timer = null
+
 @onready var _window: PanelContainer = %Window
 @onready var _tab_bar: HBoxContainer = %TabBar
 @onready var _grid: GridContainer = %Grid
@@ -107,6 +153,9 @@ var _tab_buttons: Array[Button] = []
 @onready var _container_panel: PanelContainer = %ContainerPanel
 @onready var _container_title: Label = %ContainerTitle
 @onready var _container_grid: GridContainer = %ContainerGrid
+@onready var _category_bar: HBoxContainer = %CategoryBar
+@onready var _range_label: Label = %RangeLabel
+@onready var _recipe_list: VBoxContainer = %RecipeList
 
 
 func _ready() -> void:
@@ -120,6 +169,8 @@ func _ready() -> void:
 		game = Game
 	if progression == null:
 		progression = Progression
+	if items == null:
+		items = Items
 	layer = LAYER
 	# Usable while the tree is paused, so Esc still closes it under the game-over
 	# screen (the `DebugMenu` precedent).
@@ -129,6 +180,9 @@ func _ready() -> void:
 	# ~272 Controls instantiated on a keypress is a visible hitch in a browser,
 	# where flipping `visible` costs nothing.
 	_build_slots()
+	# Same argument, and it is the reason the crafting tab has no "build on open"
+	# path either: 13 rows of ~6 Controls on a keypress is a hitch you can feel.
+	_build_crafting()
 	_build_ghost()
 	inventory.slot_changed.connect(_on_inventory_slot_changed)
 	equipment.slot_changed.connect(_on_equipment_slot_changed)
@@ -343,6 +397,7 @@ func current_tab() -> Tab:
 func _set_open(open_now: bool) -> void:
 	visible = open_now
 	is_open = open_now
+	_update_craft_timer()
 
 
 func _show_tab(tab: Tab) -> void:
@@ -353,6 +408,9 @@ func _show_tab(tab: Tab) -> void:
 		_tab_buttons[i].button_pressed = i == tab
 	if tab == Tab.INVENTORY:
 		_refresh_stats()
+	# ⚠️ Driven from BOTH here and `_set_open`, and it has to be: `open()` shows the
+	# tab *before* it sets the flag, so neither call alone sees both halves true.
+	_update_craft_timer()
 
 
 ## Closed on `GAME_OVER`, and `can_open` refuses to reopen there. Without both it
@@ -677,6 +735,246 @@ func _unequip_to_inventory(slot: int) -> void:
 	if inventory.add_item(worn, 1) > 0:
 		return
 	equipment.unequip(slot)
+
+# --- The crafting tab (3.6b) --------------------------------------------------
+#
+# A UI over `RecipeDefs`' `station = "hand"` rows, never a second table
+# ([progression.md](../../docs/systems/progression.md) §Recipe tiers). Unlock
+# filtering and the greyed/missing-input presentation are
+# [ui.md](../../docs/systems/ui.md) §Character screen's.
+#
+# ⚠️ The category filter is a **button row, not a nested `TabContainer`**: a second
+# tab bar inside this window's own tab bar is one too many, and the search box
+# ("if time allows") drops in beside it later — which is why 3.6a put the `I`/`C`
+# shortcuts in `_unhandled_input`, so a `LineEdit` can receive those letters.
+
+
+func _build_crafting() -> void:
+	_craft_timer = Timer.new()
+	_craft_timer.wait_time = CRAFT_REFRESH_SECONDS
+	_craft_timer.timeout.connect(_refresh_crafting)
+	add_child(_craft_timer)
+
+	var group := ButtonGroup.new()
+	_add_category_button("All", ALL_CATEGORIES, group)
+	for category in RecipeDefs.categories_for_station(RecipeDefs.HAND):
+		_add_category_button(category.capitalize(), category, group)
+	_category_buttons[0].button_pressed = true
+
+	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		_recipe_rows.append(_make_recipe_row(recipe, _recipe_rows.size()))
+	_apply_recipe_filter()
+
+
+func _add_category_button(text: String, category: String, group: ButtonGroup) -> void:
+	var button := Button.new()
+	button.text = text
+	button.toggle_mode = true
+	button.button_group = group
+	button.pressed.connect(_on_category_pressed.bind(category))
+	_category_bar.add_child(button)
+	_category_buttons.append(button)
+
+
+## An output `ItemSlot` (which buys the icon and the "Miner ×1" tooltip for free),
+## the name, one label per input, and the Craft button.
+func _make_recipe_row(recipe: Dictionary, index: int) -> Dictionary:
+	var root := HBoxContainer.new()
+	root.add_theme_constant_override("separation", 8)
+
+	var icon := ItemSlot.new()
+	icon.set_stack(recipe.output)
+	root.add_child(icon)
+
+	var title := Label.new()
+	title.text = recipe_title(recipe)
+	title.custom_minimum_size = Vector2(RECIPE_NAME_WIDTH, 0.0)
+	root.add_child(title)
+
+	var input_labels: Dictionary = { }
+	for id: String in recipe.inputs:
+		var label := Label.new()
+		label.text = input_text(id, recipe.inputs[id])
+		label.add_theme_font_size_override("font_size", RECIPE_INPUT_FONT_SIZE)
+		root.add_child(label)
+		input_labels[id] = label
+
+	# Pushes the button to the right edge so the column lines up down the list.
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_child(spacer)
+
+	var button := Button.new()
+	button.text = "Craft"
+	# ⚠️ `Button.pressed` carries no modifier, so shift is read off `Input` here
+	# rather than from the event — the same thing `_gui_input` hands the slots.
+	button.pressed.connect(_on_craft_pressed.bind(index))
+	root.add_child(button)
+
+	_recipe_list.add_child(root)
+	return { recipe = recipe, root = root, button = button, inputs = input_labels }
+
+
+## "Miner", or "Torch ×4" when a craft yields more than one. Static so the wording
+## unit-tests without a screen.
+static func recipe_title(recipe: Dictionary) -> String:
+	var named := Hud.item_name(recipe.output.id)
+	if recipe.output.count <= 1:
+		return named
+	return "%s ×%d" % [named, recipe.output.count]
+
+
+static func input_text(id: String, count: int) -> String:
+	return "%s ×%d" % [Hud.item_name(id), count]
+
+
+## ⚠️ **An invisible radius is a bug report.** A row greyed because the chest you
+## are standing next to is one tile too far reads as broken, so the tab says out
+## loud how many containers it can currently see.
+static func containers_in_range_text(count: int) -> String:
+	if count == 1:
+		return "1 container in range"
+	return "%d containers in range" % count
+
+
+## Whether a row is LISTED at all, as opposed to merely unaffordable. Static and
+## pure so both halves — the unlock branch and the category filter — test with a
+## synthetic row, including the locked case the shipped table has no example of.
+##
+## ❗️`unlocked_by == ""` is the whole of unlock filtering until 3.7. The branch is
+## written now so that step is data rather than a second edit here.
+static func row_is_listed(recipe: Dictionary, category: String) -> bool:
+	if recipe.unlocked_by != "":
+		return false
+	return category == ALL_CATEGORIES or recipe.category == category
+
+
+func _on_category_pressed(category: String) -> void:
+	_category = category
+	_apply_recipe_filter()
+
+
+func _apply_recipe_filter() -> void:
+	for row: Dictionary in _recipe_rows:
+		(row.root as Control).visible = row_is_listed(row.recipe, _category)
+
+
+## Started when the crafting tab is up **and** the window is open, stopped
+## otherwise, with one immediate repaint on show.
+func _update_craft_timer() -> void:
+	if _craft_timer == null:
+		return
+	if not (is_open and _tab == Tab.CRAFTING):
+		_craft_timer.stop()
+		return
+	if _craft_timer.is_stopped():
+		_craft_timer.start()
+	_refresh_crafting()
+
+
+## One `gather_available` call for the whole list: per row, the Craft button is
+## disabled unless every input is payable, and each unpayable input goes red.
+func _refresh_crafting() -> void:
+	if _player == null or not is_instance_valid(_player):
+		# No position to query from, so there is no honest answer to draw.
+		_range_label.text = ""
+		for row: Dictionary in _recipe_rows:
+			(row.button as Button).disabled = true
+		return
+	var at := _player.global_position
+	_range_label.text = containers_in_range_text(items.containers_near(at).size())
+	var available: Dictionary = items.gather_available(at)
+	for row: Dictionary in _recipe_rows:
+		var affordable := true
+		var recipe: Dictionary = row.recipe
+		for id: String in recipe.inputs:
+			var short: bool = available.get(id, 0) < recipe.inputs[id]
+			affordable = affordable and not short
+			_paint_input_label(row.inputs[id], short)
+		(row.button as Button).disabled = not affordable
+
+
+func _paint_input_label(label: Label, short: bool) -> void:
+	if short:
+		label.add_theme_color_override("font_color", MISSING_INPUT_COLOR)
+	else:
+		label.remove_theme_color_override("font_color")
+
+
+func _on_craft_pressed(index: int) -> void:
+	craft(index, Input.is_key_pressed(KEY_SHIFT))
+
+
+## Make `index`'s recipe once, or up to `CRAFT_BULK_COUNT` times with `bulk`, and
+## return how many were actually made. Public so a test drives it without
+## synthesising a click and a modifier key.
+##
+## ❗️Each craft **verifies then consumes** through `consume_available`, and the loop
+## stops on the first refusal — never "check once, craft five times".
+##
+## ⚠️ **Leftover goes to the floor, never deleted.** `add_item` returns what did not
+## fit, and the loot bag's contract is that nothing vanishes silently
+## ([player-combat.md](../../docs/systems/player-combat.md) §Death & respawn).
+func craft(index: int, bulk := false) -> int:
+	# Refused outright with no player: there is no position to query a range from,
+	# and a craft that cannot see the containers would silently price itself wrong.
+	if _player == null or not is_instance_valid(_player) or index >= _recipe_rows.size():
+		return 0
+	var recipe: Dictionary = _recipe_rows[index].recipe
+	if not row_is_listed(recipe, _category):
+		return 0
+	var made := 0
+	for _i in (CRAFT_BULK_COUNT if bulk else 1):
+		if not items.consume_available(_player.global_position, recipe.inputs):
+			break
+		_drop_to_world(recipe.output.id, inventory.add_item(recipe.output.id, recipe.output.count))
+		made += 1
+	if made > 0:
+		_refresh_crafting()
+	return made
+
+# --- Crafting-tab accessors, for the tests ------------------------------------
+#
+# Read-only, and the same bargain `ItemSlot.count_text` makes: a suite that
+# reached into the row dictionaries would be pinning this file's internals rather
+# than what the tab shows.
+
+
+func crafting_row_count() -> int:
+	return _recipe_rows.size()
+
+
+func crafting_recipe(index: int) -> Dictionary:
+	return _recipe_rows[index].recipe
+
+
+func crafting_row_visible(index: int) -> bool:
+	return (_recipe_rows[index].root as Control).visible
+
+
+func crafting_row_enabled(index: int) -> bool:
+	return not (_recipe_rows[index].button as Button).disabled
+
+
+func crafting_input_is_missing(index: int, id: String) -> bool:
+	var label: Label = _recipe_rows[index].inputs[id]
+	return label.has_theme_color_override("font_color")
+
+
+func crafting_range_text() -> String:
+	return _range_label.text
+
+
+func crafting_is_refreshing() -> bool:
+	return _craft_timer != null and not _craft_timer.is_stopped()
+
+
+## The index of the hand recipe that outputs `id`, or -1.
+func crafting_row_for(id: String) -> int:
+	for i in _recipe_rows.size():
+		if _recipe_rows[i].recipe.output.id == id:
+			return i
+	return -1
 
 # --- Repaint ------------------------------------------------------------------
 
