@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "mechanization"
+display_name = "Mechanization"
+description = "The miner digs while you are elsewhere; the furnace turns ore into bars."
+prerequisites = PackedStringArray("power_grid")
+point_cost = 1
+resource_cost = {}
+max_level = 1
+stat_name = ""
+stat_per_level = 0.0
+position = Vector2(208, 176)

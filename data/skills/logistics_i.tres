@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "logistics_i"
+display_name = "Logistics I"
+description = "Belts and arms: the first two things that move an item without you carrying it."
+prerequisites = PackedStringArray()
+point_cost = 1
+resource_cost = {}
+max_level = 1
+stat_name = ""
+stat_per_level = 0.0
+position = Vector2(208, 16)

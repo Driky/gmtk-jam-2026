@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "efficient_assembly"
+display_name = "Efficient Assembly"
+description = "Crafting stations hand back more than the recipe promised."
+prerequisites = PackedStringArray("mechanization")
+point_cost = 1
+resource_cost = { "copper_bar": 4 }
+max_level = 3
+stat_name = "crafting_yield"
+stat_per_level = 0.1
+position = Vector2(304, 256)

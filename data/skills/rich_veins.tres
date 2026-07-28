@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "rich_veins"
+display_name = "Rich Veins"
+description = "Every machine extraction pulls more ore out of the same reserve."
+prerequisites = PackedStringArray("mechanization")
+point_cost = 1
+resource_cost = {}
+max_level = 3
+stat_name = "resource_yield"
+stat_per_level = 0.1
+position = Vector2(112, 256)

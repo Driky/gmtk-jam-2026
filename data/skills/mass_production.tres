@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "mass_production"
+display_name = "Mass Production"
+description = "Crafting stations work through a recipe in fewer ticks."
+prerequisites = PackedStringArray("mechanization")
+point_cost = 1
+resource_cost = {}
+max_level = 3
+stat_name = "crafting_speed"
+stat_per_level = 0.15
+position = Vector2(496, 256)

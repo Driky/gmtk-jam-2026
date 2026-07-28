@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "conditioning"
+display_name = "Conditioning"
+description = "More of you to lose before you lose it."
+prerequisites = PackedStringArray()
+point_cost = 1
+resource_cost = {}
+max_level = 2
+stat_name = "max_hp"
+stat_per_level = 0.1
+position = Vector2(784, 16)

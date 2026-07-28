@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "emplacements"
+display_name = "Emplacements"
+description = "A turret that shoots back, and the press that feeds it."
+prerequisites = PackedStringArray("traps")
+point_cost = 1
+resource_cost = { "iron": 10 }
+max_level = 1
+stat_name = ""
+stat_per_level = 0.0
+position = Vector2(400, 96)

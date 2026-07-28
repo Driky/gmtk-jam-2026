@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="SkillNode" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/progression/skill_node.gd" id="1_node"]
+
+[resource]
+script = ExtResource("1_node")
+id = "prospecting"
+display_name = "Prospecting"
+description = "Your pickaxe bites faster into everything."
+prerequisites = PackedStringArray()
+point_cost = 1
+resource_cost = {}
+max_level = 3
+stat_name = "mining_speed"
+stat_per_level = 0.1
+position = Vector2(592, 16)
