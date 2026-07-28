@@ -17,7 +17,7 @@ The 48-frame template sheet (16×16 tiles, green/blue master) is committed at `r
 Same tool script consumes the material config — **`res://data/materials.gd`** (single source of truth), one entry per material:
 ```
 "stone": { base_color: Color(0.5,0.5,0.52), hardness: 2.0, drop_id: "stone",
-           min_tool_tier: 2, is_solid: true, is_ore: false, is_deposit: false }
+           min_tool_tier: 1, is_solid: true, is_ore: false, is_deposit: false }
 ```
 It (a) generates the placeholder PNG, (b) builds/updates `res://assets/generated/terrain_tileset.tres`: one atlas source per material, per-tile full-square physics + occlusion polygons (only where `is_solid`), custom data layers mirroring config. No peering bits — manual autotiling ([terrain.md](terrain.md)) consumes the shared `LAYOUT` from `tile_layout.gd`. **Adding a tile type = one config entry + rerun.** Real art later replaces PNGs on the same layout without touching the pipeline. `Terrain` reads the same `materials.gd` for anything not baked into custom data — config authored exactly once.
 

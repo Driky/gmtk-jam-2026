@@ -70,8 +70,8 @@ Base ore autotile on the terrain layer + marker tile on a stacked **"deposit FX"
 |---|---|---|
 | Grass | Surface top | Cosmetic dirt variant |
 | Dirt | Surface, biome 2, buffers | Low hardness; buffer immutability is positional, not a tile property |
-| Stone | Biome 3 | Hardness band 2, gates tool tier 2 |
-| Ice/Crystal stone | Biome 4 | Hardness band 3 |
+| Stone | Biome 3 | Hardness band 2, **tool tier 1** (see the gate note below) |
+| Ice/Crystal stone | Biome 4 | Hardness band 3, **where the tier gate now starts** |
 | Magma stone | Biome 5 | Hardness band 4, gates top tool tier |
 | Wood (trunk) | Surface trees | **Tile-column trees:** chopping the bottom trunk fells the whole column (walk up on destroy, drops per tile) |
 | Bedrock | World borders | Indestructible (`min_tool_tier = ∞`) |
@@ -86,6 +86,8 @@ Base ore autotile on the terrain layer + marker tile on a stacked **"deposit FX"
 | Magmatite | 5 | Magmatite deposit — anchors the tier-4 recipe line |
 
 Deposit variants reuse the ore autotile + FX overlay (`is_deposit = true`, `reserve` in dict) — no extra sheets.
+
+❗️**The tier gate starts at the CRYSTAL band, not the stone band (retuned 3.6b).** `stone`, `iron` and `iron_deposit` are `min_tool_tier = 1`; `ice_stone`/`gold` stay 3 and `magma_stone`/`magmatite` stay 4, so **the gate moved from row 250 to row 550 rather than disappearing**. Why it had to move: *every* authored item in `data/items/` is `tool_tier = 1`, the starting kit is `pickaxe_t1`, and `damage_tile` rejects a hit outright below `min_tool_tier` — so at tier 2 a fresh run could never dig past the stone band by hand, and `iron`/`iron_bar`/`iron_ammo` were unreachable content. 3.6b's hand recipes are priced in stone, copper and iron ([progression.md](progression.md) §Recipe tiers), which makes reaching them the difference between a craftable game and one you can only play through the F3 console. The higher-tier pickaxes that re-open the lower gate are content (4.2), not a mechanism — nothing here changes when they land. ⚠️ `iron_deposit` moves with its ore because every deposit mirrors its ore's tier; a miner is unaffected either way, since `extract_reserve` has no tool-tier check at all. ⚠️ `min_tool_tier` is a **baked TileSet custom data layer** ([pipeline.md](pipeline.md)) — `Terrain` reads `materials.gd` directly so the game is correct without it, but `tools/generate_tilesets.sh` must be rerun in the same commit or the baked copy drifts silently.
 
 *Player-placeable:*
 | Tile | Notes |

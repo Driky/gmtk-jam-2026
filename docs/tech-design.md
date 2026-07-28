@@ -74,6 +74,7 @@ Recorded so a future step argues from it rather than re-deriving it. No shipping
 | `station = "hand"` recipes; every row carries `category` + `unlocked_by`; first-time-craft XP cut | [systems/progression.md](systems/progression.md) |
 | `gather_available` pairs with a two-phase `consume_available`; equipment excluded from both | [systems/progression.md](systems/progression.md) |
 | Containers are found by the `&"container"` group, not a registry or an entity-cell walk | [systems/automation.md](systems/automation.md) |
+| Tool-tier gate starts at the crystal band: `stone`/`iron` are tier 1, so a starting pickaxe reaches every hand-recipe input | [systems/terrain.md](systems/terrain.md) |
 | Pause: menu interactive, gameplay actions blocked | [systems/ui.md](systems/ui.md) |
 | Save = seed + diff, autosave at build-phase start only (never serialize live monsters) | [systems/save.md](systems/save.md) |
 | Placeholder tilesets generated from template by palette remap; TileSet built from `materials.gd` | [systems/pipeline.md](systems/pipeline.md) |

@@ -32,6 +32,13 @@ const ORDER: Array[String] = [
 ## deposits reuse their ore's sheet, no extra art). Deposits also carry
 ## base_reserve (starting ore reserve; read by Terrain, not baked into the
 ## TileSet).
+##
+## ❗️**The tier gate starts at the CRYSTAL band, not the stone band (3.6b)** —
+## `stone` and `iron` (and `iron_deposit`, which mirrors its ore like every other
+## deposit here) are tier 1, so a starting `pickaxe_t1` can reach every input the
+## hand recipes are priced in. `ice_stone`/`gold` (3) and `magma_stone`/`magmatite`
+## (4) are untouched, so the gate moved rather than disappeared
+## ([terrain.md](../docs/systems/terrain.md) §Tile inventory owns the rule).
 const MATERIALS: Dictionary = {
 	"grass": {
 		base_color = Color(0.36, 0.65, 0.26),
@@ -58,7 +65,7 @@ const MATERIALS: Dictionary = {
 		hardness = 2.0,
 		drop_id = "stone",
 		drop_count = 1,
-		min_tool_tier = 2,
+		min_tool_tier = 1,
 		is_solid = true,
 		is_ore = false,
 		is_deposit = false,
@@ -128,7 +135,7 @@ const MATERIALS: Dictionary = {
 		hardness = 2.5,
 		drop_id = "iron",
 		drop_count = 1,
-		min_tool_tier = 2,
+		min_tool_tier = 1,
 		is_solid = true,
 		is_ore = true,
 		is_deposit = false,
@@ -182,7 +189,7 @@ const MATERIALS: Dictionary = {
 		hardness = 2.5,
 		drop_id = "iron",
 		drop_count = 1,
-		min_tool_tier = 2,
+		min_tool_tier = 1,
 		is_solid = true,
 		is_ore = true,
 		is_deposit = true,

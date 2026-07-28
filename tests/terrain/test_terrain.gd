@@ -131,12 +131,17 @@ func test_destroy_drops_and_prunes() -> void:
 	_terrain.debug_validate()
 
 
+## ⚠️ The fixture is `ice_stone`, not `stone`: 3.6b retuned `stone` and `iron` down
+## to tier 1 so a starting pickaxe can reach the inputs the hand recipes are priced
+## in, which moved the gate from the stone band to the crystal band
+## ([terrain.md](../../docs/systems/terrain.md)). The case is unchanged — a tool one
+## tier short is rejected outright and leaves no damage behind.
 func test_tool_tier_gating() -> void:
-	_terrain.set_tile(P, "stone") # min_tool_tier 2
-	assert_bool(_terrain.damage_tile(P, 99.0, 1, TerrainScript.Source.PLAYER)).is_false()
-	assert_str(_terrain.get_material_id(P)).is_equal("stone")
+	_terrain.set_tile(P, "ice_stone") # min_tool_tier 3
+	assert_bool(_terrain.damage_tile(P, 99.0, 2, TerrainScript.Source.PLAYER)).is_false()
+	assert_str(_terrain.get_material_id(P)).is_equal("ice_stone")
 	assert_float(_terrain.get_tile_data(P).damage).is_equal_approx(0.0, 0.001)
-	assert_bool(_terrain.damage_tile(P, 99.0, 2, TerrainScript.Source.PLAYER)).is_true()
+	assert_bool(_terrain.damage_tile(P, 99.0, 3, TerrainScript.Source.PLAYER)).is_true()
 
 
 func test_bedrock_unminable() -> void:
