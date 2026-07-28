@@ -166,9 +166,11 @@ A tabbed window, a 40-slot grid with a new interaction model, an equipment panel
 - **A `Timer` scoped to the tab's visibility drives the repaint** — the step doc specified greying and the in-range count but never said what refreshes them, and 3.6a's screen has no `_process` by design. Without it, walking toward a chest leaves the row grey ([ui.md](systems/ui.md) §Character screen).
 - **`consume_available`'s container order is stated: row-major by `global_position`.** `get_nodes_in_group` is scene-tree order, which [save.md](systems/save.md)'s restore-in-file-order reshuffles ([progression.md](systems/progression.md) §Crafting range).
 
-### 3.7 Skill tree system ([progression.md](systems/progression.md))
-- [ ] `SkillNode` Resources (prereqs, costs, recipe unlocks, leveled buffs) + ~10 nodes; buffs live through `get_stat`.
-- [ ] The tree tab — a **third tab in 3.6a's existing window**, not a screen of its own, and the step that fills in the `unlocked_by` column 3.6b ships empty on every recipe row.
+### 3.7 Skill tree system ([progression.md](systems/progression.md)) — [step doc](steps/3.7-skill-tree.md)
+- [ ] `SkillNode` Resources (prereqs, costs, leveled buffs) + 13 nodes in three branches; buffs live through `get_stat`. ⚠️ **`unlock_recipes[]` is struck**: the recipe row's `unlocked_by` is the single source of that edge, since storing it on both sides is one fact with two writable copies.
+- [ ] The three buff seams that **do not exist yet** — `crafting_speed`, `crafting_yield`, `resource_yield` are named in [progression.md](systems/progression.md) and read by nothing. ❗️Both yields are **FACTORY buffs, on deployables only**: the miner and the crafting station, never the player's own dig or a hand craft — `spawn_at` is also `pop_to_pickup`'s drop path, so a multiplier there returns two turrets for one. ⚠️ A fractional multiplier on an integer output needs a deterministic answer: an accumulator **per machine** on `Deployable`, beside the `spend_power_tick` idiom it copies.
+- [ ] The tree tab — a **third tab in 3.6a's existing window**, not a screen of its own, and the step that fills in the `unlocked_by` column 3.6b ships empty on every recipe row. It also surfaces the upgrade-point count [ui.md](systems/ui.md) §HUD defers to exactly here.
+- [ ] ❗️**This is the step that decides what a new run can build**: everything but the pickaxe, the ladder and the torch goes behind a point, so obtainability moves from 3.6b's bootstrap-recipe rule to the tree's roots — pinned by tests, not by playing it once.
 
 **Exit criteria:** miner → conveyor → inserter → furnace running *during* a wave while a turret fires; power overlay readable; a skill point spent unlocks a recipe.
 
