@@ -111,7 +111,8 @@ func test_levels_add_flat_stats() -> void:
 	assert_float(_progression.get_stat("move_speed")).is_equal_approx(114.0, 0.001)
 
 
-## Deliberately level-independent: buffing it is the skill tree's job (3.7).
+## Deliberately level-independent: buffing it is the skill tree's job, and
+## `prospecting` is the node that does it — see the tree cases below.
 func test_mining_speed_does_not_scale_with_level() -> void:
 	_progression.grant_xp("kills", 250.0)
 	assert_float(_progression.get_stat("mining_speed")).is_equal_approx(1.0, 0.001)
@@ -123,14 +124,102 @@ func test_unknown_stats_read_as_neutral_at_every_level() -> void:
 	_progression.grant_xp("kills", 250.0)
 	assert_float(_progression.get_stat("swing_speed")).is_equal_approx(1.0, 0.001)
 
+# --- The skill tree (3.7) ------------------------------------------------------
+#
+# The refusals matter more than the successes: every one of them is a way to spend
+# a point on nothing, and none of them raises anything on its own.
+
+
+func test_a_fresh_run_has_taken_nothing() -> void:
+	assert_int(_progression.node_level("prospecting")).is_equal(0)
+	assert_dict(_progression.taken).is_empty()
+
+
+func test_a_node_that_does_not_exist_is_never_takeable() -> void:
+	_grant_points(5)
+	assert_bool(_progression.can_take("no_such_node")).is_false()
+	assert_bool(_progression.take_node("no_such_node")).is_false()
+	assert_int(_progression.upgrade_points).is_equal(5)
+
+
+func test_a_root_is_refused_with_no_points_and_taken_with_one() -> void:
+	assert_bool(_progression.can_take("prospecting")).is_false()
+	_grant_points(1)
+	assert_bool(_progression.can_take("prospecting")).is_true()
+	assert_bool(_progression.take_node("prospecting")).is_true()
+	assert_int(_progression.node_level("prospecting")).is_equal(1)
+	assert_int(_progression.upgrade_points).is_equal(0)
+
+
+## ❗️The whole point of the branch shape: a node whose parent is untaken cannot be
+## bought at any price.
+func test_a_child_is_refused_until_its_prerequisite_is_taken() -> void:
+	_grant_points(5)
+	assert_bool(_progression.can_take("power_grid")).is_false()
+	_progression.take_node("logistics_i")
+	assert_bool(_progression.can_take("power_grid")).is_true()
+
+
+## A single-level node taken twice would spend a second point for nothing.
+func test_max_level_is_respected() -> void:
+	_grant_points(9)
+	for _i in 3:
+		assert_bool(_progression.take_node("prospecting")).is_true()
+	assert_int(_progression.node_level("prospecting")).is_equal(3)
+	assert_bool(_progression.can_take("prospecting")).is_false()
+	assert_bool(_progression.take_node("prospecting")).is_false()
+	assert_int(_progression.upgrade_points).is_equal(6)
+
+
+func test_taking_a_node_announces_it_at_its_new_level() -> void:
+	var events: Array = []
+	_progression.node_unlocked.connect(
+		func(id: String, level: int) -> void: events.append([id, level]),
+	)
+	_grant_points(3)
+	_progression.take_node("prospecting")
+	_progression.take_node("prospecting")
+	assert_array(events).contains_exactly([["prospecting", 1], ["prospecting", 2]])
+
+
+## The buff has to reach `get_stat` by exactly the authored rate, and a stat no
+## taken node names must still read a neutral 1.0 — the property that lets
+## `ItemStats.effective_*` ask for buffs nothing grants yet.
+func test_a_taken_node_moves_exactly_its_own_stat() -> void:
+	_grant_points(3)
+	_progression.take_node("prospecting")
+	assert_float(_progression.get_stat("mining_speed")).is_equal_approx(1.1, 0.001)
+	assert_float(_progression.get_stat("turret_damage")).is_equal_approx(1.0, 0.001)
+	_progression.take_node("prospecting")
+	assert_float(_progression.get_stat("mining_speed")).is_equal_approx(1.2, 0.001)
+
+
+## ⚠️ The one node that raises a MAXIMUM, and the reason the multiplier has to
+## compose with the flat per-level table rather than replace it: at level 3 the
+## ceiling is 120, and `conditioning` scales THAT.
+func test_a_max_stat_node_multiplies_the_leveled_value() -> void:
+	_progression.grant_xp("kills", 250.0) # -> level 3, 120 max HP
+	_progression.take_node("conditioning")
+	assert_float(_progression.get_stat("max_hp")).is_equal_approx(132.0, 0.001)
+
 # --- Restart -------------------------------------------------------------------
 
 
 func test_reset_run_clears_every_run_value() -> void:
 	_progression.grant_xp("kills", 250.0)
+	_progression.take_node("prospecting")
 	_progression.reset_run()
 	assert_int(_progression.level).is_equal(1)
 	assert_float(_progression.xp).is_equal(0.0)
 	assert_int(_progression.upgrade_points).is_equal(0)
 	assert_dict(_progression.xp_by_source).is_empty()
+	assert_dict(_progression.taken).is_empty()
 	assert_float(_progression.get_stat("max_hp")).is_equal_approx(100.0, 0.001)
+	assert_float(_progression.get_stat("mining_speed")).is_equal_approx(1.0, 0.001)
+
+# --- Helpers -------------------------------------------------------------------
+
+
+## Points without caring about the curve: the tree cases are about spending them.
+func _grant_points(count: int) -> void:
+	_progression.upgrade_points = count

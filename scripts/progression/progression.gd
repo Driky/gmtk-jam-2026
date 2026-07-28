@@ -12,6 +12,12 @@ signal xp_changed(current: float, needed: float, level: int)
 ## three levels announces three times — the HUD banner and any future
 ## level-up feedback see every step, not just the final number.
 signal leveled_up(level: int, upgrade_points: int)
+## A skill node was taken, at the level it is now at. ❗️**The Player listens to
+## this exactly as it listens to `leveled_up`**, and that is not decoration: a
+## node raising `max_hp` outside the level-up path leaves the player's
+## `_last_max_hp` cache stale, so the next level-up grants the level's delta plus
+## this node's, and the node's own grant never lands as current HP.
+signal node_unlocked(id: String, level: int)
 
 ## Flat base values. Skill-tree buffs (3.7) multiply these; levels add to them.
 const _BASE_STATS := {
@@ -42,8 +48,11 @@ const MINING_XP_PER_BLOCK := 1.0
 var level := 1
 ## Progress toward the NEXT level; reset to the remainder on each level-up.
 var xp := 0.0
-## Spent in the skill tree (3.7). Until then they simply accumulate.
+## Spent in the skill tree — see `can_take` / `take_node`.
 var upgrade_points := 0
+## Node id → the level it has been taken to. A node absent here is untaken, so
+## `node_level` answers 0 for anything, including an id that names nothing.
+var taken: Dictionary[String, int] = { }
 ## Lifetime XP per source id ("mining" / "looting" / "kills"). Exists for the
 ## Day-4 balance pass: "where is XP actually coming from" is the question the
 ## curve gets tuned against, and it's unanswerable after the fact otherwise.
@@ -86,15 +95,64 @@ func get_stat(stat_name: String) -> float:
 	var per_level: float = _PER_LEVEL.get(stat_name, 0.0)
 	return (base + per_level * (level - 1)) * _multiplier(stat_name)
 
+# --- The skill tree (3.7) -----------------------------------------------------
+#
+# The spent half of the tree. The TABLE is `data/skill_defs.gd`, static and pure —
+# what a run has bought out of it lives here, and what a node is worth is read
+# back through `get_stat` like every other buff.
+
+
+## How many times `id` has been taken, 0 for untaken and for an unknown id.
+func node_level(id: String) -> int:
+	return taken.get(id, 0)
+
+
+## May this node be taken RIGHT NOW: it exists, it is below `max_level`, every
+## prerequisite is at level ≥ 1, and there are points for it.
+##
+## ❗️**It deliberately does not consider `resource_cost`.** This autoload is
+## node-free by design (see the header), and a resource check goes through
+## `Items.gather_available(player_pos)` — a player position this file must never
+## reach for. The screen owns that half of the transaction, in the stated order:
+## `can_take` → `consume_available` → `take_node`. Any other order eats the ore.
+func can_take(id: String) -> bool:
+	var node := SkillDefs.node_for(id)
+	if node == null:
+		return false
+	if node_level(id) >= node.max_level:
+		return false
+	if upgrade_points < node.point_cost:
+		return false
+	for prereq: String in node.prerequisites:
+		if node_level(prereq) < 1:
+			return false
+	return true
+
+
+## Spend the points and record the level. ⚠️ **The caller has already paid any
+## `resource_cost`** — this function cannot see one.
+func take_node(id: String) -> bool:
+	if not can_take(id):
+		return false
+	var node := SkillDefs.node_for(id)
+	upgrade_points -= node.point_cost
+	taken[id] = node_level(id) + 1
+	node_unlocked.emit(id, taken[id])
+	return true
+
 
 ## Wipe all run state ahead of a scene reload (restart flow, 2.1). Every
 ## autoload holding run state exposes reset_run() — tech-design.md. Direct
 ## assignment, no emit: the reload re-seeds every listener from _ready.
+##
+## ⚠️ No yield credit to clear here: the fractional-yield accumulator is per
+## MACHINE, on `Deployable`, and a machine dies with the scene.
 func reset_run() -> void:
 	level = 1
 	xp = 0.0
 	upgrade_points = 0
 	xp_by_source.clear()
+	taken.clear()
 
 # --- Internals ---------------------------------------------------------------
 
@@ -105,7 +163,20 @@ func _level_up() -> void:
 	leveled_up.emit(level, upgrade_points)
 
 
-## Skill-tree buff product for a stat (3.7). Neutral until the tree exists —
-## the seam is here so no call site changes when it lands.
-func _multiplier(_stat_name: String) -> float:
-	return 1.0
+## Skill-tree buff for a stat: `1 + Σ(rate × level)` over every taken node naming
+## it, and a neutral 1.0 for a stat no node names — which is what keeps
+## `ItemStats.effective_*` asking for buffs that do not exist yet.
+##
+## ⚠️ **Additive within a stat, not compounding.** Two nodes each granting +10%
+## read as +20%, so a future third node is a number a designer can add up rather
+## than a product to work out. Levels multiply the node's own rate, so a ×3 node
+## at level 2 is worth twice one level of itself.
+func _multiplier(stat_name: String) -> float:
+	if stat_name == "":
+		return 1.0
+	var total := 1.0
+	for id: String in taken:
+		var node := SkillDefs.node_for(id)
+		if node != null and node.stat_name == stat_name:
+			total += node.stat_per_level * taken[id]
+	return total
