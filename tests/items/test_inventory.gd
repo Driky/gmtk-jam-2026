@@ -56,6 +56,38 @@ func test_remove_clears_slot_at_zero() -> void:
 	assert_int(_inv.remove_from_slot(0, 1)).is_equal(0)
 
 
+## `remove_item` is the mirror of `add_item` — it returns what it ACTUALLY took,
+## which is what makes `Items.consume_available` able to count what it still owes.
+func test_remove_item_walks_slots_and_reports_what_it_took() -> void:
+	_inv.add_item("dirt", 150) # slots 0 (99) + 1 (51)
+	assert_int(_inv.remove_item("dirt", 120)).is_equal(120)
+	assert_int(_inv.count_of("dirt")).is_equal(30)
+	assert_bool(_inv.get_slot(0).is_empty()).is_true()
+
+
+## ❗️It never over-removes and never reports more than it took — the number the
+## caller subtracts from what it still owes. Reporting the count it was ASKED for
+## is exactly where a partially-paid cost turns into a silent item sink.
+func test_remove_item_never_over_removes() -> void:
+	_inv.add_item("dirt", 4)
+	assert_int(_inv.remove_item("dirt", 10)).is_equal(4)
+	assert_int(_inv.count_of("dirt")).is_equal(0)
+	assert_int(_inv.remove_item("dirt", 1)).is_equal(0)
+	assert_int(_inv.remove_item("stone", 1)).is_equal(0)
+	assert_int(_inv.remove_item("dirt", 0)).is_equal(0)
+	assert_int(_inv.remove_item("dirt", -5)).is_equal(0)
+
+
+## It touches nothing but the id it was asked for, however the bag is laid out.
+func test_remove_item_leaves_other_ids_alone() -> void:
+	_inv.add_item("dirt", 2)
+	_inv.add_item("stone", 5)
+	_inv.add_item("dirt", 3)
+	assert_int(_inv.remove_item("dirt", 4)).is_equal(4)
+	assert_int(_inv.count_of("dirt")).is_equal(1)
+	assert_int(_inv.count_of("stone")).is_equal(5)
+
+
 func test_consume_selected_success_and_failure() -> void:
 	_inv.add_item("wood", 2)
 	assert_bool(_inv.consume_selected()).is_true()

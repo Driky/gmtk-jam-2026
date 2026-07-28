@@ -214,3 +214,25 @@ func count_of(id: String) -> int:
 		if not slot.is_empty() and slot.id == id:
 			total += slot.count
 	return total
+
+
+## Remove up to `count` of `id` across slots, in slot order, and return how many
+## were **actually** removed — the mirror of `add_item`, which returns what did not
+## fit. Composed from `remove_from_slot`, so the totality invariant above is
+## unchanged and every emptied slot still emits.
+##
+## ❗️It exists so a caller counting a cost (`Items.consume_available`, 3.6b) never
+## walks slot indices from outside: this model already owns that loop, and a second
+## copy of it is a second place to get the partial-stack case wrong.
+func remove_item(id: String, count: int) -> int:
+	if count <= 0:
+		return 0
+	var removed := 0
+	for i in _slots.size():
+		if removed >= count:
+			break
+		var slot := _slots[i]
+		if slot.is_empty() or slot.id != id:
+			continue
+		removed += remove_from_slot(i, count - removed)
+	return removed
