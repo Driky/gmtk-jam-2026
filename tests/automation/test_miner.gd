@@ -34,6 +34,18 @@ class Supply:
 		return 100.0
 
 
+## One flat multiplier for every stat (3.7). Injected rather than reaching for the
+## autoload, so this suite drives `resource_yield` without spending a skill point.
+class ProgressionDouble:
+	extends Node
+
+	var multiplier := 1.0
+
+
+	func get_stat(_stat_name: String) -> float:
+		return multiplier
+
+
 var _terrain: Node
 var _automation: Node
 var _drops: Array = []
@@ -73,13 +85,22 @@ func _power_the_world() -> void:
 
 
 ## A miner at `cell` facing `dir`, with `deposit` filling its whole harvest block
-## unless a test lays the ore out itself.
-func _miner(cell := ORIGIN, dir := Vector2i.RIGHT, deposit := "coal_deposit") -> Miner:
+## unless a test lays the ore out itself. `yield_multiplier` is what the injected
+## `Progression` reports for `resource_yield` — 1.0 is an unbuffed run.
+func _miner(
+		cell := ORIGIN,
+		dir := Vector2i.RIGHT,
+		deposit := "coal_deposit",
+		yield_multiplier := 1.0,
+) -> Miner:
 	if deposit != "":
 		for ore: Vector2i in Deployable.harvest_cells_at(cell, SIZE, dir):
 			_terrain.set_tile(ore, deposit)
 	var node: Miner = auto_free(MinerScene.instantiate())
 	node.automation = _automation
+	var progression: ProgressionDouble = auto_free(ProgressionDouble.new())
+	progression.multiplier = yield_multiplier
+	node.progression = progression
 	node.facing = dir
 	node.setup(cell)
 	add_child(node)
@@ -168,6 +189,53 @@ func test_a_full_output_stalls_extraction_instead_of_losing_ore() -> void:
 		_automation.step_tick()
 
 	assert_int(node.slot().count).is_equal(Inventory.STACK_SIZE)
+	assert_int(_terrain.get_tile_data(ore).reserve).is_equal(50)
+
+# --- resource_yield (3.7) -----------------------------------------------------
+
+
+## ❗️**The point of the buff: more ore per unit of RESERVE.** A ×1.5 miner over
+## ten extractions hands out fifteen and the deposit is down by ten — because the
+## cursor inspector puts "Copper Deposit — 43 ore left" on screen, and a reserve
+## billed for the bonus would make that readout a lie.
+func test_a_buffed_miner_outputs_more_ore_than_it_took_from_the_ground() -> void:
+	var node := _miner(ORIGIN, Vector2i.RIGHT, "coal_deposit", 1.5)
+	var ore: Vector2i = node.harvest_cells()[0]
+	_terrain.set_reserve(ore, 50)
+
+	for i in node.extract_ticks * 9 + 1:
+		_automation.step_tick()
+
+	assert_int(node.slot().count).is_equal(15)
+	assert_int(_terrain.get_tile_data(ore).reserve).is_equal(40)
+
+
+## ⚠️ Bit-identical to the miner that existed before 3.7 — the property the
+## accumulator is built around, not the arithmetic.
+func test_an_unbuffed_miner_is_unchanged() -> void:
+	var node := _miner()
+	var ore: Vector2i = node.harvest_cells()[0]
+	_terrain.set_reserve(ore, 50)
+
+	for i in node.extract_ticks * 9 + 1:
+		_automation.step_tick()
+
+	assert_int(node.slot().count).is_equal(10)
+	assert_int(_terrain.get_tile_data(ore).reserve).is_equal(40)
+
+
+## ❗️A stalled miner must not bank a bonus per stalled TICK: the credit would
+## grow while the line is jammed and dump a pile the moment it drains.
+func test_a_full_output_stalls_without_burning_credit() -> void:
+	var node := _miner(ORIGIN, Vector2i.RIGHT, "coal_deposit", 1.5)
+	var ore: Vector2i = node.harvest_cells()[0]
+	_terrain.set_reserve(ore, 50)
+	node._slot = { id = "coal", count = Inventory.STACK_SIZE }
+
+	for i in node.extract_ticks * 5:
+		_automation.step_tick()
+
+	assert_float(node.yield_credit()).is_equal_approx(0.0, 0.0001)
 	assert_int(_terrain.get_tile_data(ore).reserve).is_equal(50)
 
 

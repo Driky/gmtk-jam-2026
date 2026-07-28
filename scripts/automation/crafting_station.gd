@@ -101,8 +101,12 @@ func take_cargo() -> Array[Dictionary]:
 
 
 ## One tick of crafting: pick the first recipe whose inputs are present,
-## accumulate progress, and at `ticks` **consume the inputs and write the output
-## in the same step**.
+## accumulate progress, and at the effective duration **consume the inputs and
+## write the output in the same step**.
+##
+## Two skill-tree buffs land here (3.7), and neither is a second mechanism:
+## `crafting_speed` shortens the duration through `effective_ticks`, and
+## `crafting_yield` fattens the output through the base's `apply_yield`.
 ##
 ## ❗️**Consume on COMPLETION, not on start.** Mid-craft removal then has no
 ## half-eaten ore for `take_cargo` to lose, and a full output slot simply stalls
@@ -121,14 +125,42 @@ func on_tick(_terrain: Node) -> void:
 		# the input mid-craft cannot cash a copper's progress into an iron bar.
 		_progress = 0
 		return
-	_progress = mini(_progress + 1, recipe.ticks)
-	if _progress < recipe.ticks:
+	var duration := effective_ticks(recipe.ticks, _progression().get_stat("crafting_speed"))
+	_progress = mini(_progress + 1, duration)
+	# ❗️`>=`, not `==`. Taking `mass_production` MID-CRAFT drops the target below
+	# the progress already banked, and `==` would step straight past it — a station
+	# stuck at full progress forever, on the tick a buff was supposed to help.
+	if _progress < duration:
 		return
-	if _room_for(recipe.output.id) < recipe.output.count:
+	# ❗️**The stall is decided against the RECIPE's count, and only then is the
+	# yield resolved.** A station at full progress re-enters this every tick, so
+	# asking `apply_yield` first would bank a fresh bonus on every stalled tick and
+	# dump the pile the moment the slot drained. The cap then keeps a bonus that
+	# does not fit rather than destroying it — `apply_yield`'s own contract.
+	var room := _room_for(recipe.output.id)
+	if room < recipe.output.count:
 		return
+	var yielded := apply_yield(recipe.output.count, "crafting_yield", room)
 	_consume(recipe.inputs)
-	_store_output(recipe.output)
+	_store_output({ id = recipe.output.id, count = yielded })
 	_progress = 0
+
+
+## How many ticks a `ticks`-tick recipe actually takes under a `crafting_speed`
+## multiplier. Static and pure so the clamp unit-tests without a station.
+##
+## ❗️**Clamped to at least ONE tick, and that is not cosmetic.** A large enough
+## multiplier divides to zero, and a station at zero ticks crafts on every single
+## tick forever — the exact failure `test_recipe_defs` already asserts against for
+## hand rows, arrived at from the other direction.
+##
+## ⚠️ `ceili`, not `roundi`: rounding down would make a +15% node shave a whole
+## tick off a 3-tick recipe, i.e. −33%, which is a buff that lies about its own
+## number on short recipes.
+static func effective_ticks(ticks: int, multiplier: float) -> int:
+	if multiplier <= 0.0:
+		return maxi(ticks, 1)
+	return maxi(1, ceili(ticks / multiplier))
 
 # --- Internals ---------------------------------------------------------------
 

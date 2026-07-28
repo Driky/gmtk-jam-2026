@@ -33,6 +33,24 @@ class Supply:
 		return 100.0
 
 
+## Injected `Progression`, so this suite drives `crafting_speed` and
+## `crafting_yield` without spending a skill point.
+##
+## ⚠️ **Per stat, not one flat multiplier for all of them.** The station reads
+## BOTH buffs off this in one tick, so a single number would make every
+## crafting-speed case silently a yield case as well — a test that passes for the
+## wrong reason. Writable mid-test on purpose: taking a node MID-CRAFT is one of
+## the cases below.
+class ProgressionDouble:
+	extends Node
+
+	var stats: Dictionary = { }
+
+
+	func get_stat(stat_name: String) -> float:
+		return stats.get(stat_name, 1.0)
+
+
 var _terrain: Node
 var _automation: Node
 
@@ -65,6 +83,7 @@ func _furnace(cell := ORIGIN) -> CraftingStation:
 		_terrain.set_tile(cell + Vector2i(x, 2), "dirt")
 	var node: CraftingStation = auto_free(FurnaceScene.instantiate())
 	node.automation = _automation
+	node.progression = auto_free(ProgressionDouble.new())
 	node.setup(cell)
 	add_child(node)
 	assert_bool(node.register(_terrain)).is_true()
@@ -172,6 +191,87 @@ func test_a_full_output_stalls_at_full_progress() -> void:
 	_automation.step_tick() # Already at full progress: completes immediately.
 
 	assert_int(node.output_slot().count).is_equal(recipe.output.count)
+
+# --- crafting_speed and crafting_yield (3.7) ----------------------------------
+
+
+## The clamp, without a station: a big enough multiplier divides to zero, and a
+## station at zero ticks crafts on every tick forever.
+func test_the_effective_duration_never_falls_below_one_tick() -> void:
+	assert_int(CraftingStation.effective_ticks(20, 1.0)).is_equal(20)
+	assert_int(CraftingStation.effective_ticks(20, 2.0)).is_equal(10)
+	assert_int(CraftingStation.effective_ticks(20, 1000.0)).is_equal(1)
+	assert_int(CraftingStation.effective_ticks(1, 4.0)).is_equal(1)
+	# ⚠️ `ceili`: a +15% node must not shave a whole tick off a 3-tick recipe.
+	assert_int(CraftingStation.effective_ticks(3, 1.15)).is_equal(3)
+	# A zero or negative multiplier is a broken buff, not a free craft.
+	assert_int(CraftingStation.effective_ticks(20, 0.0)).is_equal(20)
+
+
+func test_a_doubled_crafting_speed_halves_the_tick_count() -> void:
+	var recipe := _recipe()
+	var node := _furnace()
+	node.progression.stats["crafting_speed"] = 2.0
+	node.accept_item(recipe.inputs.keys()[0], 1)
+
+	for i in recipe.ticks / 2:
+		_automation.step_tick()
+
+	assert_int(node.output_slot().count).is_equal(recipe.output.count)
+
+
+## ❗️Why the comparison is `>=` and not `==`. Taking the node mid-craft drops the
+## target BELOW the progress already banked, and `==` would step straight past it
+## — a station stuck at full progress forever, on the tick a buff was meant to
+## help it.
+func test_taking_the_node_mid_craft_completes_rather_than_overshooting() -> void:
+	var recipe := _recipe()
+	var node := _furnace()
+	node.accept_item(recipe.inputs.keys()[0], 1)
+
+	for i in recipe.ticks - 2:
+		_automation.step_tick()
+	assert_bool(node.output_slot().is_empty()).is_true()
+
+	node.progression.stats["crafting_speed"] = 4.0 # The point is spent here.
+	_automation.step_tick()
+
+	assert_int(node.output_slot().count).is_equal(recipe.output.count)
+	assert_int(node.progress()).is_equal(0)
+
+
+## The output half. A ×2 station hands back two bars for the one ore a recipe
+## charges — the input side is untouched, exactly as the miner's reserve is.
+func test_a_yield_buff_fattens_the_output_without_touching_the_input() -> void:
+	var recipe := _recipe()
+	var node := _furnace()
+	node.progression.stats["crafting_yield"] = 2.0
+	node.accept_item(recipe.inputs.keys()[0], 3)
+
+	# The full duration: a yield node is not a speed node, and the suite would not
+	# notice if it quietly became one.
+	for i in recipe.ticks:
+		_automation.step_tick()
+
+	assert_int(node.output_slot().count).is_equal(recipe.output.count * 2)
+	assert_int(node.input_slot().count).is_equal(2) # One ore charged, not two.
+
+
+## ❗️A station stalled at full progress re-enters the tick every frame. Asking
+## for the yield before the room check would bank a fresh bonus each of those
+## ticks and dump the pile the moment the slot drained.
+func test_a_stalled_station_banks_no_yield_credit() -> void:
+	var recipe := _recipe()
+	var node := _furnace()
+	node.progression.stats["crafting_yield"] = 2.0
+	node.accept_item(recipe.inputs.keys()[0], 2)
+	node._output = { id = recipe.output.id, count = Inventory.STACK_SIZE }
+
+	for i in recipe.ticks + 20:
+		_automation.step_tick()
+
+	assert_float(node.yield_credit()).is_equal_approx(0.0, 0.0001)
+	assert_int(node.output_slot().count).is_equal(Inventory.STACK_SIZE)
 
 
 ## An empty input banks nothing, so swapping what you feed it mid-craft cannot

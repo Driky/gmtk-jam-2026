@@ -133,6 +133,19 @@ func on_tick(terrain: Node) -> void:
 		var taken: Dictionary = terrain.extract_reserve(cell, mini(extract_count, room))
 		if taken.is_empty():
 			return
+		# `resource_yield` (3.7). ❗️**The deposit is billed only for what it gave —
+		# the bonus is CREATED.** A `reserve` charged for the bonus would make the
+		# cursor inspector's "Copper Deposit — 43 ore left" a lie and a deposit
+		# unplannable ([ui.md](../../docs/systems/ui.md)). The buff means more ore
+		# per unit of reserve, which is what a yield buff should mean.
+		#
+		# ⚠️ Scaled off `taken.count` rather than off `extract_count`, and that is
+		# the difference between a buff and a tap: an almost-exhausted deposit hands
+		# back less than was asked for, so multiplying the ASK would pay a bonus on
+		# ore that was never there — at ×1.0 too, which is supposed to be
+		# bit-identical to the machine that existed before 3.7. `room` is the room
+		# measured above and still holds: nothing has been stored yet.
+		taken.count = apply_yield(taken.count, "resource_yield", room)
 		_store(taken)
 		_cooldown = extract_ticks
 		return
