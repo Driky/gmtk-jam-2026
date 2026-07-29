@@ -143,6 +143,11 @@ func _ready() -> void:
 	_last_max_hp = current_hp
 	_last_max_mana = current_mana
 	Progression.leveled_up.connect(_on_leveled_up)
+	# ❗️**Both signals raise a maximum, so both have to come through the same
+	# code.** A skill node lifting `max_hp` outside this path leaves `_last_max_hp`
+	# stale, and the next level-up then grants the level's delta PLUS the node's,
+	# while the node's own grant never lands as current HP at all.
+	Progression.node_unlocked.connect(_on_node_unlocked)
 	var inventory := Items.player_inventory
 	inventory.selected_changed.connect(_on_selection_changed)
 	inventory.slot_changed.connect(_on_slot_changed)
@@ -218,6 +223,23 @@ func is_dead() -> bool:
 ## full heal. Healing to full would make leveling a heal button you farm
 ## mid-wave by mining a few blocks (progression.md).
 func _on_leveled_up(_level: int, _points: int) -> void:
+	_absorb_max_gain()
+
+
+## A skill node can raise a maximum too — `conditioning` is `max_hp × 1.1`. It
+## goes through the level-up's own code rather than beside it, so the gain is felt
+## NOW and the cache stays honest for the next level.
+func _on_node_unlocked(_id: String, _level: int) -> void:
+	_absorb_max_gain()
+
+
+## Raise current HP and mana by however much their ceilings just moved, and
+## re-cache the ceilings. ⚠️ **The cache refresh is the whole point** and has to
+## happen in the same breath as the grant: `Progression` reports the NEW maximum
+## by the time either signal fires, so the delta is unrecoverable from anywhere
+## else. A gain of zero is a no-op, which is what makes this safe to run on every
+## node taken rather than only on the ones that name a maximum.
+func _absorb_max_gain() -> void:
 	var max_hp := Progression.get_stat("max_hp")
 	var max_mana := Progression.get_stat("max_mana")
 	current_hp += max_hp - _last_max_hp

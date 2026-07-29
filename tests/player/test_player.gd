@@ -643,6 +643,64 @@ func test_level_up_raises_mana_the_same_way() -> void:
 	assert_float(player.current_mana).is_equal_approx(10.0 + gained, 0.001)
 	Progression.reset_run()
 
+# --- A skill node that raises a maximum (3.7) ---------------------------------
+
+
+## ⚠️ A node lifting `max_hp` is the same event as a level-up as far as this
+## player is concerned, so the gain has to be felt NOW rather than at the next
+## level. `conditioning` is `max_hp × 1.1`.
+func test_a_max_hp_node_raises_current_hp_immediately() -> void:
+	Progression.reset_run()
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.take_damage(40.0)
+	var hp_before := player.current_hp
+	var max_before := Progression.get_stat("max_hp")
+	Progression.upgrade_points = 1
+
+	assert_bool(Progression.take_node("conditioning")).is_true()
+
+	var gained := Progression.get_stat("max_hp") - max_before
+	assert_float(gained).is_equal_approx(10.0, 0.001)
+	assert_float(player.current_hp).is_equal_approx(hp_before + gained, 0.001)
+	Progression.reset_run()
+
+
+## ❗️**The double-dip this exists to close.** Without refreshing `_last_max_hp` in
+## the node's own path, the next level-up grants its own delta PLUS the node's —
+## the node paying out twice, once at a moment nothing announced.
+func test_the_next_level_up_grants_only_its_own_increment() -> void:
+	Progression.reset_run()
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.take_damage(40.0)
+	Progression.upgrade_points = 1
+	Progression.take_node("conditioning")
+	var hp_before := player.current_hp
+	var max_before := Progression.get_stat("max_hp")
+
+	Progression.grant_xp("kills", Progression.xp_to_level(1))
+
+	var gained := Progression.get_stat("max_hp") - max_before
+	assert_float(player.current_hp).is_equal_approx(hp_before + gained, 0.001)
+	Progression.reset_run()
+
+
+## A node that names no maximum must move nothing at all — this runs on EVERY
+## node taken, and a stray grant would be a free heal per point spent.
+func test_a_node_that_raises_no_maximum_grants_nothing() -> void:
+	Progression.reset_run()
+	var player: Player = auto_free(PlayerScene.instantiate())
+	add_child(player)
+	player.take_damage(40.0)
+	var hp_before := player.current_hp
+	Progression.upgrade_points = 1
+
+	assert_bool(Progression.take_node("prospecting")).is_true()
+
+	assert_float(player.current_hp).is_equal_approx(hp_before, 0.001)
+	Progression.reset_run()
+
 # --- Un-deploying with the use verb (2.7) ------------------------------------
 
 const TorchScene := preload("res://scenes/torch.tscn")
