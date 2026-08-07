@@ -22,7 +22,7 @@ Sequencing rule: implement in day order; within a day, systems before content.
 
 ## Cut lines (pre-authorized, in firing order; cutting one also prunes its dependencies)
 1. Boss, spitter enemy, biome 5.
-2. Skill tree breadth (keep one deep path per branch) — *the designated scope lever*.
+2. Skill tree breadth (keep one deep path per branch) — *the designated scope lever*. ❗️Sharpened at 3.7, now that the tree exists: **Industry and Defense carry every recipe unlock and the Day-3 exit criterion, so they are not the lever**. What fires here is the **buff-only leaves** — `rich_veins`, `efficient_assembly`, `mass_production`, `armaments`, `prospecting`, `conditioning` — each of which is one `.tres` and one line in `SkillDefs.NODES`. ⚠️ Cutting a *branch* prunes the recipes it gates ([progression.md](systems/progression.md) §Recipe tiers), which is a change to what the game contains, not to how much of it there is.
 3. Save system → single-session runs (announce on itch page).
 4. Spell line (keep melee + bow; mana stat still shown).
 5. Relay towers (generator radius only).

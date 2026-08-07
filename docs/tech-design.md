@@ -64,7 +64,8 @@ Recorded so a future step argues from it rather than re-deriving it. No shipping
 | Power = radius coverage grids (generator + relay), brownout `supply/demand` scaling | [systems/automation.md](systems/automation.md) |
 | Containers own an `Inventory` at their own slot count (chest = 20); `storage()` is the UI seam | [systems/automation.md](systems/automation.md) |
 | Respawn anchor = nearest beacon to the death position by group query, else the Core | [systems/player-combat.md](systems/player-combat.md) |
-| One mixed skill tree (recipes + leveled buffs) as Resource nodes; crafting range incl. nearby containers | [systems/progression.md](systems/progression.md) |
+| One mixed skill tree (recipes + leveled buffs) as Resource nodes; recipes gated by the row's `unlocked_by` only, never a list on the node; crafting range incl. nearby containers | [systems/progression.md](systems/progression.md) |
+| A fractional yield buff accumulates into whole items **per machine** on `Deployable`, never rolls | [systems/automation.md](systems/automation.md) |
 | Tabbed character screen (Inventory/Crafting/Tree) with direct hotkeys; power overlay hotkey | [systems/ui.md](systems/ui.md) |
 | Equipment = 5 armor + 3 accessory slots, no tool/weapon slot (LMB stays the hotbar item) | [systems/ui.md](systems/ui.md) |
 | Stacks move as a held stack on the cursor + shift-click quick-move; the screen is a panel that never pauses | [systems/ui.md](systems/ui.md) |
