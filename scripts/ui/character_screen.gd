@@ -41,7 +41,8 @@ const MAX_CONTAINER_SLOTS := 20
 const GHOST_OFFSET := Vector2(14.0, 12.0)
 const GHOST_MARGIN := 6.0
 
-## How often the crafting tab repaints while it is up (3.6b).
+## How often the crafting **and skills** tabs repaint while one of them is up
+## (3.6b, widened at 3.7).
 ##
 ## ⚠️ **Nothing else would ever repaint a greyed row.** Rows are built once and
 ## affordability is a function of where you are STANDING and of what an inserter
@@ -49,6 +50,10 @@ const GHOST_MARGIN := 6.0
 ## Walk toward a chest and a row that should have gone green stays grey, which
 ## reads as broken. A `Timer` scoped to this tab's visibility covers both cases,
 ## costs nothing while the tab is down, and keeps 3.6a's no-`_process` rule.
+##
+## ❗️A skill node with a `resource_cost` has the identical problem — it is
+## affordable or not depending on where you are standing — so 3.7 widens the
+## predicate rather than adding a second timer.
 const CRAFT_REFRESH_SECONDS := 0.25
 
 ## Shift-clicking Craft makes up to this many, stopping on the first refusal.
@@ -68,6 +73,27 @@ const MISSING_INPUT_COLOR := Color(0.95, 0.45, 0.4)
 ## a different x per row.
 const RECIPE_NAME_WIDTH := 150.0
 const RECIPE_INPUT_FONT_SIZE := 12
+
+## A node already bought. ⚠️ A theme override rather than `modulate`, and removed
+## rather than reset — the `MISSING_INPUT_COLOR` argument: only
+## `remove_theme_color_override` can say "go back to whatever the theme had".
+##
+## ❗️**The item is `font_disabled_color`, and the name is load-bearing.** A maxed
+## node is a disabled Button, so that is the colour it actually draws with — and
+## an override under a name no theme uses is accepted silently and changes
+## nothing, which is exactly how the first pass shipped a green that was grey. The
+## name is pinned by a test.
+const NODE_TAKEN_COLOR := Color(0.55, 0.85, 0.55)
+const NODE_TAKEN_COLOR_ITEM := "font_disabled_color"
+
+## The tree draws more text per button than a tab does, and `Efficient Assembly
+## 0/3` has to fit inside `SkillDefs.NODE_SIZE` rather than being clipped.
+const NODE_FONT_SIZE := 12
+
+## The prerequisite lines under the nodes. Dim on purpose: they are the tree's
+## shape, not its content, and a bright web reads louder than the buttons.
+const EDGE_COLOR := Color(0.45, 0.45, 0.5, 0.7)
+const EDGE_WIDTH := 2.0
 
 ## True while the window is showing. Mirrors `DebugMenu.is_open` — gameplay polls
 ## `Input` directly rather than routing through the UI, so a screen that blocks
@@ -135,9 +161,17 @@ var _tab_buttons: Array[Button] = []
 ## what makes the `Dictionary` loop variable below safe.
 var _recipe_rows: Array[Dictionary] = []
 var _category_buttons: Array[Button] = []
+## Parallel to `_category_buttons`, so a button can be hidden when nothing under
+## it is listed. Index 0 is `ALL_CATEGORIES`.
+var _category_ids := PackedStringArray()
 ## Which category the filter row is on; `ALL_CATEGORIES` shows every unlocked row.
 var _category := ALL_CATEGORIES
-var _craft_timer: Timer = null
+var _refresh_timer: Timer = null
+
+## One entry per skill node, in `SkillDefs.all()` order:
+## `{ id: String, button: Button }`. ⚠️ Built once in `_ready` and never freed,
+## like `_recipe_rows` — which is what makes the typed loop over it safe.
+var _skill_buttons: Array[Dictionary] = []
 
 @onready var _window: PanelContainer = %Window
 @onready var _tab_bar: HBoxContainer = %TabBar
@@ -156,6 +190,11 @@ var _craft_timer: Timer = null
 @onready var _category_bar: HBoxContainer = %CategoryBar
 @onready var _range_label: Label = %RangeLabel
 @onready var _recipe_list: VBoxContainer = %RecipeList
+@onready var _points_label: Label = %PointsLabel
+## ❗️A plain `Control`, never a container. Any container re-lays-out its children,
+## which would overwrite the hand-placed `position` every node carries — the
+## coordinates would simply not survive being set.
+@onready var _tree_canvas: Control = %TreeCanvas
 
 
 func _ready() -> void:
@@ -183,12 +222,20 @@ func _ready() -> void:
 	# Same argument, and it is the reason the crafting tab has no "build on open"
 	# path either: 13 rows of ~6 Controls on a keypress is a hitch you can feel.
 	_build_crafting()
+	_build_skills()
 	_build_ghost()
 	inventory.slot_changed.connect(_on_inventory_slot_changed)
 	equipment.slot_changed.connect(_on_equipment_slot_changed)
 	game.state_changed.connect(_on_state_changed)
+	# ❗️Both change what the tree tab shows and neither was listened to before 3.7:
+	# a level hands over a point, and a node taken can reveal a crafting row while
+	# the window is open — which `_apply_recipe_filter` only ever ran on a category
+	# press, so the row would stay invisible until the next click.
+	progression.leveled_up.connect(_on_leveled_up)
+	progression.node_unlocked.connect(_on_node_unlocked)
 	_refresh_inventory()
 	_refresh_equipment()
+	_refresh_skills()
 	_show_tab(Tab.INVENTORY)
 	_set_open(false)
 
@@ -750,10 +797,10 @@ func _unequip_to_inventory(slot: int) -> void:
 
 
 func _build_crafting() -> void:
-	_craft_timer = Timer.new()
-	_craft_timer.wait_time = CRAFT_REFRESH_SECONDS
-	_craft_timer.timeout.connect(_refresh_crafting)
-	add_child(_craft_timer)
+	_refresh_timer = Timer.new()
+	_refresh_timer.wait_time = CRAFT_REFRESH_SECONDS
+	_refresh_timer.timeout.connect(_on_refresh_tick)
+	add_child(_refresh_timer)
 
 	var group := ButtonGroup.new()
 	_add_category_button("All", ALL_CATEGORIES, group)
@@ -774,6 +821,7 @@ func _add_category_button(text: String, category: String, group: ButtonGroup) ->
 	button.pressed.connect(_on_category_pressed.bind(category))
 	_category_bar.add_child(button)
 	_category_buttons.append(button)
+	_category_ids.append(category)
 
 
 ## An output `ItemSlot` (which buys the icon and the "Miner ×1" tooltip for free),
@@ -839,14 +887,21 @@ static func containers_in_range_text(count: int) -> String:
 
 ## Whether a row is LISTED at all, as opposed to merely unaffordable. Static and
 ## pure so both halves — the unlock branch and the category filter — test with a
-## synthetic row, including the locked case the shipped table has no example of.
+## synthetic row and a synthetic tree.
 ##
-## ❗️`unlocked_by == ""` is the whole of unlock filtering until 3.7. The branch is
-## written now so that step is data rather than a second edit here.
-static func row_is_listed(recipe: Dictionary, category: String) -> bool:
-	if recipe.unlocked_by != "":
+## ❗️**The unlock lookup is a PARAMETER, never the autoload.** This is the seam the
+## whole suite is built on: reaching for `Progression` here would make the function
+## untestable without one *and* would quietly ignore the injected instance the
+## screen was handed, so a test could pass against state the screen never reads.
+static func row_is_listed(recipe: Dictionary, category: String, is_unlocked: Callable) -> bool:
+	if recipe.unlocked_by != "" and not is_unlocked.call(recipe.unlocked_by):
 		return false
 	return category == ALL_CATEGORIES or recipe.category == category
+
+
+## The predicate above, closed over THIS screen's injected `progression`.
+func _unlock_lookup() -> Callable:
+	return func(node_id: String) -> bool: return progression.node_level(node_id) > 0
 
 
 func _on_category_pressed(category: String) -> void:
@@ -854,21 +909,44 @@ func _on_category_pressed(category: String) -> void:
 	_apply_recipe_filter()
 
 
+## ⚠️ Also hides a category BUTTON with nothing under it. At level 1 four of the
+## five categories filter to nothing, and a row of buttons that all lead to an
+## empty list reads as a broken tab rather than a locked one.
 func _apply_recipe_filter() -> void:
+	var unlocked := _unlock_lookup()
+	var populated: Dictionary = { }
 	for row: Dictionary in _recipe_rows:
-		(row.root as Control).visible = row_is_listed(row.recipe, _category)
+		var recipe: Dictionary = row.recipe
+		(row.root as Control).visible = row_is_listed(recipe, _category, unlocked)
+		if row_is_listed(recipe, ALL_CATEGORIES, unlocked):
+			populated[recipe.category] = true
+	for i in _category_buttons.size():
+		var id := _category_ids[i]
+		_category_buttons[i].visible = id == ALL_CATEGORIES or populated.has(id)
 
 
-## Started when the crafting tab is up **and** the window is open, stopped
-## otherwise, with one immediate repaint on show.
+## Started when the crafting **or skills** tab is up and the window is open,
+## stopped otherwise, with one immediate repaint on show.
+##
+## ❗️Driven from both `_show_tab` and `_set_open`: `open()` shows the tab *before*
+## it sets the flag, so neither call alone sees both halves true.
 func _update_craft_timer() -> void:
-	if _craft_timer == null:
+	if _refresh_timer == null:
 		return
-	if not (is_open and _tab == Tab.CRAFTING):
-		_craft_timer.stop()
+	if not (is_open and (_tab == Tab.CRAFTING or _tab == Tab.SKILLS)):
+		_refresh_timer.stop()
 		return
-	if _craft_timer.is_stopped():
-		_craft_timer.start()
+	if _refresh_timer.is_stopped():
+		_refresh_timer.start()
+	_on_refresh_tick()
+
+
+## One tab repaints per tick, not both: the other one is not on screen, and
+## `gather_available` walks every container in range each time it is asked.
+func _on_refresh_tick() -> void:
+	if _tab == Tab.SKILLS:
+		_refresh_skills()
+		return
 	_refresh_crafting()
 
 
@@ -921,7 +999,7 @@ func craft(index: int, bulk := false) -> int:
 	if _player == null or not is_instance_valid(_player) or index >= _recipe_rows.size():
 		return 0
 	var recipe: Dictionary = _recipe_rows[index].recipe
-	if not row_is_listed(recipe, _category):
+	if not row_is_listed(recipe, _category, _unlock_lookup()):
 		return 0
 	var made := 0
 	for _i in (CRAFT_BULK_COUNT if bulk else 1):
@@ -965,8 +1043,10 @@ func crafting_range_text() -> String:
 	return _range_label.text
 
 
-func crafting_is_refreshing() -> bool:
-	return _craft_timer != null and not _craft_timer.is_stopped()
+## ⚠️ Named for the timer rather than for the crafting tab since 3.7: it covers
+## the skills tab too.
+func is_refreshing() -> bool:
+	return _refresh_timer != null and not _refresh_timer.is_stopped()
 
 
 ## The index of the hand recipe that outputs `id`, or -1.
@@ -976,7 +1056,220 @@ func crafting_row_for(id: String) -> int:
 			return i
 	return -1
 
+# --- The skills tab (3.7) -----------------------------------------------------
+#
+# A UI over `SkillDefs`, the way the crafting tab is a UI over `RecipeDefs`
+# ([progression.md](../../docs/systems/progression.md) §Skill tree,
+# [ui.md](../../docs/systems/ui.md) §Character screen).
+#
+# ⚠️ Built in this file rather than behind a `class_name SkillTreeCanvas` node
+# script. Considered and rejected: the screen owns the transaction — it is where
+# `items`, `progression` and `_player` are injected — so a separate node would be
+# plumbing plus a class-cache regen for one `_draw`.
+
+
+func _build_skills() -> void:
+	# From the table, not from the scene, so the rect the nodes are laid out in and
+	# the rect a test checks them against are one number.
+	_tree_canvas.custom_minimum_size = SkillDefs.CANVAS_SIZE
+	# ⚠️ **Edges before nodes**, and through the canvas's own `draw` signal rather
+	# than a `_draw` override on a script this file would then have to own.
+	_tree_canvas.draw.connect(_on_tree_canvas_draw)
+	for node: SkillNode in SkillDefs.all():
+		var button := Button.new()
+		button.position = node.position
+		button.custom_minimum_size = SkillDefs.NODE_SIZE
+		button.size = SkillDefs.NODE_SIZE
+		button.clip_text = true
+		button.add_theme_font_size_override("font_size", NODE_FONT_SIZE)
+		button.pressed.connect(take_skill.bind(node.id))
+		_tree_canvas.add_child(button)
+		_skill_buttons.append({ id = node.id, button = button })
+
+
+## Prerequisite → node, centre to centre. Drawn under the buttons because they are
+## children added after this handler paints the canvas itself.
+func _on_tree_canvas_draw() -> void:
+	var half := SkillDefs.NODE_SIZE * 0.5
+	for node: SkillNode in SkillDefs.all():
+		for prereq: String in node.prerequisites:
+			var parent := SkillDefs.node_for(prereq)
+			if parent == null:
+				continue # A dangling gate is `test_skill_defs`' problem, not a crash here.
+			_tree_canvas.draw_line(
+				parent.position + half,
+				node.position + half,
+				EDGE_COLOR,
+				EDGE_WIDTH,
+			)
+
+
+## Buy `id`. **Points and prereqs, then resources, then record** — and the order
+## is the whole of it.
+##
+## ❗️**Any other order eats the ore.** Consuming first and then discovering there
+## is no point left is an item sink with no error message — the same failure
+## `consume_available` is itself two-phase to avoid, and the "offer first, consume
+## second" rule the quick-move and hand-feed paths already keep.
+##
+## ⚠️ `consume_available` is called ONLY for a non-empty cost: it refuses an empty
+## one by design ([progression.md](../../docs/systems/progression.md) §Crafting
+## range), so calling it unconditionally would make every point-only node — nine
+## of the thirteen — unbuyable.
+##
+## Public so a test drives it without synthesising a click.
+func take_skill(id: String) -> bool:
+	# Refused outright with no player: a `resource_cost` is priced against where you
+	# are standing, and there is no position to ask from.
+	if _player == null or not is_instance_valid(_player):
+		return false
+	var node := SkillDefs.node_for(id)
+	if node == null or not progression.can_take(id):
+		return false
+	if not node.resource_cost.is_empty():
+		if not items.consume_available(_player.global_position, node.resource_cost):
+			return false
+	return progression.take_node(id)
+
+
+## Points on the page and on the tab button, and every node's state.
+func _refresh_skills() -> void:
+	var points: int = progression.upgrade_points
+	_points_label.text = points_text(points)
+	if _tab_buttons.size() > Tab.SKILLS:
+		_tab_buttons[Tab.SKILLS].text = skills_tab_text(points)
+	# One `gather_available` for the whole tree, like the crafting tab's one call
+	# for the whole list.
+	var available: Dictionary = { }
+	if _player != null and is_instance_valid(_player):
+		available = items.gather_available(_player.global_position)
+	for entry: Dictionary in _skill_buttons:
+		_paint_skill(entry, available)
+
+
+func _paint_skill(entry: Dictionary, available: Dictionary) -> void:
+	var node := SkillDefs.node_for(entry.id)
+	var level: int = progression.node_level(entry.id)
+	var button: Button = entry.button
+	button.text = skill_button_text(node, level)
+	button.tooltip_text = skill_tooltip(node, level)
+	var maxed := level >= node.max_level
+	button.disabled = maxed or not progression.can_take(entry.id) or not _can_pay(
+		node.resource_cost,
+		available,
+	)
+	# Add-and-remove, never `modulate`: only the removal says "go back to the
+	# theme's own colour" without hardcoding what that colour was.
+	if maxed:
+		button.add_theme_color_override(NODE_TAKEN_COLOR_ITEM, NODE_TAKEN_COLOR)
+	else:
+		button.remove_theme_color_override(NODE_TAKEN_COLOR_ITEM)
+
+
+static func _can_pay(cost: Dictionary, available: Dictionary) -> bool:
+	for id: String in cost:
+		if available.get(id, 0) < cost[id]:
+			return false
+	return true
+
+
+## "Prospecting" for a one-shot node, "Prospecting  1/3" for a leveled one. Static
+## so the wording unit-tests without a screen.
+static func skill_button_text(node: SkillNode, level: int) -> String:
+	if node.max_level <= 1:
+		return node.display_name
+	return "%s  %d/%d" % [node.display_name, level, node.max_level]
+
+
+## What the node is for, what it costs, and what it unlocks — the last read off
+## `RecipeDefs` rather than off a second list on the node, which is the whole
+## point of `unlocked_by` being the single copy of that edge.
+static func skill_tooltip(node: SkillNode, level: int) -> String:
+	var lines := PackedStringArray([node.display_name, node.description])
+	if level >= node.max_level:
+		lines.append("Taken")
+	else:
+		var cost := PackedStringArray(["%d point%s" % [node.point_cost, "" if node.point_cost == 1 else "s"]])
+		for id: String in node.resource_cost:
+			cost.append(input_text(id, node.resource_cost[id]))
+		lines.append("Cost: %s" % ", ".join(cost))
+	var unlocks := PackedStringArray()
+	for recipe: Dictionary in RecipeDefs.unlocked_by(node.id):
+		unlocks.append(Hud.item_name(recipe.output.id))
+	if not unlocks.is_empty():
+		lines.append("Unlocks: %s" % ", ".join(unlocks))
+	return "\n".join(lines)
+
+
+## ❗️[ui.md](../../docs/systems/ui.md) §HUD defers the upgrade-point readout to
+## exactly this step — "deliberately not surfaced until there's a skill tree to
+## spend it in". Two places, because the count has to be visible from the other
+## two tabs as well as on the page itself.
+static func points_text(points: int) -> String:
+	if points == 1:
+		return "1 skill point to spend"
+	return "%d skill points to spend" % points
+
+
+static func skills_tab_text(points: int) -> String:
+	if points <= 0:
+		return tab_name(Tab.SKILLS)
+	return "%s •%d" % [tab_name(Tab.SKILLS), points]
+
+# --- Skills-tab accessors, for the tests --------------------------------------
+
+
+func skill_count() -> int:
+	return _skill_buttons.size()
+
+
+func skill_button_index(id: String) -> int:
+	for i in _skill_buttons.size():
+		if _skill_buttons[i].id == id:
+			return i
+	return -1
+
+
+func skill_is_buyable(id: String) -> bool:
+	var index := skill_button_index(id)
+	if index < 0:
+		return false
+	return not (_skill_buttons[index].button as Button).disabled
+
+
+func skill_button_label(id: String) -> String:
+	var index := skill_button_index(id)
+	if index < 0:
+		return ""
+	return (_skill_buttons[index].button as Button).text
+
+
+func skills_points_text() -> String:
+	return _points_label.text
+
+
+func tab_button_text(tab: int) -> String:
+	return _tab_buttons[tab].text
+
+
+func category_button_visible(index: int) -> bool:
+	return _category_buttons[index].visible
+
 # --- Repaint ------------------------------------------------------------------
+
+
+## A level hands over a point, which changes both readouts and can make a node
+## affordable while the window is open.
+func _on_leveled_up(_level: int, _points: int) -> void:
+	_refresh_skills()
+
+
+## ❗️Locked crafting rows are HIDDEN, and `_apply_recipe_filter` otherwise runs
+## only at build time and on a category press — so a recipe unlocked with the
+## window open would stay invisible until the next category click.
+func _on_node_unlocked(_id: String, _level: int) -> void:
+	_apply_recipe_filter()
+	_refresh_skills()
 
 
 func _on_inventory_slot_changed(index: int) -> void:

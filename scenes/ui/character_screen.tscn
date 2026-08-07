@@ -120,14 +120,26 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 2
 
-[node name="SkillsPage" type="CenterContainer" parent="Window/Margin/VBox/Pages"]
+[node name="SkillsPage" type="VBoxContainer" parent="Window/Margin/VBox/Pages"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
+theme_override_constants/separation = 4
 
-[node name="Placeholder" type="Label" parent="Window/Margin/VBox/Pages/SkillsPage"]
+[node name="PointsLabel" type="Label" parent="Window/Margin/VBox/Pages/SkillsPage"]
+unique_name_in_owner = true
 layout_mode = 2
-text = "The skill tree lands at 3.7."
+theme_override_font_sizes/font_size = 12
+
+[node name="TreeScroll" type="ScrollContainer" parent="Window/Margin/VBox/Pages/SkillsPage"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="TreeCanvas" type="Control" parent="Window/Margin/VBox/Pages/SkillsPage/TreeScroll"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(680, 280)
+layout_mode = 2
+mouse_filter = 2
 
 [node name="ContainerPanel" type="PanelContainer" parent="."]
 unique_name_in_owner = true

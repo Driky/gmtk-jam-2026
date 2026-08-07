@@ -21,8 +21,14 @@ class_name SkillDefs
 ## reason `for_station`'s ORDER is here: a position that falls outside the canvas
 ## renders invisible rather than broken, so the rect the test checks against and
 ## the rect the tab scrolls have to be one number.
-const CANVAS_SIZE := Vector2(980.0, 340.0)
-const NODE_SIZE := Vector2(176.0, 46.0)
+##
+## ⚠️ **Width is chosen to fit the window without scrolling sideways.** The panel
+## is ~720 px of usable width, and a first pass at 980 put the whole Excavation
+## branch off the right edge behind a horizontal scrollbar nobody would think to
+## drag. Four columns of 160 is what fits; a fifth branch means smaller nodes or a
+## taller tree, not a wider canvas.
+const CANVAS_SIZE := Vector2(680.0, 280.0)
+const NODE_SIZE := Vector2(160.0, 44.0)
 
 # --- Industry -----------------------------------------------------------------
 #

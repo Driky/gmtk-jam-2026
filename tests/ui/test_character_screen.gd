@@ -1085,25 +1085,31 @@ func test_the_range_label_counts_containers_in_range() -> void:
 ## ⚠️ **The 3.6b finding: nothing else would ever repaint a greyed row.** Rows are
 ## built once and affordability depends on where you are standing and on what an
 ## inserter has put in a chest since — neither emits anything this node listens to.
-func test_the_repaint_timer_runs_only_while_the_crafting_tab_is_up() -> void:
-	assert_bool(_screen.crafting_is_refreshing()).is_false()
+##
+## ❗️Widened at 3.7: a skill node with a `resource_cost` has the identical problem,
+## so the SKILLS tab runs the same timer rather than growing a second one. The
+## inventory tab still stops it — nothing there depends on where you stand.
+func test_the_repaint_timer_runs_only_on_the_two_tabs_that_need_it() -> void:
+	assert_bool(_screen.is_refreshing()).is_false()
 	_screen.open(ScreenScript.Tab.INVENTORY)
-	assert_bool(_screen.crafting_is_refreshing()).is_false()
+	assert_bool(_screen.is_refreshing()).is_false()
 	_screen.toggle_tab(ScreenScript.Tab.CRAFTING)
-	assert_bool(_screen.crafting_is_refreshing()).is_true()
+	assert_bool(_screen.is_refreshing()).is_true()
 	_screen.toggle_tab(ScreenScript.Tab.SKILLS)
-	assert_bool(_screen.crafting_is_refreshing()).is_false()
+	assert_bool(_screen.is_refreshing()).is_true()
+	_screen.toggle_tab(ScreenScript.Tab.INVENTORY)
+	assert_bool(_screen.is_refreshing()).is_false()
 	_screen.toggle_tab(ScreenScript.Tab.CRAFTING)
-	assert_bool(_screen.crafting_is_refreshing()).is_true()
+	assert_bool(_screen.is_refreshing()).is_true()
 	_screen.close()
-	assert_bool(_screen.crafting_is_refreshing()).is_false()
+	assert_bool(_screen.is_refreshing()).is_false()
 
 
 ## Opening straight onto the tab starts it too — `open()` shows the tab BEFORE it
 ## sets the flag, so neither half alone sees both.
 func test_opening_onto_the_crafting_tab_starts_the_timer() -> void:
 	_screen.open(ScreenScript.Tab.CRAFTING)
-	assert_bool(_screen.crafting_is_refreshing()).is_true()
+	assert_bool(_screen.is_refreshing()).is_true()
 
 
 ## The timer's own tick is what makes a row go green while you walk toward a chest,
@@ -1117,23 +1123,29 @@ func test_the_timer_tick_repaints_a_row_that_became_affordable() -> void:
 	for id: String in needs:
 		chest.storage().add_item(id, needs[id])
 	assert_bool(_screen.crafting_row_enabled(row)).is_false() # nothing has ticked yet
-	_screen._craft_timer.timeout.emit()
+	_screen._refresh_timer.timeout.emit()
 	assert_bool(_screen.crafting_row_enabled(row)).is_true()
 
 # --- Filtering ----------------------------------------------------------------
 
 
-## ❗️`unlocked_by == ""` is the whole of unlock filtering until 3.7. No shipped row
-## is locked yet, so the branch is pinned on the pure predicate — which is the only
-## way to prove it before that data exists.
+## ❗️**The unlock lookup is a parameter, so this pins the predicate against a
+## synthetic tree** — both answers for the same row, which is the only way to prove
+## the branch rather than the state one particular run happens to be in.
 func test_a_locked_row_is_hidden_whatever_the_filter() -> void:
 	var locked := { category = "automation", unlocked_by = "some_skill_node" }
 	var open_row := { category = "automation", unlocked_by = "" }
-	assert_bool(ScreenScript.row_is_listed(locked, ScreenScript.ALL_CATEGORIES)).is_false()
-	assert_bool(ScreenScript.row_is_listed(locked, "automation")).is_false()
-	assert_bool(ScreenScript.row_is_listed(open_row, ScreenScript.ALL_CATEGORIES)).is_true()
-	assert_bool(ScreenScript.row_is_listed(open_row, "automation")).is_true()
-	assert_bool(ScreenScript.row_is_listed(open_row, "defense")).is_false()
+	var nothing_taken := func(_id: String) -> bool: return false
+	var all_taken := func(_id: String) -> bool: return true
+	assert_bool(ScreenScript.row_is_listed(locked, ScreenScript.ALL_CATEGORIES, nothing_taken)).is_false()
+	assert_bool(ScreenScript.row_is_listed(locked, "automation", nothing_taken)).is_false()
+	# The same row, once its gate is taken.
+	assert_bool(ScreenScript.row_is_listed(locked, ScreenScript.ALL_CATEGORIES, all_taken)).is_true()
+	assert_bool(ScreenScript.row_is_listed(locked, "defense", all_taken)).is_false()
+	# An ungated row never asks the lookup at all.
+	assert_bool(ScreenScript.row_is_listed(open_row, ScreenScript.ALL_CATEGORIES, nothing_taken)).is_true()
+	assert_bool(ScreenScript.row_is_listed(open_row, "automation", nothing_taken)).is_true()
+	assert_bool(ScreenScript.row_is_listed(open_row, "defense", nothing_taken)).is_false()
 
 
 ## ❗️**Since 3.7 this is the shape of a FRESH RUN's crafting tab**: every row is
@@ -1248,3 +1260,255 @@ func test_the_crafting_page_and_every_row_stay_inside_the_window() -> void:
 				window_rect.end.x,
 			],
 		).is_true()
+
+# --- The skills tab (3.7) -----------------------------------------------------
+#
+# The refusals are what matter: every one of them is a way to spend a point (or
+# a stack of ore) on nothing, and none of them raises anything on its own.
+
+
+## Built once in `_ready` with the rest of the window, like the crafting rows —
+## never on open and never on tab switch (3.6a's browser-hitch rule).
+func test_every_skill_node_gets_a_button_up_front() -> void:
+	assert_int(_screen.skill_count()).is_equal(SkillDefs.all().size())
+	for node: SkillNode in SkillDefs.all():
+		assert_int(_screen.skill_button_index(node.id)).is_greater_equal(0)
+
+
+## ❗️§0.4's trap: `consume_available` REFUSES an empty cost by design, so a
+## screen that called it unconditionally would make every point-only node — nine
+## of the thirteen — permanently unbuyable, with no error anywhere.
+func test_a_point_only_node_is_buyable_with_nothing_in_the_bag() -> void:
+	_progression.upgrade_points = 1
+	_screen.open(ScreenScript.Tab.SKILLS)
+	assert_bool(_screen.skill_is_buyable("logistics_i")).is_true()
+	assert_bool(_screen.take_skill("logistics_i")).is_true()
+	assert_int(_progression.node_level("logistics_i")).is_equal(1)
+	assert_int(_progression.upgrade_points).is_equal(0)
+
+
+func test_a_node_with_no_points_left_is_not_buyable() -> void:
+	_screen.open(ScreenScript.Tab.SKILLS)
+	assert_bool(_screen.skill_is_buyable("logistics_i")).is_false()
+	assert_bool(_screen.take_skill("logistics_i")).is_false()
+
+
+## The branch shape, through the UI: a child cannot be bought at any price until
+## its parent is taken.
+func test_a_child_node_is_not_buyable_before_its_prerequisite() -> void:
+	_progression.upgrade_points = 5
+	_screen.open(ScreenScript.Tab.SKILLS)
+	assert_bool(_screen.skill_is_buyable("power_grid")).is_false()
+	_screen.take_skill("logistics_i")
+	assert_bool(_screen.skill_is_buyable("power_grid")).is_true()
+
+
+## ❗️**The exit criterion of the whole step.** A locked row becomes visible with
+## the window already OPEN — no category click, no reopen. Locked rows are hidden,
+## so `_apply_recipe_filter` would otherwise only run on the next category press.
+func test_taking_a_node_reveals_its_crafting_rows_with_the_window_open() -> void:
+	var row: int = _screen.crafting_row_for("conveyor_t1")
+	_screen.open(ScreenScript.Tab.CRAFTING)
+	assert_bool(_screen.crafting_row_visible(row)).is_false()
+
+	_progression.upgrade_points = 1
+	assert_bool(_screen.take_skill("logistics_i")).is_true()
+
+	assert_bool(_screen.crafting_row_visible(row)).is_true()
+
+
+## ...and the row is then actually craftable, which is the half that would still
+## be broken if `craft` asked a different unlock lookup than the filter does.
+func test_an_unlocked_row_can_then_be_crafted() -> void:
+	var row: int = _screen.crafting_row_for("conveyor_t1")
+	_afford("conveyor_t1")
+	_progression.upgrade_points = 1
+	_screen.take_skill("logistics_i")
+	_screen.open(ScreenScript.Tab.CRAFTING)
+
+	assert_int(_screen.craft(row)).is_equal(1)
+	assert_int(_inv.count_of("conveyor_t1")).is_greater(0)
+
+# --- A node with a resource_cost ----------------------------------------------
+
+
+## ❗️Priced against where you are STANDING, through the same
+## `gather_available` / `consume_available` pair a craft pays through.
+func test_a_chest_in_range_pays_for_a_node() -> void:
+	var node := SkillDefs.node_for("emplacements")
+	_progression.upgrade_points = 2
+	_screen.take_skill("traps")
+	var chest := _near_chest(Vector2(32.0, 0.0), node.resource_cost)
+	_screen.open(ScreenScript.Tab.SKILLS)
+
+	assert_bool(_screen.skill_is_buyable("emplacements")).is_true()
+	assert_bool(_screen.take_skill("emplacements")).is_true()
+	for id: String in node.resource_cost:
+		assert_int(chest.storage().count_of(id)).is_equal(0)
+
+
+## The same chest, one tile past the radius: the ore exists, and it may as well
+## not — which is the case the range label on the crafting tab exists to explain.
+func test_a_chest_out_of_range_does_not() -> void:
+	var node := SkillDefs.node_for("emplacements")
+	_progression.upgrade_points = 2
+	_screen.take_skill("traps")
+	var chest := _near_chest(
+		Vector2(0.0, ItemsScript.CRAFTING_RANGE_PX + 8.0),
+		node.resource_cost,
+	)
+	_screen.open(ScreenScript.Tab.SKILLS)
+
+	assert_bool(_screen.skill_is_buyable("emplacements")).is_false()
+	assert_bool(_screen.take_skill("emplacements")).is_false()
+	assert_int(_progression.node_level("emplacements")).is_equal(0)
+	for id: String in node.resource_cost:
+		assert_int(chest.storage().count_of(id)).is_greater(0)
+
+
+## ❗️**The order, and the reason it is that order.** A refused node must consume
+## NOTHING: paying first and then finding there is no point left is an item sink
+## with no error message.
+func test_a_refused_node_consumes_nothing() -> void:
+	var node := SkillDefs.node_for("emplacements")
+	for id: String in node.resource_cost:
+		_inv.add_item(id, node.resource_cost[id])
+	# Its prerequisite is untaken, so `can_take` refuses before any ore is touched.
+	_progression.upgrade_points = 5
+	_screen.open(ScreenScript.Tab.SKILLS)
+
+	assert_bool(_screen.take_skill("emplacements")).is_false()
+
+	for id: String in node.resource_cost:
+		assert_int(_inv.count_of(id)).is_equal(node.resource_cost[id])
+	assert_int(_progression.upgrade_points).is_equal(5)
+
+
+func test_an_unknown_node_is_never_takeable() -> void:
+	_progression.upgrade_points = 5
+	assert_bool(_screen.take_skill("no_such_node")).is_false()
+	assert_int(_progression.upgrade_points).is_equal(5)
+
+# --- The point readout --------------------------------------------------------
+
+
+## ❗️[ui.md](../../docs/systems/ui.md) §HUD defers the upgrade-point count to
+## exactly this step, and it has to be visible from the OTHER two tabs — which is
+## what the tab-button suffix is for.
+func test_the_tab_button_and_the_page_both_show_unspent_points() -> void:
+	assert_str(_screen.tab_button_text(ScreenScript.Tab.SKILLS)).is_equal(
+		ScreenScript.tab_name(ScreenScript.Tab.SKILLS),
+	)
+	_progression.grant_xp("kills", _progression.xp_to_level(1))
+	assert_str(_screen.tab_button_text(ScreenScript.Tab.SKILLS)).is_equal(
+		ScreenScript.skills_tab_text(1),
+	)
+	assert_str(_screen.skills_points_text()).is_equal(ScreenScript.points_text(1))
+
+
+## Spending is the other direction, and it is the one a screen that only listened
+## to `leveled_up` would get wrong.
+func test_spending_a_point_drops_the_readout_again() -> void:
+	_progression.grant_xp("kills", _progression.xp_to_level(1))
+	_screen.take_skill("logistics_i")
+	assert_str(_screen.tab_button_text(ScreenScript.Tab.SKILLS)).is_equal(
+		ScreenScript.tab_name(ScreenScript.Tab.SKILLS),
+	)
+	assert_str(_screen.skills_points_text()).is_equal(ScreenScript.points_text(0))
+
+
+## A leveled node says where it is on its own track, or "×3" in the roster is a
+## number the player can never see.
+func test_a_leveled_node_shows_its_level() -> void:
+	_progression.upgrade_points = 3
+	_screen.open(ScreenScript.Tab.SKILLS)
+	assert_str(_screen.skill_button_label("prospecting")).is_equal(
+		ScreenScript.skill_button_text(SkillDefs.PROSPECTING, 0),
+	)
+	_screen.take_skill("prospecting")
+	assert_str(_screen.skill_button_label("prospecting")).contains("1/3")
+	# A one-shot node carries no counter — "Storage 1/1" is noise.
+	assert_str(_screen.skill_button_label("storage")).is_equal(SkillDefs.STORAGE.display_name)
+
+
+## ❗️**The theme item's NAME, pinned.** A colour override under a name no theme
+## uses is accepted silently and changes nothing — which is how the first pass
+## shipped a "taken" green that rendered grey, invisible to every other assertion
+## here. A maxed node is a disabled Button, so `font_disabled_color` is the item
+## it actually draws with.
+func test_a_taken_node_is_recoloured_through_the_item_a_disabled_button_draws() -> void:
+	_progression.upgrade_points = 1
+	_screen.open(ScreenScript.Tab.SKILLS)
+	var button := _screen._skill_buttons[_screen.skill_button_index("storage")].button as Button
+	assert_bool(button.has_theme_color_override(ScreenScript.NODE_TAKEN_COLOR_ITEM)).is_false()
+
+	_screen.take_skill("storage")
+
+	assert_str(ScreenScript.NODE_TAKEN_COLOR_ITEM).is_equal("font_disabled_color")
+	assert_bool(button.has_theme_color_override(ScreenScript.NODE_TAKEN_COLOR_ITEM)).is_true()
+	assert_bool(button.disabled).is_true()
+	# ⚠️ A node with levels LEFT must not be painted as finished.
+	_progression.upgrade_points = 1
+	_screen.take_skill("prospecting")
+	var partial := _screen._skill_buttons[_screen.skill_button_index("prospecting")].button as Button
+	assert_bool(partial.has_theme_color_override(ScreenScript.NODE_TAKEN_COLOR_ITEM)).is_false()
+
+
+## The tooltip names what the node unlocks, read off `RecipeDefs` rather than off
+## a second list on the node — the whole point of `unlocked_by` being one copy.
+func test_the_tooltip_names_what_a_node_unlocks() -> void:
+	var text := ScreenScript.skill_tooltip(SkillDefs.LOGISTICS_I, 0)
+	assert_str(text).contains(Hud.item_name("conveyor_t1"))
+	assert_str(text).contains(Hud.item_name("inserter"))
+	# And a cost the player can read before pressing.
+	assert_str(ScreenScript.skill_tooltip(SkillDefs.EMPLACEMENTS, 0)).contains(
+		ScreenScript.input_text("iron", SkillDefs.EMPLACEMENTS.resource_cost["iron"]),
+	)
+
+# --- Category buttons with nothing under them ---------------------------------
+
+
+## ⚠️ At level 1 four of the five categories filter to nothing, and a row of
+## buttons that all lead to an empty list reads as a broken tab rather than a
+## locked one.
+func test_a_category_button_with_no_listed_rows_is_hidden() -> void:
+	assert_bool(_screen.category_button_visible(0)).is_true() # "All", always.
+	var logistics := _category_index("logistics")
+	assert_bool(_screen.category_button_visible(logistics)).is_false()
+
+	_progression.upgrade_points = 1
+	_screen.take_skill("logistics_i")
+
+	assert_bool(_screen.category_button_visible(logistics)).is_true()
+
+
+func _category_index(category: String) -> int:
+	var ids := RecipeDefs.categories_for_station(RecipeDefs.HAND)
+	for i in ids.size():
+		if ids[i] == category:
+			return i + 1 # index 0 is "All"
+	return -1
+
+# --- Layout -------------------------------------------------------------------
+
+
+## ⚠️ The sibling of the crafting-page case above, and the one this tab is most
+## at risk of: the nodes carry hand-placed positions inside a plain `Control`, so
+## a node outside the canvas renders invisible with `visible` still true.
+func test_every_skill_button_lands_inside_the_canvas() -> void:
+	_screen.open(ScreenScript.Tab.SKILLS)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var canvas: Control = _screen._tree_canvas
+	var canvas_rect := Rect2(Vector2.ZERO, SkillDefs.CANVAS_SIZE)
+	for entry: Dictionary in _screen._skill_buttons:
+		var button := entry.button as Button
+		assert_bool(canvas_rect.encloses(Rect2(button.position, button.size))).override_failure_message(
+			"Skill button '%s' at %s escapes the %s canvas" % [
+				entry.id,
+				button.position,
+				SkillDefs.CANVAS_SIZE,
+			],
+		).is_true()
+	assert_vector(canvas.custom_minimum_size).is_equal(SkillDefs.CANVAS_SIZE)

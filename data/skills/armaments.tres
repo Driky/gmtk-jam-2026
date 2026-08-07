@@ -13,4 +13,4 @@ resource_cost = {}
 max_level = 3
 stat_name = "turret_damage"
 stat_per_level = 0.15
-position = Vector2(400, 176)
+position = Vector2(344, 144)

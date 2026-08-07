@@ -13,4 +13,4 @@ resource_cost = {}
 max_level = 1
 stat_name = ""
 stat_per_level = 0.0
-position = Vector2(208, 176)
+position = Vector2(176, 144)

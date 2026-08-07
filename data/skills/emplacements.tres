@@ -13,4 +13,4 @@ resource_cost = { "iron": 10 }
 max_level = 1
 stat_name = ""
 stat_per_level = 0.0
-position = Vector2(400, 96)
+position = Vector2(344, 76)

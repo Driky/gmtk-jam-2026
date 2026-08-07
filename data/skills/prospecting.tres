@@ -13,4 +13,4 @@ resource_cost = {}
 max_level = 3
 stat_name = "mining_speed"
 stat_per_level = 0.1
-position = Vector2(592, 16)
+position = Vector2(512, 8)

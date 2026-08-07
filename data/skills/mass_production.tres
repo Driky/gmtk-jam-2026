@@ -13,4 +13,4 @@ resource_cost = {}
 max_level = 3
 stat_name = "crafting_speed"
 stat_per_level = 0.15
-position = Vector2(496, 256)
+position = Vector2(424, 212)

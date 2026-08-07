@@ -13,4 +13,4 @@ resource_cost = { "copper_bar": 4 }
 max_level = 3
 stat_name = "crafting_yield"
 stat_per_level = 0.1
-position = Vector2(304, 256)
+position = Vector2(256, 212)
