@@ -58,24 +58,41 @@ class_name RecipeDefs
 ## priced in `stone` and `copper` ONLY — never bars — because all three carry
 ## `power_demand = 1.0`: smelting needs a generator, so a generator costing a bar
 ## would be a deadlock with no way out but the console.
+## ❗️**`unlocked_by` is filled in at 3.7, and it decides what a NEW RUN can
+## build.** Three hand rows stay free forever — `pickaxe_t1`, `ladder`, `torch`:
+## a tool, a way back up, and light. Everything else is behind a skill node, so
+## obtainability moved off "there is a hand row for it" and onto the tree's roots
+## ([progression.md](../docs/systems/progression.md) §Recipe tiers).
+##
+## ⚠️ **A STATION row carries no gate, deliberately.** It is gated by owning the
+## station: you cannot smelt without a furnace, and `mechanization` is what
+## unlocks one. A second gate here would be the same fact stored twice, free to
+## drift — exactly what `unlocked_by` beating `unlock_recipes[]` was about.
+##
+## ❗️**The `pickaxe_t1` row is NEW at 3.7.** `STARTING_KIT` was the only source of
+## a pickaxe; with the rest of the table gated, "what can I make at level 1" needs
+## a better answer than light. ⚠️ It is also the first hand output with **no
+## `place_scene`** — a tool you hold, not a thing you put down — which splits
+## 3.6b's "every hand output is placeable" assertion in two.
 const RECIPES: Array[Dictionary] = [
 	{ station = "furnace", inputs = { copper = 1 }, output = { id = "copper_bar", count = 1 }, ticks = 20, category = "components", unlocked_by = "" },
 	{ station = "furnace", inputs = { iron = 1 }, output = { id = "iron_bar", count = 1 }, ticks = 30, category = "components", unlocked_by = "" },
 	{ station = "ammo_press", inputs = { copper_bar = 1 }, output = { id = "copper_ammo", count = 4 }, ticks = 20, category = "components", unlocked_by = "" },
 	{ station = "ammo_press", inputs = { iron_bar = 1 }, output = { id = "iron_ammo", count = 4 }, ticks = 30, category = "components", unlocked_by = "" },
+	{ station = "hand", inputs = { stone = 5, coal = 2 }, output = { id = "pickaxe_t1", count = 1 }, ticks = 0, category = "utility", unlocked_by = "" },
 	{ station = "hand", inputs = { coal = 1, stone = 1 }, output = { id = "torch", count = 4 }, ticks = 0, category = "utility", unlocked_by = "" },
 	{ station = "hand", inputs = { stone = 4 }, output = { id = "ladder", count = 3 }, ticks = 0, category = "utility", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 12 }, output = { id = "chest", count = 1 }, ticks = 0, category = "utility", unlocked_by = "" },
-	{ station = "hand", inputs = { copper = 6, coal = 4 }, output = { id = "beacon", count = 1 }, ticks = 0, category = "utility", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 2, copper = 1 }, output = { id = "conveyor_t1", count = 2 }, ticks = 0, category = "logistics", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 2, copper = 2 }, output = { id = "inserter", count = 1 }, ticks = 0, category = "logistics", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 10, copper = 5 }, output = { id = "miner", count = 1 }, ticks = 0, category = "automation", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 12 }, output = { id = "furnace", count = 1 }, ticks = 0, category = "automation", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 10, copper_bar = 4 }, output = { id = "ammo_press", count = 1 }, ticks = 0, category = "automation", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 8, copper = 4 }, output = { id = "generator", count = 1 }, ticks = 0, category = "power", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 4, copper = 2 }, output = { id = "relay", count = 1 }, ticks = 0, category = "power", unlocked_by = "" },
-	{ station = "hand", inputs = { stone = 4, iron = 2 }, output = { id = "spike_trap", count = 1 }, ticks = 0, category = "defense", unlocked_by = "" },
-	{ station = "hand", inputs = { copper_bar = 4, iron_bar = 4 }, output = { id = "turret", count = 1 }, ticks = 0, category = "defense", unlocked_by = "" },
+	{ station = "hand", inputs = { stone = 12 }, output = { id = "chest", count = 1 }, ticks = 0, category = "utility", unlocked_by = "storage" },
+	{ station = "hand", inputs = { copper = 6, coal = 4 }, output = { id = "beacon", count = 1 }, ticks = 0, category = "utility", unlocked_by = "deep_delving" },
+	{ station = "hand", inputs = { stone = 2, copper = 1 }, output = { id = "conveyor_t1", count = 2 }, ticks = 0, category = "logistics", unlocked_by = "logistics_i" },
+	{ station = "hand", inputs = { stone = 2, copper = 2 }, output = { id = "inserter", count = 1 }, ticks = 0, category = "logistics", unlocked_by = "logistics_i" },
+	{ station = "hand", inputs = { stone = 10, copper = 5 }, output = { id = "miner", count = 1 }, ticks = 0, category = "automation", unlocked_by = "mechanization" },
+	{ station = "hand", inputs = { stone = 12 }, output = { id = "furnace", count = 1 }, ticks = 0, category = "automation", unlocked_by = "mechanization" },
+	{ station = "hand", inputs = { stone = 10, copper_bar = 4 }, output = { id = "ammo_press", count = 1 }, ticks = 0, category = "automation", unlocked_by = "emplacements" },
+	{ station = "hand", inputs = { stone = 8, copper = 4 }, output = { id = "generator", count = 1 }, ticks = 0, category = "power", unlocked_by = "power_grid" },
+	{ station = "hand", inputs = { stone = 4, copper = 2 }, output = { id = "relay", count = 1 }, ticks = 0, category = "power", unlocked_by = "power_grid" },
+	{ station = "hand", inputs = { stone = 4, iron = 2 }, output = { id = "spike_trap", count = 1 }, ticks = 0, category = "defense", unlocked_by = "traps" },
+	{ station = "hand", inputs = { copper_bar = 4, iron_bar = 4 }, output = { id = "turret", count = 1 }, ticks = 0, category = "defense", unlocked_by = "emplacements" },
 ]
 
 ## The player's own station id, and the one place that string is spelled. No
@@ -105,6 +122,25 @@ static func accepts_input(station: String, id: String) -> bool:
 		if recipe.station == station and recipe.inputs.has(id):
 			return true
 	return false
+
+
+## Every recipe a skill node unlocks, **in table order** — the third query beside
+## `for_station` and `categories_for_station`, and for the same reason: the order
+## a node's unlocks are listed in is a property of this file, not of the tooltip
+## that prints them.
+##
+## ❗️**This is why `SkillNode` carries no `unlock_recipes[]`.** A node unlocking a
+## recipe and a recipe naming its gate are one edge; storing it on both sides is
+## one fact with two writable copies, free to drift the first time a recipe moves
+## branch ([progression.md](../docs/systems/progression.md) §Skill tree).
+static func unlocked_by(node_id: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if node_id == "":
+		return out
+	for recipe: Dictionary in RECIPES:
+		if recipe.unlocked_by == node_id:
+			out.append(recipe)
+	return out
 
 
 ## The distinct categories a station's rows use, **in table order** — what the

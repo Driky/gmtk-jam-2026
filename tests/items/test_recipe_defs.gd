@@ -147,13 +147,116 @@ func test_no_scene_authors_the_hand_station_id() -> void:
 		).is_false()
 
 
-## A hand row whose output is not placeable is a crafted item with nowhere to go:
-## RMB does nothing with it and it sits in the bag forever.
-func test_every_hand_output_is_placeable() -> void:
+## ❗️**Split at 3.7, when the pickaxe row landed.** 3.6b asserted that every hand
+## output is placeable, which the first hand-crafted TOOL breaks. The half that
+## still holds for everything is authorship: an output missing from `ItemDefs.STATS`
+## resolves to a fallback with no icon, no name and no give-item row.
+func test_every_hand_output_is_an_authored_item() -> void:
 	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		assert_bool(ItemDefs.STATS.has(recipe.output.id)).override_failure_message(
+			"Hand recipe output '%s' is not an authored ItemDefs row" % recipe.output.id,
+		).is_true()
+
+## The other half. A hand row whose output is neither placeable nor usable is a
+## crafted item with nowhere to go — RMB does nothing with it and it sits in the
+## bag forever. The exception list is one id long on purpose: a second
+## non-placeable output should be a decision, not a silent addition.
+const HAND_TOOLS := ["pickaxe_t1"]
+
+
+func test_every_hand_output_is_placeable_unless_it_is_a_tool() -> void:
+	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		if HAND_TOOLS.has(recipe.output.id):
+			continue
 		assert_object(ItemDefs.stats_for(recipe.output.id).place_scene).override_failure_message(
 			"Hand recipe output '%s' has no place_scene" % recipe.output.id,
 		).is_not_null()
+
+
+## ...and a tool has to be worth holding, or the exception above is a way to
+## smuggle in an output that does nothing at all.
+func test_a_hand_tool_output_is_actually_usable() -> void:
+	for id: String in HAND_TOOLS:
+		var stats := ItemDefs.stats_for(id)
+		assert_float(stats.mining_power).override_failure_message(
+			"Hand tool '%s' mines nothing" % id,
+		).is_greater(0.0)
+
+# --- The skill-tree gate (3.7) ------------------------------------------------
+
+
+## A dangling gate is a recipe that can never be unlocked, and it raises nothing:
+## the crafting tab simply never lists the row.
+func test_every_gate_names_a_real_skill_node() -> void:
+	for recipe: Dictionary in RecipeDefs.RECIPES:
+		if recipe.unlocked_by == "":
+			continue
+		assert_object(SkillDefs.node_for(recipe.unlocked_by)).override_failure_message(
+			"Recipe '%s' is gated on '%s', which is not a skill node" % [
+				recipe.output.id,
+				recipe.unlocked_by,
+			],
+		).is_not_null()
+
+
+## ❗️**The other direction, which is what makes `unlocked_by` a single source of
+## truth rather than half of one.** A node that unlocks nothing and grants no buff
+## is a point the player spends on an empty promise.
+func test_every_node_either_gates_a_row_or_grants_a_buff() -> void:
+	for node: SkillNode in SkillDefs.all():
+		var gates := RecipeDefs.unlocked_by(node.id)
+		assert_bool(not gates.is_empty() or node.stat_name != "").override_failure_message(
+			"Skill node '%s' unlocks no recipe and buffs no stat" % node.id,
+		).is_true()
+
+
+## ❗️**What a fresh run can build, and the reason this list is exact rather than a
+## minimum.** A row slipping out of the gate is a machine handed over for free; a
+## row slipping IN is a run that cannot craft its way to level 2 at all.
+func test_exactly_three_hand_rows_are_free() -> void:
+	var free := PackedStringArray()
+	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		if recipe.unlocked_by == "":
+			free.append(recipe.output.id)
+	assert_array(free).contains_exactly(["pickaxe_t1", "torch", "ladder"])
+
+
+## ⚠️ A free row must also be PAYABLE by a fresh run: no bars, nothing a machine
+## has to make. Same argument the bootstrap-machine rule makes one tier up.
+func test_every_free_hand_row_costs_only_mined_materials() -> void:
+	var mined := _tier_one_material_drops()
+	for recipe: Dictionary in RecipeDefs.for_station(RecipeDefs.HAND):
+		if recipe.unlocked_by != "":
+			continue
+		for id: String in recipe.inputs:
+			assert_bool(mined.has(id)).override_failure_message(
+				"Ungated row '%s' needs '%s', which must itself be crafted" % [
+					recipe.output.id,
+					id,
+				],
+			).is_true()
+
+
+## Station rows carry no gate on purpose: owning the station IS the gate, and a
+## second one here would be the same fact stored twice.
+func test_station_rows_carry_no_gate() -> void:
+	for recipe: Dictionary in RecipeDefs.RECIPES:
+		if recipe.station == RecipeDefs.HAND:
+			continue
+		assert_str(recipe.unlocked_by).override_failure_message(
+			"Station recipe '%s' carries a second gate beside its machine" % recipe.output.id,
+		).is_empty()
+
+
+func test_unlocked_by_returns_that_nodes_rows_in_table_order() -> void:
+	var rows := RecipeDefs.unlocked_by("logistics_i")
+	assert_array(rows.map(func(r: Dictionary) -> String: return r.output.id)).contains_exactly(
+		["conveyor_t1", "inserter"],
+	)
+	assert_array(RecipeDefs.unlocked_by("no_such_node")).is_empty()
+	# ⚠️ The empty string is not a wildcard: it would otherwise answer with every
+	# ungated row, and the tooltip would claim a node unlocks the whole free set.
+	assert_array(RecipeDefs.unlocked_by("")).is_empty()
 
 
 ## ❗️**The pin on the tool-tier retune.** Every hand input must be reachable by a

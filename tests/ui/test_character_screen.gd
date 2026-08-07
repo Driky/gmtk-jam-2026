@@ -927,8 +927,13 @@ func _near_chest(offset: Vector2, stacks := { }) -> Node2D:
 	return chest
 
 
-func _miner_row() -> int:
-	return _screen.crafting_row_for("miner")
+## ⚠️ **The torch, not the miner — since 3.7 the miner is behind a skill node.**
+## The craft mechanics below (consume, bulk, floor, chest) do not care WHICH row
+## they run, but they do need one a fresh run can actually list, and the torch is
+## the only free row with more than one input — which is what the
+## only-the-missing-input case needs.
+func _torch_row() -> int:
+	return _screen.crafting_row_for("torch")
 
 
 ## Whatever the table prices a miner at, paid into the bag.
@@ -954,14 +959,14 @@ func test_every_hand_recipe_gets_a_row_up_front() -> void:
 ## ❗️The whole readable state of a row: enabled exactly when every input is
 ## payable, and each unpayable input marked so the greying has a reason on screen.
 func test_a_row_is_enabled_only_when_its_inputs_are_affordable() -> void:
-	var row := _miner_row()
+	var row := _torch_row()
 	var needs: Dictionary = _screen.crafting_recipe(row).inputs
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_bool(_screen.crafting_row_enabled(row)).is_false()
 	for id: String in needs:
 		assert_bool(_screen.crafting_input_is_missing(row, id)).is_true()
 
-	_afford("miner")
+	_afford("torch")
 	_screen.close()
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_bool(_screen.crafting_row_enabled(row)).is_true()
@@ -971,24 +976,25 @@ func test_a_row_is_enabled_only_when_its_inputs_are_affordable() -> void:
 
 ## One short input is enough to grey the row, and only that input is marked.
 func test_only_the_missing_input_is_marked() -> void:
-	var row := _miner_row()
+	var row := _torch_row()
 	var needs: Dictionary = _screen.crafting_recipe(row).inputs
-	_afford("miner")
-	_inv.remove_item("copper", 1)
+	_afford("torch")
+	_inv.remove_item("coal", 1)
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_bool(_screen.crafting_row_enabled(row)).is_false()
-	assert_bool(_screen.crafting_input_is_missing(row, "copper")).is_true()
+	assert_bool(_screen.crafting_input_is_missing(row, "coal")).is_true()
 	assert_bool(_screen.crafting_input_is_missing(row, "stone")).is_false()
 	assert_int(needs.size()).is_greater(1) # or this case proves nothing
 
 
 func test_crafting_consumes_and_yields_exactly_once() -> void:
-	var row := _miner_row()
+	var row := _torch_row()
 	var needs: Dictionary = _screen.crafting_recipe(row).inputs
-	_afford("miner", 2)
+	_afford("torch", 2)
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_int(_screen.craft(row)).is_equal(1)
-	assert_int(_inv.count_of("miner")).is_equal(1)
+	var made: Dictionary = _screen.crafting_recipe(row).output
+	assert_int(_inv.count_of(made.id)).is_equal(made.count)
 	for id: String in needs:
 		assert_int(_inv.count_of(id)).is_equal(needs[id])
 
@@ -996,30 +1002,30 @@ func test_crafting_consumes_and_yields_exactly_once() -> void:
 ## Shift is bulk everywhere else in this screen, and it verifies-then-consumes per
 ## craft rather than checking once and making five.
 func test_shift_crafting_stops_at_the_first_refusal() -> void:
-	var row := _miner_row()
-	_afford("miner", 3)
+	var row := _torch_row()
+	_afford("torch", 3)
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_int(_screen.craft(row, true)).is_equal(3)
-	assert_int(_inv.count_of("miner")).is_equal(3)
+	assert_int(_inv.count_of("torch")).is_equal(_screen.crafting_recipe(row).output.count * 3)
 	assert_bool(_screen.crafting_row_enabled(row)).is_false()
 
 
 func test_shift_crafting_is_capped() -> void:
-	var row := _miner_row()
-	_afford("miner", 20)
+	var row := _torch_row()
+	_afford("torch", 20)
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_int(_screen.craft(row, true)).is_equal(ScreenScript.CRAFT_BULK_COUNT)
 
 
 func test_crafting_an_unaffordable_row_takes_nothing() -> void:
-	var row := _miner_row()
-	_afford("miner")
-	_inv.remove_item("copper", 1)
+	var row := _torch_row()
+	_afford("torch")
+	_inv.remove_item("coal", 1)
 	var before := _inv.count_of("stone")
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_int(_screen.craft(row)).is_equal(0)
 	assert_int(_inv.count_of("stone")).is_equal(before)
-	assert_int(_inv.count_of("miner")).is_equal(0)
+	assert_int(_inv.count_of("torch")).is_equal(0)
 
 
 ## ⚠️ **The output must not vanish into a full bag** — `add_item` returns what did
@@ -1027,7 +1033,7 @@ func test_crafting_an_unaffordable_row_takes_nothing() -> void:
 func test_a_full_inventory_sends_the_output_to_the_floor() -> void:
 	var spawner: Node2D = auto_free(PickupSpawnerScript.new())
 	add_child(spawner)
-	var row := _miner_row()
+	var row := _torch_row()
 	var needs: Dictionary = _screen.crafting_recipe(row).inputs
 	var chest := _near_chest(Vector2(32.0, 0.0))
 	for id: String in needs:
@@ -1037,7 +1043,7 @@ func test_a_full_inventory_sends_the_output_to_the_floor() -> void:
 
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_int(_screen.craft(row)).is_equal(1)
-	assert_int(_inv.count_of("miner")).is_equal(0)
+	assert_int(_inv.count_of("torch")).is_equal(0)
 	assert_int(spawner.get_children().size()).is_equal(1)
 
 # --- Crafting range -----------------------------------------------------------
@@ -1046,7 +1052,7 @@ func test_a_full_inventory_sends_the_output_to_the_floor() -> void:
 ## ❗️The exit criterion of 3.6b: with the ore in a chest beside you, the row is
 ## craftable — the bag is not the only pool a cost draws from.
 func test_a_chest_in_range_pays_for_a_craft() -> void:
-	var row := _miner_row()
+	var row := _torch_row()
 	var needs: Dictionary = _screen.crafting_recipe(row).inputs
 	var chest := _near_chest(Vector2(32.0, 0.0))
 	for id: String in needs:
@@ -1054,7 +1060,7 @@ func test_a_chest_in_range_pays_for_a_craft() -> void:
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_bool(_screen.crafting_row_enabled(row)).is_true()
 	assert_int(_screen.craft(row)).is_equal(1)
-	assert_int(_inv.count_of("miner")).is_equal(1)
+	assert_int(_inv.count_of("torch")).is_equal(_screen.crafting_recipe(row).output.count)
 	for id: String in needs:
 		assert_int(chest.storage().count_of(id)).is_equal(0)
 
@@ -1103,7 +1109,7 @@ func test_opening_onto_the_crafting_tab_starts_the_timer() -> void:
 ## The timer's own tick is what makes a row go green while you walk toward a chest,
 ## without reopening the tab.
 func test_the_timer_tick_repaints_a_row_that_became_affordable() -> void:
-	var row := _miner_row()
+	var row := _torch_row()
 	var needs: Dictionary = _screen.crafting_recipe(row).inputs
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	assert_bool(_screen.crafting_row_enabled(row)).is_false()
@@ -1130,35 +1136,48 @@ func test_a_locked_row_is_hidden_whatever_the_filter() -> void:
 	assert_bool(ScreenScript.row_is_listed(open_row, "defense")).is_false()
 
 
-## Every row starts listed, because every shipped row is unlocked.
-func test_every_row_is_visible_under_the_all_filter() -> void:
+## ❗️**Since 3.7 this is the shape of a FRESH RUN's crafting tab**: every row is
+## built, and exactly the ungated ones are listed. A gated row showing up here is
+## a machine handed over for free.
+func test_only_the_ungated_rows_are_visible_under_the_all_filter() -> void:
+	var listed := 0
 	for i in _screen.crafting_row_count():
-		assert_bool(_screen.crafting_row_visible(i)).is_true()
+		var free: bool = _screen.crafting_recipe(i).unlocked_by == ""
+		assert_bool(_screen.crafting_row_visible(i)).is_equal(free)
+		listed += 1 if free else 0
+	# Not zero, or a new run opens a tab with nothing in it at all.
+	assert_int(listed).is_greater(0)
 
 
 ## The filter flips `visible` on rows already built — it never rebuilds the list.
+## ⚠️ Run against `utility`, the one category with an ungated row in it: the gate
+## and the category filter are two conditions on one predicate, so a category with
+## nothing free in it would pass this whichever way the AND was written.
 func test_a_category_filter_hides_the_other_rows() -> void:
-	_screen._on_category_pressed("automation")
+	_screen._on_category_pressed("utility")
 	var shown := 0
 	for i in _screen.crafting_row_count():
-		var is_automation: bool = _screen.crafting_recipe(i).category == "automation"
-		assert_bool(_screen.crafting_row_visible(i)).is_equal(is_automation)
-		shown += 1 if is_automation else 0
+		var recipe: Dictionary = _screen.crafting_recipe(i)
+		var listed: bool = recipe.category == "utility" and recipe.unlocked_by == ""
+		assert_bool(_screen.crafting_row_visible(i)).is_equal(listed)
+		shown += 1 if listed else 0
 	assert_int(shown).is_greater(0)
 	_screen._on_category_pressed(ScreenScript.ALL_CATEGORIES)
 	for i in _screen.crafting_row_count():
-		assert_bool(_screen.crafting_row_visible(i)).is_true()
+		assert_bool(_screen.crafting_row_visible(i)).is_equal(
+			_screen.crafting_recipe(i).unlocked_by == "",
+		)
 
 
 ## A filtered-out row cannot be crafted even if something reached its button —
 ## the filter is what is on screen, so it has to be what is craftable too.
 func test_a_filtered_out_row_refuses_to_craft() -> void:
-	var row := _miner_row()
-	_afford("miner")
+	var row := _torch_row()
+	_afford("torch")
 	_screen.open(ScreenScript.Tab.CRAFTING)
 	_screen._on_category_pressed("defense")
 	assert_int(_screen.craft(row)).is_equal(0)
-	assert_int(_inv.count_of("miner")).is_equal(0)
+	assert_int(_inv.count_of("torch")).is_equal(0)
 
 
 ## `All` plus one button per category, in table order.
@@ -1186,8 +1205,8 @@ func test_crafting_is_refused_before_the_player_is_bound() -> void:
 	unbound.items = their_items
 	add_child(unbound)
 	their_items.player_inventory.add_item("stone", 99)
-	their_items.player_inventory.add_item("copper", 99)
-	assert_int(unbound.craft(unbound.crafting_row_for("miner"))).is_equal(0)
+	their_items.player_inventory.add_item("coal", 99)
+	assert_int(unbound.craft(unbound.crafting_row_for("torch"))).is_equal(0)
 	assert_str(unbound.crafting_range_text()).is_equal("")
 	# ⚠️ Freed here rather than `auto_free`d: it claimed `_instance` on `_ready`, and
 	# `_exit_tree` clears the static only while it is still the one holding it.
